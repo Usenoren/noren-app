@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+/* ============================================================
+   NOREN INDIGO DESIGN SYSTEM
+   Light · Warm · Japanese indigo palette
+   ============================================================ */
+
+@theme inline {
+  --color-background: #F6F1EB;
+  --color-surface: #FFFFFF;
+  --color-border: #D4CFC9;
+  --color-foreground: #2B2725;
+  --color-muted: #7A746E;
+  --color-primary: #1E3148;
+  --color-primary-hover: #162538;
+  --color-primary-muted: rgba(30, 49, 72, 0.10);
+  --color-accent: #C44A2F;
+  --color-accent-hover: #A83D27;
+  --color-secondary: #3B6B8A;
+  --color-tint: #E8EDF2;
+  --color-signal: #2D7A4F;
+  --color-warning: #B8860B;
+  --color-error: #C44A2F;
+}
+
+/* --- Base --- */
+:root {
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #2B2725;
+  background-color: #F6F1EB;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* --- Tauri drag region --- */
+[data-tauri-drag-region] {
+  cursor: grab;
+  -webkit-app-region: drag;
+}
+
+/* --- Typography --- */
+.font-heading {
+  font-family: "Fraunces", Georgia, "Times New Roman", serif;
+}
+
+.font-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* --- Focus --- */
+*:focus-visible {
+  outline: 1.5px solid #3B6B8A;
+  outline-offset: 1px;
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4CFC9;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7A746E;
+}
+
+/* --- Selection --- */
+::selection {
+  background: rgba(59, 107, 138, 0.2);
+  color: #2B2725;
+}
+
+/* --- Animations --- */
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
+.divider {
+  height: 1px;
+  background: #D4CFC9;
+}
+
+/* --- Form resets --- */
+input, textarea, select {
+  background-color: #FFFFFF;
+  border: 1px solid #D4CFC9;
+  color: #2B2725;
+  font-family: inherit;
+  border-radius: 6px;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #7A746E;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237A746E' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+
+/* --- Buttons --- */
+button {
+  border-radius: 6px;
+}
