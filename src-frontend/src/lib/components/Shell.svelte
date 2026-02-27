@@ -1,22 +1,25 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
-  import { checkPermissions, requestPermissions, getSettings } from "$lib/api/tauri";
+  import { checkPermissions, requestPermissions, getSettings, getProfileOverview } from "$lib/api/tauri";
   import GenerateView from "./GenerateView.svelte";
   import SettingsView from "./SettingsView.svelte";
   import ProfilesView from "./ProfilesView.svelte";
   import ExtractView from "./ExtractView.svelte";
+  import OnboardingView from "./OnboardingView.svelte";
 
-  type View = "generate" | "profiles" | "extract" | "settings";
+  type View = "generate" | "profiles" | "extract" | "settings" | "onboarding";
   let view: View = $state("generate");
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
+  let loading = $state(true);
 
   const viewLabels: Record<View, string> = {
     generate: "noren",
     profiles: "Profiles",
     extract: "Extract",
     settings: "Settings",
+    onboarding: "Welcome",
   };
 
   function closeWindow() {
@@ -38,15 +41,24 @@
       hasPermissions = ok;
     });
 
-    getSettings().then((s) => {
-      if (!s.has_key && s.provider.requiresKey) {
+    // Check if we need onboarding (no profile + no API key)
+    Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
+      if (!profile.exists) {
         needsOnboarding = true;
+        view = "onboarding";
+      } else if (!settings.has_key && settings.provider.requiresKey) {
         view = "settings";
       }
+      loading = false;
     });
 
     return () => cleanup?.();
   });
+
+  function handleOnboardingComplete() {
+    needsOnboarding = false;
+    view = "generate";
+  }
 
   async function handleRequestPermissions() {
     const granted = await requestPermissions();
@@ -54,6 +66,11 @@
   }
 </script>
 
+{#if loading}
+  <div class="flex items-center justify-center h-screen bg-background">
+    <span class="text-xs text-muted">Loading...</span>
+  </div>
+{:else}
 <div class="flex flex-col h-screen overflow-hidden bg-background">
   <!-- Title bar -->
   <div
@@ -61,17 +78,17 @@
     class="flex items-center justify-between px-4 py-2 border-b border-border bg-surface shrink-0"
   >
     <div class="flex items-center gap-2">
-      {#if view !== "generate"}
+      {#if view !== "generate" && view !== "onboarding"}
         <button
-          onclick={() => { view = "generate"; needsOnboarding = false; }}
+          onclick={() => { view = "generate"; }}
           class="text-muted hover:text-primary transition-colors text-sm cursor-pointer"
           aria-label="Back"
         >
           &larr;
         </button>
       {/if}
-      <span class="text-xs font-medium text-foreground pointer-events-none tracking-wide {view === 'generate' ? 'font-heading' : ''}">
-        {needsOnboarding && view === "settings" ? "Welcome" : viewLabels[view]}
+      <span class="text-xs font-medium text-foreground pointer-events-none tracking-wide {view === 'generate' || view === 'onboarding' ? 'font-heading' : ''}">
+        {viewLabels[view]}
       </span>
     </div>
     <div class="flex items-center gap-3">
@@ -128,18 +145,11 @@
     </div>
   {/if}
 
-  <!-- Onboarding hint -->
-  {#if needsOnboarding && view === "settings"}
-    <div class="px-4 py-2 bg-tint border-b border-border shrink-0">
-      <p class="text-xs text-muted">
-        Add an API key to get started. You can always change this later.
-      </p>
-    </div>
-  {/if}
-
   <!-- Main content -->
   <div class="flex-1 min-h-0">
-    {#if view === "generate"}
+    {#if view === "onboarding"}
+      <OnboardingView onComplete={handleOnboardingComplete} />
+    {:else if view === "generate"}
       <GenerateView />
     {:else if view === "profiles"}
       <ProfilesView />
@@ -150,3 +160,4 @@
     {/if}
   </div>
 </div>
+{/if}
