@@ -84,6 +84,21 @@ export async function testConnection(key?: string): Promise<string> {
   return invoke("test_connection", { key: key || null });
 }
 
+// --- Extraction ---
+
+export interface ExtractionProgress {
+  status: string;
+  progress: number;
+  error: string | null;
+}
+
+export async function startExtraction(params: {
+  samples: string;
+  format: string;
+}): Promise<void> {
+  return invoke("start_extraction", params);
+}
+
 // --- Profiles ---
 
 export interface ProfileOverview {

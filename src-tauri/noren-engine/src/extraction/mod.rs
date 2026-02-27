@@ -1,3 +1,3 @@
 pub mod client;
 
-pub use client::ExtractionClient;
+pub use client::{ExtractionClient, ExtractionProgress, ServerExtractionClient};

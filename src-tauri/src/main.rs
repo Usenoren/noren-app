@@ -129,6 +129,7 @@ fn main() {
             commands::read_profile_content,
             commands::save_profile_edit,
             commands::run_extraction,
+            commands::start_extraction,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
