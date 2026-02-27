@@ -8,6 +8,7 @@
   let format = $state("general");
   let level: "strict" | "guided" | "light" = $state("guided");
   let contextText = $state("");
+  let detectedApp = $state("");
   let formats = $state<string[]>([]);
   let output = $state<GenerateResult | null>(null);
   let isGenerating = $state(false);
@@ -28,14 +29,21 @@
       if (text) contextText = text;
     });
 
-    let cleanup: (() => void) | undefined;
+    const cleanups: (() => void)[] = [];
+
     listen<string>("context-text", (event) => {
       if (event.payload) contextText = event.payload;
-    }).then((fn) => {
-      cleanup = fn;
-    });
+    }).then((fn) => cleanups.push(fn));
 
-    return () => cleanup?.();
+    listen<{ name: string; format: string | null }>("detected-app", (event) => {
+      const { name, format: detected } = event.payload;
+      detectedApp = name;
+      if (detected && formats.includes(detected)) {
+        format = detected;
+      }
+    }).then((fn) => cleanups.push(fn));
+
+    return () => cleanups.forEach((fn) => fn());
   });
 
   // --- Actions ---
@@ -107,18 +115,23 @@
 
   <!-- Format + Enforcement selectors -->
   <div class="flex items-center gap-3">
-    {#if formats.length > 0}
-      <select
-        bind:value={format}
-        class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-      >
-        {#each formats as fmt}
-          <option value={fmt}>{fmt}</option>
-        {/each}
-      </select>
-    {:else}
-      <span class="text-xs text-muted">No formats</span>
-    {/if}
+    <div class="flex items-center gap-2">
+      {#if formats.length > 0}
+        <select
+          bind:value={format}
+          class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+        >
+          {#each formats as fmt}
+            <option value={fmt}>{fmt}</option>
+          {/each}
+        </select>
+      {:else}
+        <span class="text-xs text-muted">No formats</span>
+      {/if}
+      {#if detectedApp}
+        <span class="text-[10px] text-secondary">{detectedApp}</span>
+      {/if}
+    </div>
 
     <div class="flex gap-1 ml-auto">
       {#each levels as lvl}

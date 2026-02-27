@@ -192,6 +192,72 @@ pub fn get_frontmost_pid() -> Option<i32> {
     }
 }
 
+/// Get the localized name of the frontmost application.
+pub fn get_frontmost_app_name() -> Option<String> {
+    unsafe {
+        let workspace_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const i8);
+        if workspace_class.is_null() {
+            return None;
+        }
+
+        let shared_sel = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const i8);
+        let front_sel = sel_registerName(b"frontmostApplication\0".as_ptr() as *const i8);
+        let name_sel = sel_registerName(b"localizedName\0".as_ptr() as *const i8);
+
+        let send_ptr: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void =
+            std::mem::transmute(objc_msgSend as *const ());
+
+        let workspace = send_ptr(workspace_class, shared_sel);
+        if workspace.is_null() {
+            return None;
+        }
+
+        let front_app = send_ptr(workspace, front_sel);
+        if front_app.is_null() {
+            return None;
+        }
+
+        // localizedName returns an NSString (which is toll-free bridged with CFString)
+        let name_ref = send_ptr(front_app, name_sel);
+        if name_ref.is_null() {
+            return None;
+        }
+
+        cfstring_to_string(name_ref as CFStringRef)
+    }
+}
+
+/// Map an application name to its likely writing format context.
+pub fn detect_format(app_name: &str) -> Option<&'static str> {
+    let lower = app_name.to_lowercase();
+    match lower.as_str() {
+        // Social
+        "twitter" | "x" | "tweetbot" | "twitterrific" => Some("twitter"),
+        "linkedin" => Some("linkedin"),
+        // Messaging
+        "slack" | "messages" | "imessage" | "discord" | "telegram" | "whatsapp"
+        | "microsoft teams" | "teams" => Some("slack"),
+        // Email
+        "mail" | "gmail" | "outlook" | "spark" | "airmail" | "mimestream"
+        | "microsoft outlook" | "thunderbird" => Some("email"),
+        // Long-form
+        "notion" | "obsidian" | "bear" | "ulysses" | "ia writer" | "typora"
+        | "google docs" | "pages" | "word" | "microsoft word" | "scrivener"
+        | "craft" | "logseq" | "roam research" | "substack" => Some("longform"),
+        _ => {
+            // Browser heuristics — could be anything, don't auto-detect
+            if lower.contains("safari") || lower.contains("chrome")
+                || lower.contains("firefox") || lower.contains("arc")
+                || lower.contains("brave") || lower.contains("edge")
+            {
+                None
+            } else {
+                None
+            }
+        }
+    }
+}
+
 /// Activate (bring to front) the application with the given PID.
 pub fn activate_app(pid: i32) -> bool {
     unsafe {
