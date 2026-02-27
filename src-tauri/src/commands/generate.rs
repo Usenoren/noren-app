@@ -64,8 +64,15 @@ pub async fn generate(
         None => prompt,
     };
 
+    // Resolve API key from keychain
+    let api_key = if config.provider.requires_key {
+        crate::keychain::get_api_key(&config.provider.keychain_id())
+    } else {
+        None
+    };
+
     // Create LLM client and call
-    let client = noren_engine::create_llm_client(&config).map_err(|e| e.to_string())?;
+    let client = noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?;
     let messages = vec![
         noren_engine::LlmMessage {
             role: noren_engine::Role::System,

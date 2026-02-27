@@ -1,40 +1,41 @@
-use crate::config::get_api_key;
 use crate::error::EngineError;
-use crate::types::{Config, Provider};
+use crate::types::{Config, ProviderType};
 
 use super::anthropic::AnthropicClient;
-use super::gemini::GeminiClient;
-use super::openai::OpenAiClient;
+use super::openai_compatible::OpenAiCompatibleClient;
 use super::LlmClient;
 
-const DEFAULT_ANTHROPIC_MODEL: &str = "claude-sonnet-4-20250514";
-const OPENAI_DEFAULT_MODEL: &str = "gpt-4o";
-const GEMINI_DEFAULT_MODEL: &str = "gemini-2.5-flash";
-
-/// Create an LLM client based on the config.
+/// Create an LLM client based on the config's provider settings.
 ///
-/// If the model is the default Anthropic model but a non-Anthropic provider is selected,
-/// the model is overridden to that provider's default.
-pub fn create_llm_client(config: &Config) -> Result<Box<dyn LlmClient>, EngineError> {
-    let api_key = get_api_key(config)?;
+/// Routes to AnthropicClient for Anthropic's API format, or
+/// OpenAiCompatibleClient for everything else.
+pub fn create_llm_client(
+    config: &Config,
+    api_key: Option<String>,
+) -> Result<Box<dyn LlmClient>, EngineError> {
+    let provider = &config.provider;
 
-    match config.provider {
-        Provider::Anthropic => Ok(Box::new(AnthropicClient::new(api_key, config.model.clone()))),
-        Provider::OpenAI => {
-            let model = if config.model == DEFAULT_ANTHROPIC_MODEL {
-                OPENAI_DEFAULT_MODEL.to_string()
-            } else {
-                config.model.clone()
-            };
-            Ok(Box::new(OpenAiClient::new(api_key, model)))
+    match provider.provider_type {
+        ProviderType::Anthropic => {
+            let key = api_key.ok_or_else(|| {
+                EngineError::MissingApiKey(provider.name.clone())
+            })?;
+            Ok(Box::new(AnthropicClient::new(
+                key,
+                provider.model.clone(),
+            )))
         }
-        Provider::Gemini => {
-            let model = if config.model == DEFAULT_ANTHROPIC_MODEL {
-                GEMINI_DEFAULT_MODEL.to_string()
-            } else {
-                config.model.clone()
-            };
-            Ok(Box::new(GeminiClient::new(api_key, model)))
+        ProviderType::OpenaiCompatible => {
+            // For providers that don't require a key (e.g. Ollama), api_key can be None
+            if provider.requires_key && api_key.is_none() {
+                return Err(EngineError::MissingApiKey(provider.name.clone()));
+            }
+            Ok(Box::new(OpenAiCompatibleClient::new(
+                api_key,
+                provider.base_url.clone(),
+                provider.model.clone(),
+                provider.name.clone(),
+            )))
         }
     }
 }
@@ -42,37 +43,53 @@ pub fn create_llm_client(config: &Config) -> Result<Box<dyn LlmClient>, EngineEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ProviderConfig;
 
     #[test]
-    fn router_overrides_model_for_openai() {
+    fn router_creates_anthropic_client() {
         let config = Config {
-            provider: Provider::OpenAI,
-            model: DEFAULT_ANTHROPIC_MODEL.to_string(),
-            openai_api_key: Some("test-key".to_string()),
+            provider: ProviderConfig::anthropic(),
             ..Config::default()
         };
-        let client = create_llm_client(&config).unwrap();
+        let client = create_llm_client(&config, Some("test-key".to_string())).unwrap();
+        assert_eq!(client.provider(), "anthropic");
+    }
+
+    #[test]
+    fn router_creates_openai_compatible_client() {
+        let config = Config {
+            provider: ProviderConfig::openai(),
+            ..Config::default()
+        };
+        let client = create_llm_client(&config, Some("test-key".to_string())).unwrap();
         assert_eq!(client.provider(), "openai");
     }
 
     #[test]
-    fn router_overrides_model_for_gemini() {
+    fn router_allows_no_key_for_ollama() {
         let config = Config {
-            provider: Provider::Gemini,
-            model: DEFAULT_ANTHROPIC_MODEL.to_string(),
-            gemini_api_key: Some("test-key".to_string()),
+            provider: ProviderConfig::ollama(),
             ..Config::default()
         };
-        let client = create_llm_client(&config).unwrap();
-        assert_eq!(client.provider(), "gemini");
+        let client = create_llm_client(&config, None).unwrap();
+        assert_eq!(client.provider(), "ollama");
     }
 
     #[test]
-    fn router_errors_without_api_key() {
+    fn router_errors_without_api_key_for_anthropic() {
         let config = Config {
-            provider: Provider::Anthropic,
+            provider: ProviderConfig::anthropic(),
             ..Config::default()
         };
-        assert!(create_llm_client(&config).is_err());
+        assert!(create_llm_client(&config, None).is_err());
+    }
+
+    #[test]
+    fn router_errors_without_api_key_for_openai() {
+        let config = Config {
+            provider: ProviderConfig::openai(),
+            ..Config::default()
+        };
+        assert!(create_llm_client(&config, None).is_err());
     }
 }

@@ -25,7 +25,7 @@ pub struct AppState {
     pub encryption_key: [u8; 32],
 }
 
-// --- Tauri commands (M4) ---
+// --- Tauri commands ---
 
 #[tauri::command]
 fn get_context_text(state: tauri::State<ContextState>) -> Option<String> {
@@ -90,26 +90,8 @@ fn load_or_create_encryption_key() -> [u8; 32] {
     key
 }
 
-/// Load config and merge Keychain API keys
-fn load_config_with_keychain() -> noren_engine::Config {
-    let mut config = noren_engine::load_config(None);
-
-    // Keychain takes priority over env/file for API keys
-    if let Some(key) = keychain::get_api_key("anthropic") {
-        config.anthropic_api_key = Some(key);
-    }
-    if let Some(key) = keychain::get_api_key("openai") {
-        config.openai_api_key = Some(key);
-    }
-    if let Some(key) = keychain::get_api_key("gemini") {
-        config.gemini_api_key = Some(key);
-    }
-
-    config
-}
-
 fn main() {
-    let config = load_config_with_keychain();
+    let config = noren_engine::load_config(None);
     let encryption_key = load_or_create_encryption_key();
 
     tauri::Builder::default()
@@ -129,27 +111,23 @@ fn main() {
             encryption_key,
         })
         .invoke_handler(tauri::generate_handler![
-            // M4 commands
             get_context_text,
             inject_generated_text,
             check_permissions,
             request_permissions,
-            // M5 commands
             commands::generate,
             commands::list_formats,
             commands::get_config,
-            // M6 commands
             commands::get_settings,
+            commands::set_provider,
             commands::save_api_key,
             commands::remove_api_key,
-            commands::update_provider,
             commands::update_model,
-            commands::test_api_key,
-            // M7 commands
+            commands::update_base_url,
+            commands::test_connection,
             commands::get_profile_overview,
             commands::read_profile_content,
             commands::save_profile_edit,
-            // M8 commands
             commands::run_extraction,
         ])
         .setup(|app| {

@@ -1,85 +1,75 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::{keychain, AppState};
 
 #[derive(Serialize)]
 pub struct SettingsInfo {
-    pub provider: String,
-    pub model: String,
-    pub has_anthropic_key: bool,
-    pub has_openai_key: bool,
-    pub has_gemini_key: bool,
+    pub provider: noren_engine::ProviderConfig,
+    pub has_key: bool,
 }
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
     let config = state.config.lock().unwrap();
+    let provider = &config.provider;
+
+    let has_key = if !provider.requires_key {
+        true // Local providers like Ollama don't need a key
+    } else {
+        keychain::get_api_key(&provider.keychain_id()).is_some()
+    };
+
     SettingsInfo {
-        provider: config.provider.to_string(),
-        model: config.model.clone(),
-        has_anthropic_key: keychain::get_api_key("anthropic").is_some()
-            || config.anthropic_api_key.is_some(),
-        has_openai_key: keychain::get_api_key("openai").is_some()
-            || config.openai_api_key.is_some(),
-        has_gemini_key: keychain::get_api_key("gemini").is_some()
-            || config.gemini_api_key.is_some(),
+        provider: provider.clone(),
+        has_key,
     }
 }
 
-#[tauri::command]
-pub fn save_api_key(
-    state: State<'_, AppState>,
-    provider: String,
-    key: String,
-) -> Result<(), String> {
-    // Store in Keychain
-    keychain::store_api_key(&provider, &key)?;
-
-    // Update in-memory config so it's available immediately
-    let mut config = state.config.lock().unwrap();
-    match provider.as_str() {
-        "anthropic" => config.anthropic_api_key = Some(key),
-        "openai" => config.openai_api_key = Some(key),
-        "gemini" => config.gemini_api_key = Some(key),
-        _ => return Err(format!("Unknown provider: {}", provider)),
-    }
-
-    Ok(())
+#[derive(Deserialize)]
+pub struct SetProviderArgs {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub provider_type: Option<String>,
+    #[serde(rename = "baseUrl")]
+    pub base_url: Option<String>,
+    pub model: Option<String>,
+    #[serde(rename = "requiresKey")]
+    pub requires_key: Option<bool>,
 }
 
 #[tauri::command]
-pub fn remove_api_key(
+pub fn set_provider(
     state: State<'_, AppState>,
-    provider: String,
+    provider: SetProviderArgs,
 ) -> Result<(), String> {
-    keychain::delete_api_key(&provider)?;
+    let provider_config = if let Some(preset) = noren_engine::ProviderConfig::preset_by_name(&provider.name) {
+        // Use preset, but allow model override
+        let mut config = preset;
+        if let Some(m) = provider.model {
+            config.model = m;
+        }
+        if let Some(url) = provider.base_url {
+            config.base_url = url;
+        }
+        config
+    } else {
+        // Custom provider — all fields required
+        let provider_type = match provider.provider_type.as_deref() {
+            Some("anthropic") => noren_engine::ProviderType::Anthropic,
+            _ => noren_engine::ProviderType::OpenaiCompatible,
+        };
+        noren_engine::ProviderConfig {
+            name: provider.name,
+            provider_type,
+            base_url: provider.base_url.ok_or("Base URL required for custom provider")?,
+            model: provider.model.ok_or("Model required for custom provider")?,
+            requires_key: provider.requires_key.unwrap_or(true),
+        }
+    };
 
-    // Clear from in-memory config
     let mut config = state.config.lock().unwrap();
-    match provider.as_str() {
-        "anthropic" => config.anthropic_api_key = None,
-        "openai" => config.openai_api_key = None,
-        "gemini" => config.gemini_api_key = None,
-        _ => return Err(format!("Unknown provider: {}", provider)),
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-pub fn update_provider(
-    state: State<'_, AppState>,
-    provider: String,
-) -> Result<(), String> {
-    let provider_enum: noren_engine::Provider = provider
-        .parse()
-        .map_err(|e: String| e)?;
-
-    let mut config = state.config.lock().unwrap();
-    config.provider = provider_enum;
-
-    // Persist to config file
+    config.provider = provider_config;
     save_config_file(&config);
 
     Ok(())
@@ -91,36 +81,64 @@ pub fn update_model(
     model: String,
 ) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
-    config.model = model;
-
+    config.provider.model = model;
     save_config_file(&config);
-
     Ok(())
 }
 
 #[tauri::command]
-pub async fn test_api_key(
-    provider: String,
+pub fn update_base_url(
+    state: State<'_, AppState>,
+    base_url: String,
+) -> Result<(), String> {
+    let mut config = state.config.lock().unwrap();
+    config.provider.base_url = base_url;
+    save_config_file(&config);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn save_api_key(
+    state: State<'_, AppState>,
     key: String,
-    model: Option<String>,
+) -> Result<(), String> {
+    let config = state.config.lock().unwrap();
+    let keychain_id = config.provider.keychain_id();
+    keychain::store_api_key(&keychain_id, &key)
+}
+
+#[tauri::command]
+pub fn remove_api_key(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let config = state.config.lock().unwrap();
+    let keychain_id = config.provider.keychain_id();
+    keychain::delete_api_key(&keychain_id)
+}
+
+#[tauri::command]
+pub async fn test_connection(
+    state: State<'_, AppState>,
+    key: Option<String>,
 ) -> Result<String, String> {
-    let provider_enum: noren_engine::Provider = provider
-        .parse()
-        .map_err(|e: String| e)?;
+    let config = state.config.lock().unwrap().clone();
+    let provider = &config.provider;
 
-    let mut config = noren_engine::Config::default();
-    config.provider = provider_enum;
-    if let Some(m) = model {
-        config.model = m;
-    }
+    // Resolve API key: provided key > keychain > none (for local providers)
+    let api_key = if provider.requires_key {
+        let k = key
+            .or_else(|| keychain::get_api_key(&provider.keychain_id()));
+        if k.is_none() {
+            return Err(format!("No API key for {}", provider.name));
+        }
+        k
+    } else {
+        None
+    };
 
-    match config.provider {
-        noren_engine::Provider::Anthropic => config.anthropic_api_key = Some(key),
-        noren_engine::Provider::OpenAI => config.openai_api_key = Some(key),
-        noren_engine::Provider::Gemini => config.gemini_api_key = Some(key),
-    }
+    let client = noren_engine::create_llm_client(&config, api_key)
+        .map_err(|e| e.to_string())?;
 
-    let client = noren_engine::create_llm_client(&config).map_err(|e| e.to_string())?;
     let messages = vec![noren_engine::LlmMessage {
         role: noren_engine::Role::User,
         content: "Say 'ok'".to_string(),
@@ -143,10 +161,8 @@ fn save_config_file(config: &noren_engine::Config) {
     let config_dir = std::path::PathBuf::from(home).join(".noren");
     let _ = std::fs::create_dir_all(&config_dir);
 
-    // Only persist provider and model (not API keys — those go to Keychain)
     let json = serde_json::json!({
-        "provider": config.provider.to_string(),
-        "model": &config.model,
+        "provider": config.provider,
         "profileDir": config.profile_dir.to_string_lossy(),
     });
 

@@ -5,20 +5,30 @@ use super::LlmClient;
 use crate::error::EngineError;
 use crate::types::{LlmMessage, LlmOptions, LlmResponse, Role};
 
-const API_URL: &str = "https://api.openai.com/v1/chat/completions";
-
-pub struct OpenAiClient {
+/// Universal client for any provider that exposes an OpenAI-compatible
+/// chat completions endpoint (OpenAI, Ollama, Groq, Together, Mistral,
+/// Fireworks, OpenRouter, Gemini, LM Studio, vLLM, etc.).
+pub struct OpenAiCompatibleClient {
     client: reqwest::Client,
-    api_key: String,
+    api_key: Option<String>,
+    base_url: String,
     model: String,
+    provider_name: String,
 }
 
-impl OpenAiClient {
-    pub fn new(api_key: String, model: String) -> Self {
+impl OpenAiCompatibleClient {
+    pub fn new(
+        api_key: Option<String>,
+        base_url: String,
+        model: String,
+        provider_name: String,
+    ) -> Self {
         Self {
             client: reqwest::Client::new(),
             api_key,
+            base_url: base_url.trim_end_matches('/').to_string(),
             model,
+            provider_name,
         }
     }
 }
@@ -66,7 +76,7 @@ struct ApiUsage {
 }
 
 #[async_trait]
-impl LlmClient for OpenAiClient {
+impl LlmClient for OpenAiCompatibleClient {
     async fn complete(
         &self,
         messages: &[LlmMessage],
@@ -91,21 +101,25 @@ impl LlmClient for OpenAiClient {
             messages: api_messages,
         };
 
-        let resp = self
+        let url = format!("{}/chat/completions", self.base_url);
+
+        let mut req = self
             .client
-            .post(API_URL)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+            .post(&url)
+            .header("Content-Type", "application/json");
+
+        if let Some(ref key) = self.api_key {
+            req = req.header("Authorization", format!("Bearer {}", key));
+        }
+
+        let resp = req.json(&request).send().await?;
 
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             return Err(EngineError::Llm(format!(
-                "OpenAI API error ({}): {}",
-                status, body
+                "{} API error ({}): {}",
+                self.provider_name, status, body
             )));
         }
 
@@ -130,6 +144,6 @@ impl LlmClient for OpenAiClient {
     }
 
     fn provider(&self) -> &str {
-        "openai"
+        &self.provider_name
     }
 }

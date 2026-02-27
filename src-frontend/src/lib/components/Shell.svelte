@@ -39,8 +39,7 @@
     });
 
     getSettings().then((s) => {
-      const hasAnyKey = s.has_anthropic_key || s.has_openai_key || s.has_gemini_key;
-      if (!hasAnyKey) {
+      if (!s.has_key && s.provider.requiresKey) {
         needsOnboarding = true;
         view = "settings";
       }

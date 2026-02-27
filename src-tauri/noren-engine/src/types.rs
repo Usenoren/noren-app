@@ -34,32 +34,103 @@ pub struct LlmResponse {
 // --- Provider ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Provider {
+#[serde(rename_all = "snake_case")]
+pub enum ProviderType {
     Anthropic,
-    #[serde(rename = "openai")]
-    OpenAI,
-    Gemini,
+    OpenaiCompatible,
 }
 
-impl std::fmt::Display for Provider {
+impl std::fmt::Display for ProviderType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Provider::Anthropic => write!(f, "anthropic"),
-            Provider::OpenAI => write!(f, "openai"),
-            Provider::Gemini => write!(f, "gemini"),
+            ProviderType::Anthropic => write!(f, "anthropic"),
+            ProviderType::OpenaiCompatible => write!(f, "openai_compatible"),
         }
     }
 }
 
-impl std::str::FromStr for Provider {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "anthropic" => Ok(Provider::Anthropic),
-            "openai" => Ok(Provider::OpenAI),
-            "gemini" => Ok(Provider::Gemini),
-            _ => Err(format!("Unknown provider: {}", s)),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderConfig {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub provider_type: ProviderType,
+    #[serde(rename = "baseUrl")]
+    pub base_url: String,
+    pub model: String,
+    /// Whether this provider requires an API key (false for local providers like Ollama)
+    #[serde(rename = "requiresKey", default = "default_true")]
+    pub requires_key: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl ProviderConfig {
+    pub fn keychain_id(&self) -> String {
+        self.name.to_lowercase().replace(' ', "-")
+    }
+}
+
+/// Preset provider configurations
+impl ProviderConfig {
+    pub fn anthropic() -> Self {
+        Self {
+            name: "anthropic".to_string(),
+            provider_type: ProviderType::Anthropic,
+            base_url: "https://api.anthropic.com/v1/messages".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
+            requires_key: true,
+        }
+    }
+
+    pub fn openai() -> Self {
+        Self {
+            name: "openai".to_string(),
+            provider_type: ProviderType::OpenaiCompatible,
+            base_url: "https://api.openai.com/v1".to_string(),
+            model: "gpt-4o".to_string(),
+            requires_key: true,
+        }
+    }
+
+    pub fn gemini() -> Self {
+        Self {
+            name: "gemini".to_string(),
+            provider_type: ProviderType::OpenaiCompatible,
+            base_url: "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+            model: "gemini-2.5-flash".to_string(),
+            requires_key: true,
+        }
+    }
+
+    pub fn ollama() -> Self {
+        Self {
+            name: "ollama".to_string(),
+            provider_type: ProviderType::OpenaiCompatible,
+            base_url: "http://localhost:11434/v1".to_string(),
+            model: "llama3.1".to_string(),
+            requires_key: false,
+        }
+    }
+
+    pub fn custom(base_url: String, model: String, requires_key: bool) -> Self {
+        Self {
+            name: "custom".to_string(),
+            provider_type: ProviderType::OpenaiCompatible,
+            base_url,
+            model,
+            requires_key,
+        }
+    }
+
+    pub fn preset_by_name(name: &str) -> Option<Self> {
+        match name {
+            "anthropic" => Some(Self::anthropic()),
+            "openai" => Some(Self::openai()),
+            "gemini" => Some(Self::gemini()),
+            "ollama" => Some(Self::ollama()),
+            _ => None,
         }
     }
 }
@@ -88,16 +159,9 @@ impl std::fmt::Display for EnforcementLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub provider: Provider,
-    pub model: String,
+    pub provider: ProviderConfig,
     #[serde(rename = "profileDir")]
     pub profile_dir: PathBuf,
-    #[serde(rename = "anthropicApiKey", skip_serializing_if = "Option::is_none")]
-    pub anthropic_api_key: Option<String>,
-    #[serde(rename = "openaiApiKey", skip_serializing_if = "Option::is_none")]
-    pub openai_api_key: Option<String>,
-    #[serde(rename = "geminiApiKey", skip_serializing_if = "Option::is_none")]
-    pub gemini_api_key: Option<String>,
     /// Server URL for fetching prompts
     #[serde(rename = "serverUrl", skip_serializing_if = "Option::is_none")]
     pub server_url: Option<String>,
@@ -107,18 +171,14 @@ impl Default for Config {
     fn default() -> Self {
         let home = dirs_home();
         Self {
-            provider: Provider::Anthropic,
-            model: "claude-sonnet-4-20250514".to_string(),
+            provider: ProviderConfig::anthropic(),
             profile_dir: home.join(".noren").join("profiles"),
-            anthropic_api_key: None,
-            openai_api_key: None,
-            gemini_api_key: None,
             server_url: None,
         }
     }
 }
 
-// --- Pipeline types (for future milestones, defined here for completeness) ---
+// --- Pipeline types ---
 
 #[derive(Debug, Clone)]
 pub struct FormatGroup {

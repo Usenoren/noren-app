@@ -4,7 +4,7 @@ use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
 
-const SERVICE: &str = "com.noren.app";
+const SERVICE: &str = "ink.noren.app";
 
 // --- API Keys ---
 

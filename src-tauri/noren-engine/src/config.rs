@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
-use crate::error::EngineError;
-use crate::types::{Config, Provider};
+use crate::types::{Config, ProviderConfig};
 
 const CONFIG_DIR_NAME: &str = ".noren";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -9,12 +8,8 @@ const CONFIG_FILE_NAME: &str = "config.json";
 /// Optional overrides that can be passed from CLI args or Tauri commands
 #[derive(Debug, Default)]
 pub struct ConfigOverrides {
-    pub provider: Option<Provider>,
-    pub model: Option<String>,
+    pub provider: Option<ProviderConfig>,
     pub profile_dir: Option<PathBuf>,
-    pub anthropic_api_key: Option<String>,
-    pub openai_api_key: Option<String>,
-    pub gemini_api_key: Option<String>,
     pub server_url: Option<String>,
 }
 
@@ -22,62 +17,24 @@ pub struct ConfigOverrides {
 pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
     let defaults = Config::default();
     let file_config = load_file_config();
-    let env_config = load_env_config();
+    let env_provider = load_env_provider();
     let overrides = overrides.unwrap_or_default();
 
     Config {
         provider: overrides
             .provider
-            .or(env_config.provider)
+            .or(env_provider)
             .or(file_config.provider)
             .unwrap_or(defaults.provider),
-        model: overrides
-            .model
-            .or(env_config.model)
-            .or(file_config.model)
-            .unwrap_or(defaults.model),
         profile_dir: overrides
             .profile_dir
             .or(file_config.profile_dir)
             .unwrap_or(defaults.profile_dir),
-        anthropic_api_key: overrides
-            .anthropic_api_key
-            .or(env_config.anthropic_api_key)
-            .or(file_config.anthropic_api_key),
-        openai_api_key: overrides
-            .openai_api_key
-            .or(env_config.openai_api_key)
-            .or(file_config.openai_api_key),
-        gemini_api_key: overrides
-            .gemini_api_key
-            .or(env_config.gemini_api_key)
-            .or(file_config.gemini_api_key),
         server_url: overrides
             .server_url
-            .or(env_config.server_url)
+            .or_else(|| std::env::var("NOREN_SERVER_URL").ok())
             .or(file_config.server_url)
             .or(defaults.server_url),
-    }
-}
-
-/// Get the API key for the configured provider
-pub fn get_api_key(config: &Config) -> Result<String, EngineError> {
-    match config.provider {
-        Provider::Anthropic => config
-            .anthropic_api_key
-            .clone()
-            .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-            .ok_or_else(|| EngineError::MissingApiKey("anthropic".to_string())),
-        Provider::OpenAI => config
-            .openai_api_key
-            .clone()
-            .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            .ok_or_else(|| EngineError::MissingApiKey("openai".to_string())),
-        Provider::Gemini => config
-            .gemini_api_key
-            .clone()
-            .or_else(|| std::env::var("GEMINI_API_KEY").ok())
-            .ok_or_else(|| EngineError::MissingApiKey("gemini".to_string())),
     }
 }
 
@@ -85,12 +42,8 @@ pub fn get_api_key(config: &Config) -> Result<String, EngineError> {
 
 #[derive(Default)]
 struct PartialConfig {
-    provider: Option<Provider>,
-    model: Option<String>,
+    provider: Option<ProviderConfig>,
     profile_dir: Option<PathBuf>,
-    anthropic_api_key: Option<String>,
-    openai_api_key: Option<String>,
-    gemini_api_key: Option<String>,
     server_url: Option<String>,
 }
 
@@ -144,31 +97,26 @@ fn load_file_config() -> PartialConfig {
         Err(_) => return PartialConfig::default(),
     };
 
+    // Try new format first (nested provider object)
+    let provider = json
+        .get("provider")
+        .and_then(|v| {
+            if v.is_object() {
+                serde_json::from_value::<ProviderConfig>(v.clone()).ok()
+            } else if let Some(name) = v.as_str() {
+                // Legacy format: provider was a string like "anthropic"
+                ProviderConfig::preset_by_name(name)
+            } else {
+                None
+            }
+        });
+
     PartialConfig {
-        provider: json
-            .get("provider")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse().ok()),
-        model: json
-            .get("model")
-            .and_then(|v| v.as_str())
-            .map(String::from),
+        provider,
         profile_dir: json
             .get("profileDir")
             .and_then(|v| v.as_str())
             .map(PathBuf::from),
-        anthropic_api_key: json
-            .get("anthropicApiKey")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        openai_api_key: json
-            .get("openaiApiKey")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        gemini_api_key: json
-            .get("geminiApiKey")
-            .and_then(|v| v.as_str())
-            .map(String::from),
         server_url: json
             .get("serverUrl")
             .and_then(|v| v.as_str())
@@ -176,65 +124,53 @@ fn load_file_config() -> PartialConfig {
     }
 }
 
-fn load_env_config() -> PartialConfig {
-    PartialConfig {
-        provider: std::env::var("NOREN_PROVIDER")
-            .ok()
-            .and_then(|s| s.parse().ok()),
-        model: std::env::var("NOREN_EXTRACTION_MODEL").ok(),
-        profile_dir: None,
-        anthropic_api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
-        openai_api_key: std::env::var("OPENAI_API_KEY").ok(),
-        gemini_api_key: std::env::var("GEMINI_API_KEY").ok(),
-        server_url: std::env::var("NOREN_SERVER_URL").ok(),
+/// Load provider config from environment variables (legacy support)
+fn load_env_provider() -> Option<ProviderConfig> {
+    let provider_name = std::env::var("NOREN_PROVIDER").ok()?;
+    let model = std::env::var("NOREN_EXTRACTION_MODEL").ok();
+
+    let mut config = ProviderConfig::preset_by_name(&provider_name)?;
+    if let Some(m) = model {
+        config.model = m;
     }
+    Some(config)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ProviderType;
 
     #[test]
     fn defaults_are_sane() {
         let config = load_config(None);
-        assert_eq!(config.provider, Provider::Anthropic);
-        assert_eq!(config.model, "claude-sonnet-4-20250514");
+        assert_eq!(config.provider.provider_type, ProviderType::Anthropic);
+        assert_eq!(config.provider.model, "claude-sonnet-4-20250514");
         assert!(config.profile_dir.to_string_lossy().contains(".noren/profiles"));
     }
 
     #[test]
     fn overrides_take_precedence() {
         let config = load_config(Some(ConfigOverrides {
-            provider: Some(Provider::OpenAI),
-            model: Some("gpt-4o".to_string()),
+            provider: Some(ProviderConfig::openai()),
             ..Default::default()
         }));
-        assert_eq!(config.provider, Provider::OpenAI);
-        assert_eq!(config.model, "gpt-4o");
+        assert_eq!(config.provider.provider_type, ProviderType::OpenaiCompatible);
+        assert_eq!(config.provider.model, "gpt-4o");
     }
 
     #[test]
-    fn get_api_key_returns_error_when_missing() {
-        let config = Config::default();
-        let result = get_api_key(&config);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("anthropic"));
+    fn preset_providers_exist() {
+        assert!(ProviderConfig::preset_by_name("anthropic").is_some());
+        assert!(ProviderConfig::preset_by_name("openai").is_some());
+        assert!(ProviderConfig::preset_by_name("gemini").is_some());
+        assert!(ProviderConfig::preset_by_name("ollama").is_some());
+        assert!(ProviderConfig::preset_by_name("unknown").is_none());
     }
 
     #[test]
-    fn get_api_key_from_config() {
-        let mut config = Config::default();
-        config.anthropic_api_key = Some("sk-test-123".to_string());
-        let key = get_api_key(&config).unwrap();
-        assert_eq!(key, "sk-test-123");
-    }
-
-    #[test]
-    fn provider_from_str() {
-        assert_eq!("anthropic".parse::<Provider>().unwrap(), Provider::Anthropic);
-        assert_eq!("openai".parse::<Provider>().unwrap(), Provider::OpenAI);
-        assert_eq!("gemini".parse::<Provider>().unwrap(), Provider::Gemini);
-        assert!("unknown".parse::<Provider>().is_err());
+    fn ollama_does_not_require_key() {
+        let config = ProviderConfig::ollama();
+        assert!(!config.requires_key);
     }
 }

@@ -6,14 +6,17 @@ export interface GenerateResult {
   output_tokens: number;
 }
 
-export interface Config {
-  provider: string;
+export interface ProviderConfig {
+  name: string;
+  type: "anthropic" | "openai_compatible";
+  baseUrl: string;
   model: string;
-  profileDir: string;
-  anthropicApiKey?: string;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-  serverUrl?: string;
+  requiresKey: boolean;
+}
+
+export interface SettingsInfo {
+  provider: ProviderConfig;
+  has_key: boolean;
 }
 
 export async function generate(params: {
@@ -33,10 +36,6 @@ export async function listFormats(): Promise<string[]> {
   return invoke("list_formats");
 }
 
-export async function getConfig(): Promise<Config> {
-  return invoke("get_config");
-}
-
 export async function injectGeneratedText(text: string): Promise<void> {
   return invoke("inject_generated_text", { text });
 }
@@ -49,45 +48,43 @@ export async function requestPermissions(): Promise<boolean> {
   return invoke("request_permissions");
 }
 
-// --- Settings (M6) ---
-
-export interface SettingsInfo {
-  provider: string;
-  model: string;
-  has_anthropic_key: boolean;
-  has_openai_key: boolean;
-  has_gemini_key: boolean;
-}
+// --- Settings ---
 
 export async function getSettings(): Promise<SettingsInfo> {
   return invoke("get_settings");
 }
 
-export async function saveApiKey(provider: string, key: string): Promise<void> {
-  return invoke("save_api_key", { provider, key });
+export async function setProvider(provider: {
+  name: string;
+  type?: string;
+  baseUrl?: string;
+  model?: string;
+  requiresKey?: boolean;
+}): Promise<void> {
+  return invoke("set_provider", { provider });
 }
 
-export async function removeApiKey(provider: string): Promise<void> {
-  return invoke("remove_api_key", { provider });
+export async function saveApiKey(key: string): Promise<void> {
+  return invoke("save_api_key", { key });
 }
 
-export async function updateProvider(provider: string): Promise<void> {
-  return invoke("update_provider", { provider });
+export async function removeApiKey(): Promise<void> {
+  return invoke("remove_api_key");
 }
 
 export async function updateModel(model: string): Promise<void> {
   return invoke("update_model", { model });
 }
 
-export async function testApiKey(
-  provider: string,
-  key: string,
-  model?: string,
-): Promise<string> {
-  return invoke("test_api_key", { provider, key, model });
+export async function updateBaseUrl(baseUrl: string): Promise<void> {
+  return invoke("update_base_url", { baseUrl });
 }
 
-// --- Profiles (M7) ---
+export async function testConnection(key?: string): Promise<string> {
+  return invoke("test_connection", { key: key || null });
+}
+
+// --- Profiles ---
 
 export interface ProfileOverview {
   exists: boolean;
