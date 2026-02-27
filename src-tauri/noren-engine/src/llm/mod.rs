@@ -1,4 +1,5 @@
 pub mod anthropic;
+pub mod noren_proxy;
 pub mod openai_compatible;
 pub mod router;
 

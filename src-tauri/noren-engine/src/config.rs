@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::types::{Config, ProviderConfig};
+use crate::types::{Config, InferenceMode, ProviderConfig};
 
 const CONFIG_DIR_NAME: &str = ".noren";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -35,6 +35,8 @@ pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
             .or_else(|| std::env::var("NOREN_SERVER_URL").ok())
             .or(file_config.server_url)
             .or(defaults.server_url),
+        inference_mode: file_config.inference_mode.unwrap_or(defaults.inference_mode),
+        living_profile_enabled: file_config.living_profile_enabled.unwrap_or(false),
     }
 }
 
@@ -45,6 +47,8 @@ struct PartialConfig {
     provider: Option<ProviderConfig>,
     profile_dir: Option<PathBuf>,
     server_url: Option<String>,
+    inference_mode: Option<InferenceMode>,
+    living_profile_enabled: Option<bool>,
 }
 
 fn config_dir() -> PathBuf {
@@ -111,6 +115,15 @@ fn load_file_config() -> PartialConfig {
             }
         });
 
+    let inference_mode = json
+        .get("inferenceMode")
+        .and_then(|v| v.as_str())
+        .and_then(|s| match s {
+            "noren_pro" => Some(InferenceMode::NorenPro),
+            "byok" => Some(InferenceMode::Byok),
+            _ => None,
+        });
+
     PartialConfig {
         provider,
         profile_dir: json
@@ -121,6 +134,10 @@ fn load_file_config() -> PartialConfig {
             .get("serverUrl")
             .and_then(|v| v.as_str())
             .map(String::from),
+        inference_mode,
+        living_profile_enabled: json
+            .get("livingProfileEnabled")
+            .and_then(|v| v.as_bool()),
     }
 }
 

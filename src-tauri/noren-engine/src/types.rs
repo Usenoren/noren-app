@@ -155,6 +155,21 @@ impl std::fmt::Display for EnforcementLevel {
     }
 }
 
+// --- Inference mode ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceMode {
+    Byok,
+    NorenPro,
+}
+
+impl Default for InferenceMode {
+    fn default() -> Self {
+        Self::Byok
+    }
+}
+
 // --- Config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,9 +177,15 @@ pub struct Config {
     pub provider: ProviderConfig,
     #[serde(rename = "profileDir")]
     pub profile_dir: PathBuf,
-    /// Server URL for fetching prompts
+    /// Server URL for fetching prompts and Noren Pro inference
     #[serde(rename = "serverUrl", skip_serializing_if = "Option::is_none")]
     pub server_url: Option<String>,
+    /// BYOK or Noren Pro
+    #[serde(rename = "inferenceMode", default)]
+    pub inference_mode: InferenceMode,
+    /// Living profile opt-in (edit tracking + server analysis)
+    #[serde(rename = "livingProfileEnabled", default)]
+    pub living_profile_enabled: bool,
 }
 
 impl Default for Config {
@@ -174,6 +195,8 @@ impl Default for Config {
             provider: ProviderConfig::anthropic(),
             profile_dir: home.join(".noren").join("profiles"),
             server_url: None,
+            inference_mode: InferenceMode::Byok,
+            living_profile_enabled: false,
         }
     }
 }

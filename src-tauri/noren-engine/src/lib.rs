@@ -8,10 +8,13 @@ pub mod storage;
 pub mod template;
 pub mod types;
 
+pub mod tracking;
+
 pub use config::{load_config, ConfigOverrides};
 pub use error::EngineError;
 pub use extraction::{ExtractionClient, ExtractionProgress, ServerExtractionClient};
 pub use generate::enforce::compose_system_prompt;
+pub use llm::noren_proxy::NorenProxyClient;
 pub use llm::router::create_llm_client;
 pub use llm::LlmClient;
 pub use storage::profiles::{list_formats, load_profile, save_profile};

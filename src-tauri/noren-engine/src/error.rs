@@ -26,6 +26,9 @@ pub enum EngineError {
     #[error("Prompt cache error: {0}")]
     PromptCache(String),
 
+    #[error("Network error: {0}")]
+    Network(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
