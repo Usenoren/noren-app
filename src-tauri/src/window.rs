@@ -47,6 +47,7 @@ fn create_popup(app: &AppHandle) {
     let builder = WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::default())
         .title("Noren")
         .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
+        .min_inner_size(320.0, 400.0)
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)

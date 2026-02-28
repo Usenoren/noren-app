@@ -7,6 +7,8 @@ use crate::{keychain, AppState};
 pub struct SettingsInfo {
     pub provider: noren_engine::ProviderConfig,
     pub has_key: bool,
+    pub inference_mode: String,
+    pub noren_pro_logged_in: bool,
 }
 
 #[tauri::command]
@@ -20,9 +22,16 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
         keychain::get_api_key(&provider.keychain_id()).is_some()
     };
 
+    let mode = match config.inference_mode {
+        noren_engine::InferenceMode::NorenPro => "noren_pro",
+        noren_engine::InferenceMode::Byok => "byok",
+    };
+
     SettingsInfo {
         provider: provider.clone(),
         has_key,
+        inference_mode: mode.to_string(),
+        noren_pro_logged_in: keychain::get_api_key("noren-pro-token").is_some(),
     }
 }
 
@@ -155,16 +164,315 @@ pub async fn test_connection(
         .map_err(|e| e.to_string())
 }
 
+// --- Noren Pro auth ---
+
+#[derive(Serialize)]
+pub struct NorenProStatus {
+    pub logged_in: bool,
+    pub email: Option<String>,
+    pub inference_mode: String,
+    pub tokens_used: Option<u64>,
+    pub tokens_limit: Option<u64>,
+    pub requests_this_month: Option<u64>,
+}
+
+#[tauri::command]
+pub fn get_noren_pro_status(state: State<'_, AppState>) -> NorenProStatus {
+    let config = state.config.lock().unwrap();
+    let has_token = keychain::get_api_key("noren-pro-token").is_some();
+    let email = keychain::get_api_key("noren-pro-email");
+
+    let mode = match config.inference_mode {
+        noren_engine::InferenceMode::NorenPro => "noren_pro",
+        noren_engine::InferenceMode::Byok => "byok",
+    };
+
+    NorenProStatus {
+        logged_in: has_token,
+        email,
+        inference_mode: mode.to_string(),
+        tokens_used: None,
+        tokens_limit: None,
+        requests_this_month: None,
+    }
+}
+
+#[tauri::command]
+pub async fn noren_pro_login(
+    state: State<'_, AppState>,
+    email: String,
+    password: String,
+) -> Result<NorenProStatus, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.noren.ink");
+
+    let client = reqwest::Client::new();
+
+    // Try login
+    let resp: reqwest::Response = client
+        .post(format!("{}/v1/auth/login", server_url))
+        .json(&serde_json::json!({ "email": email, "password": password }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body: String = resp.text().await.unwrap_or_default();
+        return Err(format!("Login failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+    let token = data["access_token"]
+        .as_str()
+        .ok_or("No access token in response")?;
+
+    // Store token and email in keychain
+    keychain::store_api_key("noren-pro-token", token)?;
+    keychain::store_api_key("noren-pro-email", &email)?;
+
+    Ok(NorenProStatus {
+        logged_in: true,
+        email: Some(email),
+        inference_mode: "noren_pro".to_string(),
+        tokens_used: None,
+        tokens_limit: None,
+        requests_this_month: None,
+    })
+}
+
+#[tauri::command]
+pub async fn noren_pro_signup(
+    state: State<'_, AppState>,
+    email: String,
+    password: String,
+) -> Result<NorenProStatus, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.noren.ink");
+
+    let client = reqwest::Client::new();
+
+    // Register
+    let resp: reqwest::Response = client
+        .post(format!("{}/v1/auth/register", server_url))
+        .json(&serde_json::json!({ "email": email, "password": password }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body: String = resp.text().await.unwrap_or_default();
+        return Err(format!("Signup failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+    let token = data["access_token"]
+        .as_str()
+        .ok_or("No access token in response")?;
+
+    // Store token and email in keychain
+    keychain::store_api_key("noren-pro-token", token)?;
+    keychain::store_api_key("noren-pro-email", &email)?;
+
+    Ok(NorenProStatus {
+        logged_in: true,
+        email: Some(email),
+        inference_mode: "noren_pro".to_string(),
+        tokens_used: None,
+        tokens_limit: None,
+        requests_this_month: None,
+    })
+}
+
+#[tauri::command]
+pub fn noren_pro_logout() -> Result<(), String> {
+    let _ = keychain::delete_api_key("noren-pro-token");
+    let _ = keychain::delete_api_key("noren-pro-email");
+    Ok(())
+}
+
+// --- Google OAuth ---
+
+#[derive(Serialize)]
+pub struct GoogleOAuthInitResult {
+    pub auth_url: String,
+    pub session_id: String,
+}
+
+#[tauri::command]
+pub async fn google_oauth_init(
+    state: State<'_, AppState>,
+) -> Result<GoogleOAuthInitResult, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.noren.ink");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/google/init", server_url))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Google sign-in not available: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+
+    Ok(GoogleOAuthInitResult {
+        auth_url: data["auth_url"]
+            .as_str()
+            .ok_or("No auth_url in response")?
+            .to_string(),
+        session_id: data["session_id"]
+            .as_str()
+            .ok_or("No session_id in response")?
+            .to_string(),
+    })
+}
+
+#[derive(Serialize)]
+pub struct GoogleOAuthPollResult {
+    pub status: String,
+    pub complete: bool,
+}
+
+#[tauri::command]
+pub async fn google_oauth_poll(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<GoogleOAuthPollResult, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.noren.ink");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!(
+            "{}/v1/auth/google/poll?session_id={}",
+            server_url, session_id
+        ))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Poll failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+
+    let status = data["status"]
+        .as_str()
+        .unwrap_or("pending")
+        .to_string();
+
+    if status == "complete" {
+        let access_token = data["access_token"]
+            .as_str()
+            .ok_or("No access_token in poll response")?;
+        let email = data["email"]
+            .as_str()
+            .ok_or("No email in poll response")?;
+
+        keychain::store_api_key("noren-pro-token", access_token)?;
+        keychain::store_api_key("noren-pro-email", email)?;
+    }
+
+    Ok(GoogleOAuthPollResult {
+        status: status.clone(),
+        complete: status == "complete",
+    })
+}
+
+#[tauri::command]
+pub async fn get_noren_pro_usage(
+    state: State<'_, AppState>,
+) -> Result<NorenProStatus, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.noren.ink");
+    let auth_token = keychain::get_api_key("noren-pro-token")
+        .ok_or("Not logged in")?;
+    let email = keychain::get_api_key("noren-pro-email");
+
+    let proxy = noren_engine::NorenProxyClient::new(
+        server_url.to_string(),
+        auth_token,
+        "general".to_string(),
+    );
+
+    let (used, limit, requests) = proxy.get_usage().await.map_err(|e| e.to_string())?;
+
+    Ok(NorenProStatus {
+        logged_in: true,
+        email,
+        inference_mode: "noren_pro".to_string(),
+        tokens_used: Some(used),
+        tokens_limit: Some(limit),
+        requests_this_month: Some(requests),
+    })
+}
+
+#[tauri::command]
+pub fn set_inference_mode(
+    state: State<'_, AppState>,
+    mode: String,
+) -> Result<(), String> {
+    let mut config = state.config.lock().unwrap();
+    config.inference_mode = match mode.as_str() {
+        "noren_pro" => noren_engine::InferenceMode::NorenPro,
+        _ => noren_engine::InferenceMode::Byok,
+    };
+    save_config_file(&config);
+    Ok(())
+}
+
 /// Persist config to ~/.noren/config.json
-fn save_config_file(config: &noren_engine::Config) {
+pub fn save_config_file(config: &noren_engine::Config) {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let config_dir = std::path::PathBuf::from(home).join(".noren");
     let _ = std::fs::create_dir_all(&config_dir);
 
-    let json = serde_json::json!({
+    let mut json = serde_json::json!({
         "provider": config.provider,
         "profileDir": config.profile_dir.to_string_lossy(),
+        "inferenceMode": match config.inference_mode {
+            noren_engine::InferenceMode::NorenPro => "noren_pro",
+            noren_engine::InferenceMode::Byok => "byok",
+        },
+        "livingProfileEnabled": config.living_profile_enabled,
     });
+
+    if let Some(ref url) = config.server_url {
+        json["serverUrl"] = serde_json::Value::String(url.clone());
+    }
 
     let _ = std::fs::write(
         config_dir.join("config.json"),

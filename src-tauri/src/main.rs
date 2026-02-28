@@ -97,6 +97,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(hotkey::handle_shortcut)
@@ -130,6 +131,30 @@ fn main() {
             commands::save_profile_edit,
             commands::run_extraction,
             commands::start_extraction,
+            commands::generate_comparison,
+            commands::get_noren_pro_status,
+            commands::noren_pro_login,
+            commands::noren_pro_signup,
+            commands::noren_pro_logout,
+            commands::google_oauth_init,
+            commands::google_oauth_poll,
+            commands::get_noren_pro_usage,
+            commands::set_inference_mode,
+            commands::get_subscription_status,
+            commands::create_checkout,
+            commands::open_billing_portal,
+            commands::get_living_profile_status,
+            commands::set_living_profile_enabled,
+            commands::log_edit,
+            commands::upload_edit_log,
+            commands::refresh_living_profile,
+            commands::get_profile_patches,
+            commands::approve_profile_patch,
+            commands::reject_profile_patch,
+            commands::sync_profile_up,
+            commands::sync_profile_down,
+            commands::get_sync_status,
+            commands::read_file_as_text,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
