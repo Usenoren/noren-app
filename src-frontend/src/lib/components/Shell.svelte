@@ -41,12 +41,16 @@
       hasPermissions = ok;
     });
 
-    // Check if we need onboarding (no profile + no API key)
+    // Check if we need onboarding (no profile) or settings (no key in BYOK mode)
     Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
       if (!profile.exists) {
         needsOnboarding = true;
         view = "onboarding";
-      } else if (!settings.has_key && settings.provider.requiresKey) {
+      } else if (
+        settings.inference_mode === "byok" &&
+        !settings.has_key &&
+        settings.provider.requiresKey
+      ) {
         view = "settings";
       }
       loading = false;
@@ -77,7 +81,7 @@
     data-tauri-drag-region
     class="flex items-center justify-between px-4 py-2 border-b border-border bg-surface shrink-0"
   >
-    <div class="flex items-center gap-2">
+    <div data-tauri-drag-region class="flex items-center gap-2">
       {#if view !== "generate" && view !== "onboarding"}
         <button
           onclick={() => { view = "generate"; }}
@@ -87,7 +91,7 @@
           &larr;
         </button>
       {/if}
-      <span class="text-xs font-medium text-foreground pointer-events-none tracking-wide {view === 'generate' || view === 'onboarding' ? 'font-heading' : ''}">
+      <span data-tauri-drag-region class="text-xs font-medium text-foreground pointer-events-none tracking-wide {view === 'generate' || view === 'onboarding' ? 'font-heading' : ''}">
         {viewLabels[view]}
       </span>
     </div>

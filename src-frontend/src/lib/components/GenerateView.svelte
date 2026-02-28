@@ -1,6 +1,8 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
-  import { generate, getContextText, listFormats, injectGeneratedText, type GenerateResult } from "$lib/api/tauri";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   // --- State ---
@@ -11,8 +13,11 @@
   let detectedApp = $state("");
   let formats = $state<string[]>([]);
   let output = $state<GenerateResult | null>(null);
+  let comparison = $state<ComparisonResult | null>(null);
+  let compareMode = $state(false);
   let isGenerating = $state(false);
   let error = $state("");
+  let attachedFiles = $state<{ name: string; content: string }[]>([]);
 
   const levels = ["strict", "guided", "light"] as const;
 
@@ -53,20 +58,40 @@
     isGenerating = true;
     error = "";
     output = null;
+    comparison = null;
 
     try {
-      output = await generate({
-        prompt: prompt.trim(),
-        format,
-        level,
-        context: contextText || undefined,
-      });
+      const attachmentContents = attachedFiles.length > 0
+        ? attachedFiles.map((f) => f.content)
+        : undefined;
+
+      if (compareMode) {
+        comparison = await generateComparison({
+          prompt: prompt.trim(),
+          format,
+          context: contextText || undefined,
+          attachments: attachmentContents,
+        });
+        output = comparison.with_voice;
+      } else {
+        output = await generate({
+          prompt: prompt.trim(),
+          format,
+          level,
+          context: contextText || undefined,
+          attachments: attachmentContents,
+        });
+      }
       if (output) {
-        await navigator.clipboard.writeText(output.text);
-        copied = true;
+        try {
+          await navigator.clipboard.writeText(output.text);
+          copied = true;
+        } catch {
+          // Clipboard API may not be available in Tauri webview — user can use Copy button
+        }
       }
     } catch (e) {
-      error = String(e);
+      error = friendlyError(e);
     } finally {
       isGenerating = false;
     }
@@ -86,12 +111,45 @@
     try {
       await injectGeneratedText(output.text);
     } catch (e) {
-      error = String(e);
+      error = friendlyError(e);
     }
   }
 
   function clearContext() {
     contextText = "";
+  }
+
+  async function handleAttachFile() {
+    if (attachedFiles.length >= 3) {
+      error = "Maximum 3 attachments allowed";
+      return;
+    }
+
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "Documents",
+            extensions: ["txt", "md", "csv", "json", "xml", "html", "pdf", "yaml", "yml", "toml"],
+          },
+        ],
+      });
+
+      if (!selected) return;
+
+      const path = selected as string;
+      const content = await readFileAsText(path);
+      const name = path.split("/").pop() || path;
+
+      attachedFiles = [...attachedFiles, { name, content }];
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
+
+  function removeAttachment(index: number) {
+    attachedFiles = attachedFiles.filter((_, i) => i !== index);
   }
 </script>
 
@@ -113,6 +171,22 @@
     </div>
   {/if}
 
+  <!-- Attachments -->
+  {#if attachedFiles.length > 0}
+    <div class="flex items-center gap-1.5 flex-wrap">
+      {#each attachedFiles as file, i}
+        <div class="inline-flex items-center gap-1 px-2 py-0.5 bg-tint border border-border rounded text-[10px] text-secondary">
+          <span class="max-w-[120px] truncate">{file.name}</span>
+          <button
+            onclick={() => removeAttachment(i)}
+            class="text-muted hover:text-error cursor-pointer ml-0.5"
+            aria-label="Remove attachment"
+          >&times;</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   <!-- Format + Enforcement selectors -->
   <div class="flex items-center gap-3">
     <div class="flex items-center gap-2">
@@ -131,20 +205,44 @@
       {#if detectedApp}
         <span class="text-[10px] text-secondary">{detectedApp}</span>
       {/if}
+      <button
+        onclick={handleAttachFile}
+        class="px-2 py-1 text-[10px] bg-surface text-muted border border-border hover:border-secondary hover:text-foreground transition-colors cursor-pointer rounded-md"
+        title="Attach a file (PDF, text, etc.)"
+        disabled={attachedFiles.length >= 3}
+      >
+        Attach{#if attachedFiles.length > 0} ({attachedFiles.length}/3){/if}
+      </button>
     </div>
 
-    <div class="flex gap-1 ml-auto">
-      {#each levels as lvl}
-        <button
-          onclick={() => { level = lvl; }}
-          class="px-2.5 py-1 text-xs transition-colors cursor-pointer uppercase tracking-wide rounded-md
-            {level === lvl
-              ? 'bg-primary text-white font-medium'
-              : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-        >
-          {lvl}
-        </button>
-      {/each}
+    <div class="flex items-center gap-2 ml-auto">
+      <!-- Compare toggle -->
+      <button
+        onclick={() => { compareMode = !compareMode; }}
+        class="px-2 py-1 text-[10px] transition-colors cursor-pointer rounded-md
+          {compareMode
+            ? 'bg-secondary text-white font-medium'
+            : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+        title="Compare with and without your voice"
+      >
+        Compare
+      </button>
+
+      {#if !compareMode}
+        <div class="flex gap-1">
+          {#each levels as lvl}
+            <button
+              onclick={() => { level = lvl; }}
+              class="px-2.5 py-1 text-xs transition-colors cursor-pointer uppercase tracking-wide rounded-md
+                {level === lvl
+                  ? 'bg-primary text-white font-medium'
+                  : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+            >
+              {lvl}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -183,13 +281,51 @@
 
   <!-- Error -->
   {#if error}
-    <div class="p-3 bg-surface border border-error/30 rounded-md text-xs text-error">
+    <div class="p-3 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
       {error}
     </div>
   {/if}
 
   <!-- Output -->
-  {#if output}
+  {#if comparison}
+    <!-- Side-by-side comparison -->
+    <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fade-in-up">
+      <div class="flex-1 grid grid-cols-2 gap-2 min-h-0">
+        <div class="flex flex-col min-h-0">
+          <span class="text-[10px] font-medium text-primary mb-1 uppercase tracking-wide">With your voice</span>
+          <div class="flex-1 p-3 bg-surface border border-primary/30 rounded-md overflow-y-auto">
+            <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.with_voice.text}</p>
+          </div>
+        </div>
+        <div class="flex flex-col min-h-0">
+          <span class="text-[10px] font-medium text-muted mb-1 uppercase tracking-wide">Without voice</span>
+          <div class="flex-1 p-3 bg-surface border border-border rounded-md overflow-y-auto">
+            <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.without_voice.text}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] text-muted">
+          {comparison.with_voice.input_tokens + comparison.with_voice.output_tokens + comparison.without_voice.input_tokens + comparison.without_voice.output_tokens} tokens total
+        </span>
+        <div class="flex gap-2">
+          <button
+            onclick={handleCopy}
+            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+          >
+            {copied ? "Copied" : "Copy voiced"}
+          </button>
+          <button
+            onclick={handleInject}
+            class="px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer rounded-md font-medium"
+          >
+            Inject voiced
+          </button>
+        </div>
+      </div>
+    </div>
+  {:else if output}
     <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fade-in-up">
       <div class="flex-1 p-3 bg-surface border border-border rounded-md overflow-y-auto">
         <p class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{output.text}</p>

@@ -17,6 +17,17 @@ export interface ProviderConfig {
 export interface SettingsInfo {
   provider: ProviderConfig;
   has_key: boolean;
+  inference_mode: "byok" | "noren_pro";
+  noren_pro_logged_in: boolean;
+}
+
+export interface NorenProStatus {
+  logged_in: boolean;
+  email: string | null;
+  inference_mode: string;
+  tokens_used: number | null;
+  tokens_limit: number | null;
+  requests_this_month: number | null;
 }
 
 export async function generate(params: {
@@ -24,6 +35,7 @@ export async function generate(params: {
   format: string;
   level: string;
   context?: string;
+  attachments?: string[];
 }): Promise<GenerateResult> {
   return invoke("generate", params);
 }
@@ -84,6 +96,83 @@ export async function testConnection(key?: string): Promise<string> {
   return invoke("test_connection", { key: key || null });
 }
 
+// --- Noren Pro ---
+
+export async function getNorenProStatus(): Promise<NorenProStatus> {
+  return invoke("get_noren_pro_status");
+}
+
+export async function norenProLogin(email: string, password: string): Promise<NorenProStatus> {
+  return invoke("noren_pro_login", { email, password });
+}
+
+export async function norenProSignup(email: string, password: string): Promise<NorenProStatus> {
+  return invoke("noren_pro_signup", { email, password });
+}
+
+export async function norenProLogout(): Promise<void> {
+  return invoke("noren_pro_logout");
+}
+
+export async function getNorenProUsage(): Promise<NorenProStatus> {
+  return invoke("get_noren_pro_usage");
+}
+
+export async function setInferenceMode(mode: "byok" | "noren_pro"): Promise<void> {
+  return invoke("set_inference_mode", { mode });
+}
+
+// --- Google OAuth ---
+
+export interface GoogleOAuthInitResult {
+  auth_url: string;
+  session_id: string;
+}
+
+export interface GoogleOAuthPollResult {
+  status: string;
+  complete: boolean;
+}
+
+export async function googleOAuthInit(): Promise<GoogleOAuthInitResult> {
+  return invoke("google_oauth_init");
+}
+
+export async function googleOAuthPoll(sessionId: string): Promise<GoogleOAuthPollResult> {
+  return invoke("google_oauth_poll", { sessionId });
+}
+
+// --- Billing ---
+
+export interface SubscriptionStatus {
+  tier: "free" | "extraction" | "living" | "pro" | "teams";
+  active: boolean;
+  can_extract: boolean;
+  can_generate_bundled: boolean;
+  can_living_profile: boolean;
+  can_sync: boolean;
+  tokens_limit: number;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
+export interface CheckoutResult {
+  checkout_url: string;
+  session_id: string;
+}
+
+export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
+  return invoke("get_subscription_status");
+}
+
+export async function createCheckout(tier: string): Promise<CheckoutResult> {
+  return invoke("create_checkout", { tier });
+}
+
+export async function openBillingPortal(): Promise<string> {
+  return invoke("open_billing_portal");
+}
+
 // --- Extraction ---
 
 export interface ExtractionProgress {
@@ -97,6 +186,106 @@ export async function startExtraction(params: {
   format: string;
 }): Promise<void> {
   return invoke("start_extraction", params);
+}
+
+// --- Comparison ---
+
+export interface ComparisonResult {
+  with_voice: GenerateResult;
+  without_voice: GenerateResult;
+}
+
+export async function generateComparison(params: {
+  prompt: string;
+  format: string;
+  context?: string;
+  attachments?: string[];
+}): Promise<ComparisonResult> {
+  return invoke("generate_comparison", params);
+}
+
+// --- Attachments ---
+
+export async function readFileAsText(path: string): Promise<string> {
+  return invoke("read_file_as_text", { path });
+}
+
+// --- Living Profile ---
+
+export interface LivingProfileStatus {
+  enabled: boolean;
+  edit_count: number;
+  last_upload: string | null;
+}
+
+export interface ProfilePatch {
+  patch_id: string;
+  section: string;
+  change_type: string;
+  description: string;
+  original_text: string | null;
+  new_text: string | null;
+  confidence: number;
+  status: string;
+}
+
+export interface RefreshResult {
+  patches: ProfilePatch[];
+  signals_found: number;
+  entries_analyzed: number;
+}
+
+export async function getLivingProfileStatus(): Promise<LivingProfileStatus> {
+  return invoke("get_living_profile_status");
+}
+
+export async function setLivingProfileEnabled(enabled: boolean): Promise<void> {
+  return invoke("set_living_profile_enabled", { enabled });
+}
+
+export async function logEdit(ctx: string, orig: string, edit: string, app: string): Promise<void> {
+  return invoke("log_edit", { ctx, orig, edit, app });
+}
+
+export async function uploadEditLog(): Promise<number> {
+  return invoke("upload_edit_log");
+}
+
+export async function refreshLivingProfile(): Promise<RefreshResult> {
+  return invoke("refresh_living_profile");
+}
+
+export async function getProfilePatches(): Promise<ProfilePatch[]> {
+  return invoke("get_profile_patches");
+}
+
+export async function approveProfilePatch(patchId: string): Promise<void> {
+  return invoke("approve_profile_patch", { patchId });
+}
+
+export async function rejectProfilePatch(patchId: string): Promise<void> {
+  return invoke("reject_profile_patch", { patchId });
+}
+
+// --- Sync ---
+
+export interface SyncStatus {
+  has_remote: boolean;
+  remote_version: number | null;
+  updated_at: string | null;
+  local_checksum: string;
+}
+
+export async function syncProfileUp(): Promise<string> {
+  return invoke("sync_profile_up");
+}
+
+export async function syncProfileDown(): Promise<string> {
+  return invoke("sync_profile_down");
+}
+
+export async function getSyncStatus(): Promise<SyncStatus> {
+  return invoke("get_sync_status");
 }
 
 // --- Profiles ---
