@@ -2,6 +2,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import { startExtraction, type ExtractionProgress } from "../api/tauri";
+  import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   let samples = $state("");
@@ -55,7 +56,7 @@
     try {
       await startExtraction({ samples: samples.trim(), format });
     } catch (e) {
-      error = String(e);
+      error = friendlyError(e);
       isExtracting = false;
     }
   }
@@ -177,7 +178,7 @@ Example formats: tweets, emails, blog posts, Slack messages, LinkedIn posts..."
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-surface border border-error/30 rounded-md text-xs text-error">
+      <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
         {error}
       </div>
     {/if}

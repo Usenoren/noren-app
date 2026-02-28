@@ -2,6 +2,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import { startExtraction, type ExtractionProgress } from "../api/tauri";
+  import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   // Events
@@ -144,7 +145,7 @@
     try {
       await startExtraction({ samples: text.trim(), format: fmt });
     } catch (e) {
-      error = String(e);
+      error = friendlyError(e);
       step = "paste";
     }
   }
@@ -265,7 +266,7 @@
       {/if}
 
       {#if error}
-        <div class="p-2 bg-surface border border-error/30 rounded-md text-xs text-error">{error}</div>
+        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <button
