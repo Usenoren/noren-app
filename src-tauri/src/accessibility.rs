@@ -258,6 +258,82 @@ pub fn detect_format(app_name: &str) -> Option<&'static str> {
     }
 }
 
+/// Execute an AppleScript in-process using NSAppleScript.
+/// This runs with the Noren app's own accessibility permissions, unlike
+/// spawning /usr/bin/osascript which is a separate process without permissions.
+#[allow(dead_code)]
+pub fn run_applescript(script: &str) -> bool {
+    unsafe {
+        let nsapplescript_class =
+            objc_getClass(b"NSAppleScript\0".as_ptr() as *const i8);
+        let nsstring_class =
+            objc_getClass(b"NSString\0".as_ptr() as *const i8);
+
+        if nsapplescript_class.is_null() || nsstring_class.is_null() {
+            return false;
+        }
+
+        let alloc_sel = sel_registerName(b"alloc\0".as_ptr() as *const i8);
+        let init_utf8_sel =
+            sel_registerName(b"initWithUTF8String:\0".as_ptr() as *const i8);
+        let init_source_sel =
+            sel_registerName(b"initWithSource:\0".as_ptr() as *const i8);
+        let execute_sel =
+            sel_registerName(b"executeAndReturnError:\0".as_ptr() as *const i8);
+        let release_sel = sel_registerName(b"release\0".as_ptr() as *const i8);
+
+        let send_ptr: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void =
+            std::mem::transmute(objc_msgSend as *const ());
+        let send_with_ptr: unsafe extern "C" fn(
+            *const c_void,
+            *const c_void,
+            *const c_void,
+        ) -> *const c_void =
+            std::mem::transmute(objc_msgSend as *const ());
+        let send_void: unsafe extern "C" fn(*const c_void, *const c_void) =
+            std::mem::transmute(objc_msgSend as *const ());
+
+        // Create NSString from script
+        let c_script = match std::ffi::CString::new(script) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let ns_string_alloc = send_ptr(nsstring_class, alloc_sel);
+        if ns_string_alloc.is_null() {
+            return false;
+        }
+        let ns_string = send_with_ptr(
+            ns_string_alloc,
+            init_utf8_sel,
+            c_script.as_ptr() as *const c_void,
+        );
+        if ns_string.is_null() {
+            return false;
+        }
+
+        // Create NSAppleScript from source
+        let as_alloc = send_ptr(nsapplescript_class, alloc_sel);
+        if as_alloc.is_null() {
+            send_void(ns_string, release_sel);
+            return false;
+        }
+        let apple_script = send_with_ptr(as_alloc, init_source_sel, ns_string);
+        if apple_script.is_null() {
+            send_void(ns_string, release_sel);
+            return false;
+        }
+
+        // Execute: [appleScript executeAndReturnError:nil]
+        let _result = send_with_ptr(apple_script, execute_sel, std::ptr::null());
+
+        // Cleanup
+        send_void(apple_script, release_sel);
+        send_void(ns_string, release_sel);
+
+        true
+    }
+}
+
 /// Activate (bring to front) the application with the given PID.
 pub fn activate_app(pid: i32) -> bool {
     unsafe {

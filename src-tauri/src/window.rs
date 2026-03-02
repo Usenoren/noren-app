@@ -30,7 +30,8 @@ pub fn toggle_popup(app: &AppHandle) {
 }
 
 pub fn show_popup(app: &AppHandle) {
-    save_source_pid(app);
+    // Don't call save_source_pid here — the hotkey handler already captured it.
+    // Calling it again would overwrite the real source PID with Noren's own PID.
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
         show_existing(&window);
     } else {

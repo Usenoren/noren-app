@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { listen } from "@tauri-apps/api/event";
+  import { listen, emit } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
-  import { startExtraction, type ExtractionProgress } from "../api/tauri";
+  import { startExtraction, saveProfileEdit, type ExtractionProgress } from "../api/tauri";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   // Events
   let { onComplete }: { onComplete: () => void } = $props();
 
-  type Step = "welcome" | "paste" | "guided" | "guided-pairs" | "extracting" | "done";
+  type Step = "welcome" | "paste" | "guided" | "guided-pairs" | "extracting" | "done" | "manual";
   let step: Step = $state("welcome");
 
   // Paste path
@@ -24,6 +24,11 @@
   // Calibration pairs
   let currentPair = $state(0);
   let pairChoices = $state<string[]>([]);
+
+  // Manual profile
+  let manualProfile = $state("");
+  let isSavingManual = $state(false);
+  let wasManual = $state(false);
 
   // Extraction progress
   let progress = $state<ExtractionProgress | null>(null);
@@ -178,6 +183,26 @@
       handleStartExtraction(samples, format);
     }
   }
+
+  function goToSettings() {
+    onComplete();
+    emit("navigate", "settings");
+  }
+
+  async function handleSaveManualProfile() {
+    if (!manualProfile.trim()) return;
+    isSavingManual = true;
+    error = "";
+    try {
+      await saveProfileEdit({ coreIdentity: manualProfile.trim() });
+      wasManual = true;
+      step = "done";
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isSavingManual = false;
+    }
+  }
 </script>
 
 <div class="flex flex-col h-full p-4 overflow-y-auto animate-fade-in-up">
@@ -193,17 +218,44 @@
       </div>
 
       <div class="flex flex-col gap-2 w-full">
+        <!-- Extraction paths (premium) -->
         <button
           onclick={() => { step = "paste"; }}
-          class="w-full py-2.5 px-4 text-sm font-semibold bg-primary text-white rounded-md hover:bg-primary-hover transition-colors cursor-pointer"
+          class="w-full py-2.5 px-4 text-sm font-semibold bg-secondary text-white rounded-md hover:bg-secondary/90 transition-colors cursor-pointer text-left"
         >
-          Paste my writing
+          <span class="flex items-center gap-2">
+            AI-powered extraction
+            <span class="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
+          </span>
+          <span class="block text-[10px] font-normal text-white/70 mt-0.5">4-pass deep analysis of your writing patterns, vocabulary, and rhetorical style</span>
         </button>
         <button
           onclick={() => { step = "guided"; currentQuestion = 0; guidedAnswers = []; }}
-          class="w-full py-2.5 px-4 text-sm font-medium bg-surface border border-border text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer"
+          class="w-full py-2.5 px-4 text-sm font-medium bg-surface border border-secondary/30 text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
         >
-          Build from scratch
+          <span class="flex items-center gap-2">
+            Guided interview
+            <span class="text-[10px] font-normal text-secondary bg-secondary/10 px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
+          </span>
+          <span class="block text-[10px] font-normal text-muted mt-0.5">7 questions + style calibration, then AI builds your profile</span>
+        </button>
+
+        <div class="relative my-1">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-border"></div>
+          </div>
+          <div class="relative flex justify-center text-[10px]">
+            <span class="px-2 bg-background text-muted">or start free</span>
+          </div>
+        </div>
+
+        <!-- Free path -->
+        <button
+          onclick={() => { step = "manual"; }}
+          class="w-full py-2.5 px-4 text-sm font-medium bg-surface border border-border text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
+        >
+          Describe my voice manually
+          <span class="block text-[10px] font-normal text-muted mt-0.5">Write your own profile description</span>
         </button>
         <button
           onclick={onComplete}
@@ -212,6 +264,60 @@
           Skip for now
         </button>
       </div>
+    </div>
+
+  {:else if step === "manual"}
+    <!-- Manual profile creation -->
+    <div class="flex flex-col gap-3 flex-1">
+      <div>
+        <span class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Describe your voice</span>
+        <p class="text-[10px] text-muted leading-relaxed">
+          Write how you'd describe your writing style to someone. The more specific, the better Noren can match you.
+        </p>
+      </div>
+
+      <div class="flex-1 flex flex-col min-h-0">
+        <textarea
+          bind:value={manualProfile}
+          class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary"
+          placeholder={"Example:\n\nI write casually and directly. Short sentences. I use contractions, avoid jargon, and get to the point fast. I'm opinionated but not aggressive — more like a friend giving honest advice. I occasionally use humor and rhetorical questions. I prefer active voice and concrete examples over abstract theory."}
+        ></textarea>
+      </div>
+
+      <!-- Subtle upgrade nudge -->
+      <div class="p-2.5 bg-tint border border-secondary/20 rounded-md flex items-start justify-between gap-2">
+        <p class="text-[10px] text-muted leading-relaxed">
+          <span class="text-secondary font-medium">Noren Pro</span> uses AI to analyze your actual writing — detecting sentence rhythm, vocabulary fingerprint, rhetorical moves, and format-specific adaptations you might not even notice.
+        </p>
+        <button
+          onclick={goToSettings}
+          class="text-[10px] text-secondary hover:text-foreground font-medium cursor-pointer whitespace-nowrap shrink-0 uppercase tracking-wide"
+        >
+          Upgrade
+        </button>
+      </div>
+
+      <button
+        onclick={handleSaveManualProfile}
+        disabled={!manualProfile.trim() || isSavingManual}
+        class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
+          {!manualProfile.trim() || isSavingManual
+            ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
+            : 'bg-primary text-white hover:bg-primary-hover'}"
+      >
+        {isSavingManual ? "Saving..." : "Save Profile"}
+      </button>
+
+      {#if error}
+        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">{error}</div>
+      {/if}
+
+      <button
+        onclick={() => { step = "welcome"; }}
+        class="text-xs text-muted hover:text-foreground text-center cursor-pointer"
+      >
+        &larr; Back
+      </button>
     </div>
 
   {:else if step === "paste"}
@@ -400,11 +506,53 @@
         </svg>
       </div>
       <div class="text-center">
-        <p class="text-sm font-semibold text-foreground">Voice profile created</p>
+        <p class="text-sm font-semibold text-foreground">
+          {wasManual ? "Basic profile saved" : "Voice profile created"}
+        </p>
         <p class="text-xs text-muted mt-1 leading-relaxed">
-          Noren now knows how you write. Start generating and it'll match your voice.
+          {#if wasManual}
+            Good start. Noren will use your description to match your tone.
+          {:else}
+            Noren now knows how you write. Start generating and it'll match your voice.
+          {/if}
         </p>
       </div>
+
+      {#if wasManual}
+        <!-- Upgrade nudge for manual profiles -->
+        <div class="w-full max-w-[280px] p-3 bg-tint border border-secondary/20 rounded-md">
+          <p class="text-[10px] font-medium text-secondary mb-1.5">Want a deeper profile?</p>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-start gap-1.5">
+              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
+              <span class="text-[10px] text-muted">AI extraction from your actual writing</span>
+            </div>
+            <div class="flex items-start gap-1.5">
+              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
+              <span class="text-[10px] text-muted">No API key needed — inference included</span>
+            </div>
+            <div class="flex items-start gap-1.5">
+              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
+              <span class="text-[10px] text-muted">Advanced voice enforcement prompt</span>
+            </div>
+            <div class="flex items-start gap-1.5">
+              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
+              <span class="text-[10px] text-muted">Format-specific contexts (Twitter, email, Slack...)</span>
+            </div>
+            <div class="flex items-start gap-1.5">
+              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
+              <span class="text-[10px] text-muted">Living profile that evolves with your edits</span>
+            </div>
+          </div>
+          <button
+            onclick={goToSettings}
+            class="mt-2 w-full py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
+          >
+            Upgrade to Noren Pro
+          </button>
+        </div>
+      {/if}
+
       <button
         onclick={onComplete}
         class="px-6 py-2.5 text-sm font-semibold bg-primary text-white rounded-md hover:bg-primary-hover transition-colors cursor-pointer"

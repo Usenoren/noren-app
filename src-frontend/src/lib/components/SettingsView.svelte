@@ -61,9 +61,7 @@
   let isNorenPro = $derived(settings?.inference_mode === "noren_pro");
 
   const tiers = [
-    { id: "extraction", label: "Extraction", price: "$29", period: "one-time", desc: "Voice profile extraction" },
-    { id: "living", label: "Living Profile", price: "$8", period: "/mo", desc: "Auto-improving voice profile" },
-    { id: "pro", label: "Noren Pro", price: "$19", period: "/mo", desc: "Bundled inference + everything" },
+    { id: "pro", label: "Noren Pro", price: "$19", period: "/mo", desc: "AI extraction, bundled inference, living profile" },
   ] as const;
 
   $effect(() => {
@@ -341,7 +339,7 @@
           <div class="p-3 bg-tint border border-secondary/30 rounded-md">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-medium text-secondary">
-                {subscription?.tier === "pro" ? "Noren Pro" : subscription?.tier === "living" ? "Living Profile" : subscription?.tier === "extraction" ? "Extraction" : "Free"}
+                {subscription?.tier === "pro" ? "Noren Pro" : "Free"}
               </span>
               <button
                 onclick={handleProLogout}

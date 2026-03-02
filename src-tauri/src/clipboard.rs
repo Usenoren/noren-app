@@ -1,6 +1,7 @@
 //! Clipboard management and text injection.
 
 use std::ffi::c_void;
+use std::io::Write;
 use std::process::Command;
 
 use tauri::AppHandle;
@@ -41,13 +42,20 @@ fn simulate_key_combo(key: u16, flags: u64) {
 
         // Key down
         let key_down = CGEventCreateKeyboardEvent(source, key, true);
-        CGEventSetFlags(key_down, flags);
-        CGEventPost(K_CG_HID_EVENT_TAP, key_down);
+        if !key_down.is_null() {
+            CGEventSetFlags(key_down, flags);
+            CGEventPost(K_CG_HID_EVENT_TAP, key_down);
+        }
+
+        // Small delay between key-down and key-up for reliability
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Key up
         let key_up = CGEventCreateKeyboardEvent(source, key, false);
-        CGEventSetFlags(key_up, flags);
-        CGEventPost(K_CG_HID_EVENT_TAP, key_up);
+        if !key_up.is_null() {
+            CGEventSetFlags(key_up, flags);
+            CGEventPost(K_CG_HID_EVENT_TAP, key_up);
+        }
 
         // Cleanup
         if !key_down.is_null() {
@@ -104,45 +112,80 @@ fn get_selected_text_clipboard(app: &AppHandle) -> Option<String> {
     }
 }
 
-/// Inject text into the frontmost application.
-/// 1. Writes text to clipboard
-/// 2. Activates the source app via NSRunningApplication
-/// 3. Uses osascript + System Events to simulate Cmd+V
-pub fn inject_text(app: &AppHandle, text: &str, source_pid: Option<i32>) -> Result<(), String> {
-    // Write generated text to clipboard
-    app.clipboard()
-        .write_text(text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+/// Wait until the given PID becomes the frontmost application.
+/// Returns true if the app was activated within the timeout.
+fn wait_for_app_focus(pid: i32, timeout_ms: u64) -> bool {
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(timeout_ms);
 
-    // Activate the source app first via native API (no permissions needed)
+    loop {
+        if let Some(front) = accessibility::get_frontmost_pid() {
+            if front == pid {
+                return true;
+            }
+        }
+        if start.elapsed() > timeout {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+/// Write text to the macOS clipboard. Tries Tauri plugin first, then pbcopy.
+fn write_clipboard(app: &AppHandle, text: &str) -> Result<(), String> {
+    if app.clipboard().write_text(text).is_ok() {
+        return Ok(());
+    }
+    eprintln!("[inject] Tauri clipboard failed, trying pbcopy");
+    let mut child = Command::new("pbcopy")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("pbcopy failed to start: {}", e))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(text.as_bytes())
+            .map_err(|e| format!("pbcopy write failed: {}", e))?;
+    }
+    child.wait().map_err(|e| format!("pbcopy failed: {}", e))?;
+    Ok(())
+}
+
+/// Inject text into the source application.
+/// Must be called from a background thread (NOT the main thread) so that
+/// window.hide() can complete while we wait.
+///
+/// 1. Writes text to clipboard
+/// 2. Waits for the Noren window to fully hide
+/// 3. Activates the source app by PID with polling confirmation
+/// 4. Simulates Cmd+V via CGEvent
+pub fn inject_text(
+    app: &AppHandle,
+    text: &str,
+    source_pid: Option<i32>,
+    _source_app_name: Option<String>,
+) -> Result<(), String> {
+    // Step 1: Write text to clipboard
+    write_clipboard(app, text)?;
+
+    // Step 2: Wait for the Noren window to fully hide.
+    // hide() was called on the main thread — give the event loop time to process it.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    // Step 3: Activate source app and poll until it's frontmost
     if let Some(pid) = source_pid {
         accessibility::activate_app(pid);
-        // Give macOS time to complete the activation
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        if !wait_for_app_focus(pid, 3000) {
+            eprintln!("[inject] timeout waiting for source app to activate");
+        }
     } else {
-        // No source PID — wait for macOS to activate previous app after our window hides
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
-    // Try osascript to simulate Cmd+V
-    let result = Command::new("/usr/bin/osascript")
-        .args(["-e", r#"tell application "System Events" to keystroke "v" using command down"#])
-        .output();
+    // Step 4: Extra stabilization — let the app settle after activation
+    std::thread::sleep(std::time::Duration::from_millis(200));
 
-    match result {
-        Ok(output) if output.status.success() => {}
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("osascript paste failed: {}", stderr.trim());
-            // Fallback: try CGEvent (works if Accessibility permission is granted)
-            simulate_key_combo(K_VK_ANSI_V, K_CG_EVENT_FLAG_MASK_COMMAND);
-        }
-        Err(e) => {
-            eprintln!("osascript not available: {}", e);
-            simulate_key_combo(K_VK_ANSI_V, K_CG_EVENT_FLAG_MASK_COMMAND);
-        }
-    }
+    // Step 5: Paste via CGEvent Cmd+V
+    simulate_key_combo(K_VK_ANSI_V, K_CG_EVENT_FLAG_MASK_COMMAND);
 
-    // Text is on clipboard regardless — user can always Cmd+V manually
     Ok(())
 }

@@ -29,6 +29,7 @@ pub fn handle_shortcut(app: &AppHandle, _shortcut: &Shortcut, event: ShortcutEve
         if let Some(state) = app.try_state::<ContextState>() {
             *state.selected_text.lock().unwrap() = text.clone();
             *state.source_pid.lock().unwrap() = source_pid;
+            *state.source_app_name.lock().unwrap() = app_name.clone();
         }
 
         // Emit context to frontend
