@@ -40,21 +40,25 @@ pub async fn run_extraction(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Save profile to disk
-    let profile_dir = {
-        let config = state.config.lock().unwrap();
-        config.profile_dir.clone()
-    };
+    if result.stored_server_side {
+        Ok("Extraction complete — profile stored on Noren servers".to_string())
+    } else {
+        // Save profile to disk (BYOK path)
+        let profile_dir = {
+            let config = state.config.lock().unwrap();
+            config.profile_dir.clone()
+        };
 
-    noren_engine::save_profile(
-        &profile_dir,
-        &result.core_identity,
-        &result.contexts,
-        &result.quality_check,
-    )
-    .map_err(|e| e.to_string())?;
+        noren_engine::save_profile(
+            &profile_dir,
+            &result.core_identity,
+            &result.contexts,
+            &result.quality_check,
+        )
+        .map_err(|e| e.to_string())?;
 
-    Ok("Extraction complete — profile saved".to_string())
+        Ok("Extraction complete — profile saved".to_string())
+    }
 }
 
 /// Get auth token — for now, auto-register with a device-based identity.
@@ -129,32 +133,44 @@ pub async fn start_extraction(
 
         match client.extract(&samples, &format).await {
             Ok(result) => {
-                // Save profile
-                match noren_engine::save_profile(
-                    &profile_dir,
-                    &result.core_identity,
-                    &result.contexts,
-                    &result.quality_check,
-                ) {
-                    Ok(_) => {
-                        let _ = app_for_done.emit(
-                            "extraction-progress",
-                            &ExtractionProgress {
-                                status: "saved".to_string(),
-                                progress: 100,
-                                error: None,
-                            },
-                        );
-                    }
-                    Err(e) => {
-                        let _ = app_for_done.emit(
-                            "extraction-progress",
-                            &ExtractionProgress {
-                                status: "failed".to_string(),
-                                progress: 0,
-                                error: Some(format!("Failed to save profile: {}", e)),
-                            },
-                        );
+                if result.stored_server_side {
+                    // Pro path: profile stored on server — skip local save
+                    let _ = app_for_done.emit(
+                        "extraction-progress",
+                        &ExtractionProgress {
+                            status: "stored_server".to_string(),
+                            progress: 100,
+                            error: None,
+                        },
+                    );
+                } else {
+                    // BYOK path: save profile locally
+                    match noren_engine::save_profile(
+                        &profile_dir,
+                        &result.core_identity,
+                        &result.contexts,
+                        &result.quality_check,
+                    ) {
+                        Ok(_) => {
+                            let _ = app_for_done.emit(
+                                "extraction-progress",
+                                &ExtractionProgress {
+                                    status: "saved".to_string(),
+                                    progress: 100,
+                                    error: None,
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            let _ = app_for_done.emit(
+                                "extraction-progress",
+                                &ExtractionProgress {
+                                    status: "failed".to_string(),
+                                    progress: 0,
+                                    error: Some(format!("Failed to save profile: {}", e)),
+                                },
+                            );
+                        }
                     }
                 }
             }

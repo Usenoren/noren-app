@@ -23,6 +23,21 @@ struct GenerateRequest {
     max_tokens: Option<u32>,
 }
 
+/// Server-composed request — no messages, no profile content.
+/// Server loads profile and composes prompt from its side.
+#[derive(Serialize)]
+struct ServerComposedRequest {
+    prompt: String,
+    format: String,
+    level: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<String>>,
+    temperature: Option<f64>,
+    max_tokens: Option<u32>,
+}
+
 #[derive(Deserialize)]
 struct GenerateResponse {
     content: String,
@@ -59,6 +74,66 @@ impl NorenProxyClient {
             format,
             http: reqwest::Client::new(),
         }
+    }
+
+    /// Generate text with server-side prompt composition.
+    ///
+    /// The server loads the user's profile and composes the system prompt
+    /// using the proprietary enforcement template. Client never sees
+    /// profile content or real prompt.
+    pub async fn generate_server_composed(
+        &self,
+        prompt: &str,
+        format: &str,
+        level: &str,
+        context: Option<&str>,
+        attachments: Option<&[String]>,
+        options: &LlmOptions,
+    ) -> Result<LlmResponse, EngineError> {
+        let url = format!("{}/v1/generate/", self.server_url);
+
+        let req = ServerComposedRequest {
+            prompt: prompt.to_string(),
+            format: format.to_string(),
+            level: level.to_string(),
+            context: context.map(|s| s.to_string()),
+            attachments: attachments.map(|a| a.to_vec()),
+            temperature: options.temperature,
+            max_tokens: options.max_tokens,
+        };
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.auth_token))
+            .json(&req)
+            .send()
+            .await
+            .map_err(|e| EngineError::Network(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let body: String = resp.text().await.unwrap_or_default();
+
+            if let Ok(err) = serde_json::from_str::<ErrorDetail>(&body) {
+                return Err(EngineError::Network(err.detail));
+            }
+            return Err(EngineError::Network(format!(
+                "Server error ({}): {}",
+                status, body
+            )));
+        }
+
+        let gen: GenerateResponse = resp
+            .json::<GenerateResponse>()
+            .await
+            .map_err(|e: reqwest::Error| EngineError::Network(e.to_string()))?;
+
+        Ok(LlmResponse {
+            content: gen.content,
+            input_tokens: gen.input_tokens,
+            output_tokens: gen.output_tokens,
+        })
     }
 
     /// Fetch current usage from server.

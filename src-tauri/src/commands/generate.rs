@@ -19,56 +19,105 @@ pub async fn generate(
     context: Option<String>,
     attachments: Option<Vec<String>>,
 ) -> Result<GenerateResult, String> {
-    // Extract from state synchronously (no holding lock across await)
     let config = state.config.lock().unwrap().clone();
-    let encryption_key = state.encryption_key;
 
-    // Load profile
-    let (core_identity, contexts) =
-        noren_engine::load_profile(&config.profile_dir).map_err(|e| e.to_string())?;
+    if config.inference_mode == noren_engine::InferenceMode::NorenPro {
+        // --- Pro path: server loads profile + composes prompt ---
+        generate_pro(&config, &prompt, &format, &level, context.as_deref(), attachments.as_deref()).await
+    } else {
+        // --- BYOK path: client loads profile + composes prompt locally ---
+        generate_byok(&config, state.encryption_key, &prompt, &format, &level, context.as_deref(), attachments.as_deref()).await
+    }
+}
 
-    // Get context layer for this format
-    let context_layer = contexts.get(&format);
+/// Pro path — server handles profile + prompt composition + inference.
+/// Client sends only { prompt, format, level }.
+async fn generate_pro(
+    config: &noren_engine::Config,
+    prompt: &str,
+    format: &str,
+    level: &str,
+    context: Option<&str>,
+    attachments: Option<&[String]>,
+) -> Result<GenerateResult, String> {
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.noren.ink")
+        .to_string();
+    let auth_token = crate::keychain::get_api_key("noren-pro-token")
+        .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
 
-    // Get enforcement prompt (cache → server → error)
+    let client = noren_engine::NorenProxyClient::new(server_url, auth_token, format.to_string());
+    let options = noren_engine::LlmOptions {
+        temperature: Some(0.7),
+        max_tokens: Some(4096),
+    };
+
+    let response = client
+        .generate_server_composed(prompt, format, level, context, attachments, &options)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(GenerateResult {
+        text: response.content,
+        input_tokens: response.input_tokens,
+        output_tokens: response.output_tokens,
+    })
+}
+
+/// BYOK path — client loads local profile, composes prompt, calls LLM directly.
+async fn generate_byok(
+    config: &noren_engine::Config,
+    encryption_key: [u8; 32],
+    prompt: &str,
+    format: &str,
+    level: &str,
+    context: Option<&str>,
+    attachments: Option<&[String]>,
+) -> Result<GenerateResult, String> {
+    // Load local profile — fall back to empty identity if none exists
+    let (core_identity, contexts) = noren_engine::load_profile(&config.profile_dir)
+        .unwrap_or_else(|_| (String::new(), std::collections::HashMap::new()));
+
+    let context_layer = contexts.get(format);
+
+    // Get enforcement prompt (cache → dev file → built-in fallback)
     let cache_dir = noren_engine::prompt_cache::default_cache_dir();
     let enforcement_prompt = noren_engine::prompt_cache::get_enforcement_prompt(
         &cache_dir,
         &encryption_key,
         config.server_url.as_deref(),
-        None, // auth token — Keychain integration in M6
+        None,
     )
     .await
     .map_err(|e| e.to_string())?;
 
-    // Parse enforcement level
-    let enforcement_level = match level.as_str() {
+    let enforcement_level = match level {
         "strict" => noren_engine::EnforcementLevel::Strict,
         "light" => noren_engine::EnforcementLevel::Light,
         _ => noren_engine::EnforcementLevel::Guided,
     };
 
-    // Compose system prompt
     let system_prompt = noren_engine::compose_system_prompt(
         &enforcement_prompt,
         &core_identity,
         context_layer.map(String::as_str),
-        &format,
+        format,
         &enforcement_level,
-        &prompt,
+        prompt,
     )
     .map_err(|e| e.to_string())?;
 
-    // Build user message (include selected text context + attachments if present)
+    // Build user message
     let mut user_content = match context.filter(|s| !s.is_empty()) {
-        Some(ctx) => format!("Context (selected text):\n{}\n\nRequest: {}", ctx, prompt),
-        None => prompt,
+        Some(ctx) => std::format!("Context (selected text):\n{}\n\nRequest: {}", ctx, prompt),
+        None => prompt.to_string(),
     };
 
-    // Append file attachments
-    if let Some(ref attached) = attachments {
+    if let Some(attached) = attachments {
         for (i, content) in attached.iter().enumerate() {
-            user_content.push_str(&format!(
+            user_content.push_str(&std::format!(
                 "\n\n--- Attached document {} ---\n{}",
                 i + 1,
                 content
@@ -76,29 +125,15 @@ pub async fn generate(
         }
     }
 
-    // Create LLM client — BYOK (direct) or Noren Pro (server proxy)
-    let client: Box<dyn noren_engine::LlmClient> =
-        if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-            let server_url = config
-                .server_url
-                .as_deref()
-                .unwrap_or("https://api.noren.ink")
-                .to_string();
-            let auth_token = crate::keychain::get_api_key("noren-pro-token")
-                .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
-            Box::new(noren_engine::NorenProxyClient::new(
-                server_url,
-                auth_token,
-                format.clone(),
-            ))
+    let client: Box<dyn noren_engine::LlmClient> = {
+        let api_key = if config.provider.requires_key {
+            crate::keychain::get_api_key(&config.provider.keychain_id())
         } else {
-            let api_key = if config.provider.requires_key {
-                crate::keychain::get_api_key(&config.provider.keychain_id())
-            } else {
-                None
-            };
-            noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
+            None
         };
+        noren_engine::create_llm_client(config, api_key).map_err(|e| e.to_string())?
+    };
+
     let messages = vec![
         noren_engine::LlmMessage {
             role: noren_engine::Role::System,
@@ -154,35 +189,11 @@ pub async fn generate_comparison(
     // Generate WITHOUT voice — vanilla LLM, no profile
     let config = state.config.lock().unwrap().clone();
 
-    let client: Box<dyn noren_engine::LlmClient> =
-        if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-            let server_url = config
-                .server_url
-                .as_deref()
-                .unwrap_or("https://api.noren.ink")
-                .to_string();
-            let auth_token = crate::keychain::get_api_key("noren-pro-token")
-                .ok_or("Not logged in to Noren Pro.")?;
-            Box::new(noren_engine::NorenProxyClient::new(
-                server_url,
-                auth_token,
-                format.clone(),
-            ))
-        } else {
-            let api_key = if config.provider.requires_key {
-                crate::keychain::get_api_key(&config.provider.keychain_id())
-            } else {
-                None
-            };
-            noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
-        };
-
     let mut user_content = match context.filter(|s| !s.is_empty()) {
         Some(ctx) => format!("Context:\n{}\n\nRequest: {}", ctx, prompt),
         None => prompt,
     };
 
-    // Append file attachments
     if let Some(ref attached) = attachments {
         for (i, content) in attached.iter().enumerate() {
             user_content.push_str(&format!(
@@ -207,6 +218,30 @@ pub async fn generate_comparison(
         temperature: Some(0.7),
         max_tokens: Some(4096),
     };
+
+    // For "without voice", always use legacy messages path (even for Pro)
+    let client: Box<dyn noren_engine::LlmClient> =
+        if config.inference_mode == noren_engine::InferenceMode::NorenPro {
+            let server_url = config
+                .server_url
+                .as_deref()
+                .unwrap_or("https://api.noren.ink")
+                .to_string();
+            let auth_token = crate::keychain::get_api_key("noren-pro-token")
+                .ok_or("Not logged in to Noren Pro.")?;
+            Box::new(noren_engine::NorenProxyClient::new(
+                server_url,
+                auth_token,
+                format.clone(),
+            ))
+        } else {
+            let api_key = if config.provider.requires_key {
+                crate::keychain::get_api_key(&config.provider.keychain_id())
+            } else {
+                None
+            };
+            noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
+        };
 
     let response = client
         .complete(&messages, &options)

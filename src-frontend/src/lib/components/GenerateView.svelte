@@ -1,7 +1,8 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { emit } from "@tauri-apps/api/event";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -18,15 +19,33 @@
   let isGenerating = $state(false);
   let error = $state("");
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
+  let hasProfile = $state(true);
 
   const levels = ["strict", "guided", "light"] as const;
 
   // --- Init ---
   $effect(() => {
-    listFormats().then((f) => {
+    // Use profile overview for both profile status and format list
+    // (works for both local and server-side profiles)
+    getProfileOverview().then((overview) => {
+      hasProfile = overview.exists;
+      let f = overview.formats;
+      if (!f.includes("general")) {
+        f = ["general", ...f];
+      }
       formats = f;
-      if (f.length > 0 && !f.includes(format)) {
+      if (!f.includes(format)) {
         format = f[0];
+      }
+    });
+
+    // Also get local formats as fallback (for BYOK path)
+    listFormats().then((f) => {
+      if (formats.length <= 1) {
+        if (!f.includes("general")) {
+          f = ["general", ...f];
+        }
+        formats = f;
       }
     });
 
@@ -154,6 +173,23 @@
 </script>
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
+  <!-- No profile nudge -->
+  {#if !hasProfile}
+    <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-md">
+      <p class="flex-1 text-[10px] text-muted leading-relaxed">
+        No voice profile yet — output will be generic.
+        <button
+          onclick={() => emit("navigate", "profiles")}
+          class="text-secondary font-medium cursor-pointer hover:text-foreground"
+        >Create one</button> or
+        <button
+          onclick={() => emit("navigate", "settings")}
+          class="text-secondary font-medium cursor-pointer hover:text-foreground"
+        >upgrade to Pro</button> for AI extraction.
+      </p>
+    </div>
+  {/if}
+
   <!-- Context banner -->
   {#if contextText}
     <div class="flex items-start gap-2 p-2 bg-tint border border-border rounded-md text-xs">
@@ -190,18 +226,14 @@
   <!-- Format + Enforcement selectors -->
   <div class="flex items-center gap-3">
     <div class="flex items-center gap-2">
-      {#if formats.length > 0}
-        <select
-          bind:value={format}
-          class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-        >
-          {#each formats as fmt}
-            <option value={fmt}>{fmt}</option>
-          {/each}
-        </select>
-      {:else}
-        <span class="text-xs text-muted">No formats</span>
-      {/if}
+      <select
+        bind:value={format}
+        class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+      >
+        {#each formats as fmt}
+          <option value={fmt}>{fmt}</option>
+        {/each}
+      </select>
       {#if detectedApp}
         <span class="text-[10px] text-secondary">{detectedApp}</span>
       {/if}

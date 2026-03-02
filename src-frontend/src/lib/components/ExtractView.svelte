@@ -25,6 +25,7 @@
     quality_check: "Running quality check...",
     completed: "Extraction complete",
     saved: "Profile saved",
+    stored_server: "Profile created on Noren servers",
     failed: "Extraction failed",
   };
 
@@ -34,7 +35,7 @@
     listen<ExtractionProgress>("extraction-progress", (event) => {
       progress = event.payload;
 
-      if (progress.status === "saved") {
+      if (progress.status === "saved" || progress.status === "stored_server") {
         isExtracting = false;
         isDone = true;
       } else if (progress.status === "failed") {
@@ -79,7 +80,11 @@
       </div>
       <div class="text-center">
         <p class="text-sm font-semibold text-foreground">Voice profile created</p>
-        <p class="text-xs text-muted mt-1">Your profile has been saved and is ready to use.</p>
+        <p class="text-xs text-muted mt-1">
+          {progress?.status === "stored_server"
+            ? "Your profile is stored on Noren servers and ready to use."
+            : "Your profile has been saved and is ready to use."}
+        </p>
       </div>
       <button
         onclick={() => { isDone = false; samples = ""; progress = null; }}

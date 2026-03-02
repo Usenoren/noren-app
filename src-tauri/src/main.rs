@@ -17,6 +17,7 @@ use tauri::Manager;
 pub struct ContextState {
     pub selected_text: Mutex<Option<String>>,
     pub source_pid: Mutex<Option<i32>>,
+    pub source_app_name: Mutex<Option<String>>,
 }
 
 /// Main app state: config + encryption key for prompt cache
@@ -38,16 +39,26 @@ fn inject_generated_text(
     state: tauri::State<ContextState>,
     text: String,
 ) -> Result<(), String> {
-    // Get the saved source app PID before hiding
+    // Get the saved source app info before hiding
     let source_pid = state.source_pid.lock().unwrap().take();
+    let source_app_name = state.source_app_name.lock().unwrap().take();
 
     // Hide our popup
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
     }
 
-    // osascript handles focus activation + paste via System Events
-    clipboard::inject_text(&app, &text, source_pid)
+    // IMPORTANT: Run injection on a background thread so the main thread can
+    // process the window hide. Blocking the main thread here would prevent
+    // hide() from completing, causing paste to fire into Noren instead of
+    // the source app.
+    std::thread::spawn(move || {
+        if let Err(e) = clipboard::inject_text(&app, &text, source_pid, source_app_name) {
+            eprintln!("[inject] error: {}", e);
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -106,6 +117,7 @@ fn main() {
         .manage(ContextState {
             selected_text: Mutex::new(None),
             source_pid: Mutex::new(None),
+            source_app_name: Mutex::new(None),
         })
         .manage(AppState {
             config: Mutex::new(config),
@@ -155,10 +167,17 @@ fn main() {
             commands::sync_profile_down,
             commands::get_sync_status,
             commands::read_file_as_text,
+            commands::migrate_profile_to_server,
+            commands::export_profile,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Request accessibility permission on first launch (opens System Settings if not granted)
+            if !accessibility::check_accessibility_trusted(false) {
+                accessibility::check_accessibility_trusted(true);
+            }
 
             tray::setup_tray(app.handle())?;
             hotkey::register(app.handle())?;

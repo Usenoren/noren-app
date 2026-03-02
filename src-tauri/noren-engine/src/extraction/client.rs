@@ -8,6 +8,8 @@ pub struct ExtractionResult {
     pub core_identity: String,
     pub contexts: std::collections::HashMap<String, String>,
     pub quality_check: String,
+    /// When true, the profile is stored server-side — don't save locally.
+    pub stored_server_side: bool,
 }
 
 /// Progress callback type
@@ -66,6 +68,8 @@ struct JobResultResponse {
     core_identity: Option<String>,
     context: Option<std::collections::HashMap<String, String>>,
     quality_report: Option<String>,
+    #[serde(default)]
+    stored_server_side: bool,
 }
 
 #[derive(Deserialize)]
@@ -237,6 +241,7 @@ impl ExtractionClient for ServerExtractionClient {
             core_identity: result.core_identity.unwrap_or_default(),
             contexts: result.context.unwrap_or_default(),
             quality_check: result.quality_report.unwrap_or_default(),
+            stored_server_side: result.stored_server_side,
         })
     }
 }

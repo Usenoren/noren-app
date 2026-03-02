@@ -13,12 +13,14 @@
     syncProfileUp,
     syncProfileDown,
     getSyncStatus,
+    exportProfile,
     type ProfileOverview,
     type ProfileContent,
     type LivingProfileStatus,
     type ProfilePatch,
     type SyncStatus,
   } from "$lib/api/tauri";
+  import { emit } from "@tauri-apps/api/event";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -43,6 +45,9 @@
   let isSyncing = $state(false);
   let syncMessage = $state("");
 
+  // Export state (server profiles)
+  let isExporting = $state(false);
+
   let displayContent = $derived(
     activeTab === "core"
       ? profile?.core_identity ?? ""
@@ -56,7 +61,7 @@
   async function loadProfile() {
     try {
       overview = await getProfileOverview();
-      if (overview.exists) {
+      if (overview.exists && !overview.is_server) {
         profile = await readProfileContent();
       }
       // Load living profile status
@@ -73,6 +78,20 @@
       } catch { /* not logged in or not available */ }
     } catch (e) {
       error = friendlyError(e);
+    }
+  }
+
+  async function handleCreateProfile() {
+    if (!editContent.trim()) return;
+    isSaving = true;
+    error = "";
+    try {
+      await saveProfileEdit({ coreIdentity: editContent.trim() });
+      await loadProfile();
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isSaving = false;
     }
   }
 
@@ -203,6 +222,19 @@
       isSyncing = false;
     }
   }
+
+  async function handleExport() {
+    isExporting = true;
+    error = "";
+    try {
+      await exportProfile();
+      await loadProfile();
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isExporting = false;
+    }
+  }
 </script>
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-hidden animate-fade-in-up">
@@ -211,18 +243,125 @@
       <LoadingSpinner />
     </div>
   {:else if !overview.exists}
-    <!-- No profile -->
-    <div class="flex flex-col items-center justify-center h-full gap-3 text-center">
-      <p class="text-sm text-muted">No voice profile found.</p>
-      <p class="text-xs text-muted max-w-[280px] leading-relaxed">
-        Create a profile using the CLI:
-      </p>
-      <code class="px-3 py-1.5 bg-surface border border-border rounded text-xs text-secondary font-mono">
-        noren extract --samples your-writing.txt
-      </code>
-      <p class="text-[10px] text-muted mt-2">
-        Profile directory: {overview.path}
-      </p>
+    <!-- No profile — manual creation -->
+    <div class="flex flex-col gap-3 h-full">
+      <div>
+        <p class="text-sm font-medium text-foreground">Create your voice profile</p>
+        <p class="text-[10px] text-muted leading-relaxed mt-1">
+          Describe how you write — tone, word choices, sentence length, and any quirks.
+        </p>
+      </div>
+
+      <div class="flex-1 flex flex-col min-h-0">
+        <textarea
+          bind:value={editContent}
+          class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary"
+          placeholder={"Example:\n\nI write casually and directly. Short sentences. I use contractions, avoid jargon, and get to the point fast. I'm opinionated but not aggressive — more like a friend giving honest advice. I occasionally use humor and rhetorical questions."}
+        ></textarea>
+      </div>
+
+      <!-- Pro nudge -->
+      <div class="p-2 bg-tint border border-secondary/20 rounded-md flex items-start justify-between gap-2">
+        <p class="text-[10px] text-muted leading-relaxed">
+          <span class="text-secondary font-medium">Noren Pro</span> analyzes your real writing to build a much richer profile — sentence patterns, vocabulary, rhetorical style, and format-specific contexts. No API key needed.
+        </p>
+        <button
+          onclick={() => emit("navigate", "settings")}
+          class="text-[10px] text-secondary hover:text-foreground font-medium cursor-pointer whitespace-nowrap shrink-0 uppercase tracking-wide"
+        >
+          Upgrade
+        </button>
+      </div>
+
+      <button
+        onclick={handleCreateProfile}
+        disabled={!editContent.trim() || isSaving}
+        class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
+          {!editContent.trim() || isSaving
+            ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
+            : 'bg-primary text-white hover:bg-primary-hover'}"
+      >
+        {isSaving ? "Saving..." : "Save Profile"}
+      </button>
+
+      {#if error}
+        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
+          {error}
+        </div>
+      {/if}
+    </div>
+  {:else if overview.is_server}
+    <!-- Server profile — metadata only -->
+    <div class="flex flex-col gap-3 h-full">
+      <div class="p-3 bg-surface border border-secondary/20 rounded-md">
+        <p class="text-sm font-medium text-foreground">Voice profile on Noren servers</p>
+        <p class="text-[10px] text-muted mt-1">
+          Your extracted profile is securely stored on Noren servers and used automatically when generating text.
+        </p>
+      </div>
+
+      {#if overview.formats.length > 0}
+        <div class="p-3 bg-surface border border-border rounded-md">
+          <span class="text-[10px] font-medium text-muted uppercase tracking-wide">Formats</span>
+          <div class="flex gap-1.5 mt-1.5 flex-wrap">
+            {#each overview.formats as fmt}
+              <span class="px-2 py-0.5 text-xs bg-tint border border-border rounded text-secondary">{fmt}</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Living Profile tab -->
+      <div class="flex gap-1 shrink-0">
+        <button
+          onclick={() => switchTab("living")}
+          class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md
+            {activeTab === 'living'
+              ? 'bg-secondary text-white font-medium'
+              : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+        >
+          Living Profile
+        </button>
+      </div>
+
+      {#if activeTab === "living"}
+        <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
+          <div class="p-3 bg-surface border border-border rounded-md">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-xs font-medium text-foreground">Edit tracking</span>
+                <p class="text-[10px] text-muted mt-0.5">Track edits to improve your profile over time.</p>
+              </div>
+              <button
+                onclick={handleToggleLiving}
+                class="px-3 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md transition-colors
+                  {livingStatus?.enabled
+                    ? 'bg-secondary text-white font-medium'
+                    : 'bg-surface text-muted border border-border hover:border-secondary'}"
+              >
+                {livingStatus?.enabled ? "On" : "Off"}
+              </button>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <div class="flex items-center justify-between shrink-0 mt-auto">
+        <span class="text-[10px] text-muted">Stored on Noren servers</span>
+        <button
+          onclick={handleExport}
+          disabled={isExporting}
+          class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
+        >
+          {isExporting ? "Exporting..." : "Export to disk"}
+        </button>
+      </div>
+
+      {#if error}
+        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed shrink-0">
+          {error}
+        </div>
+      {/if}
     </div>
   {:else}
     <!-- Tabs -->
@@ -368,6 +507,21 @@
         </div>
       {/if}
     </div>
+
+    <!-- Upgrade nudge for manual-only profiles (no format contexts) -->
+    {#if overview.formats.length === 0 && activeTab === "core" && !isEditing}
+      <div class="p-2 bg-tint border border-secondary/15 rounded-md shrink-0 flex items-start justify-between gap-2">
+        <p class="text-[10px] text-muted leading-relaxed">
+          Your profile covers the basics. <span class="text-secondary font-medium">Noren Pro</span> adds AI extraction, format-specific contexts, and vocabulary analysis for significantly more accurate voice matching.
+        </p>
+        <button
+          onclick={() => emit("navigate", "settings")}
+          class="text-[10px] text-secondary hover:text-foreground font-medium cursor-pointer whitespace-nowrap shrink-0 uppercase tracking-wide"
+        >
+          Upgrade
+        </button>
+      </div>
+    {/if}
 
     <!-- Actions -->
     {#if activeTab !== "living"}

@@ -72,13 +72,13 @@ pub async fn get_enforcement_prompt(
     }
 
     // 3. Fetch from server and cache
-    let server_url = server_url.ok_or_else(|| {
-        EngineError::PromptCache(
-            "No cached prompt found and no server URL configured. \
-             Set NOREN_DEV_PROMPT_PATH for local development."
-                .to_string(),
-        )
-    })?;
+    let server_url = match server_url {
+        Some(url) => url,
+        None => {
+            // No server available — use built-in fallback prompt
+            return Ok(BUILTIN_ENFORCEMENT_PROMPT.to_string());
+        }
+    };
 
     let auth_token = auth_token.ok_or_else(|| {
         EngineError::PromptCache("No auth token configured for prompt server.".to_string())
@@ -223,6 +223,24 @@ pub fn default_dev_prompt_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     PathBuf::from(home).join(".noren").join("dev-prompt.md")
 }
+
+/// Built-in enforcement prompt for free/BYOK users.
+pub const BUILTIN_ENFORCEMENT_PROMPT: &str = r#"### System Prompt
+
+```
+You are a writing assistant. Write {{FORMAT}} content in the voice described below.
+
+{{CORE_IDENTITY}}
+
+{{#if CONTEXT_LAYER}}
+{{CONTEXT_LAYER}}
+{{/if}}
+
+{{USER_REQUEST}}
+
+Write only the final text. No commentary.
+```
+"#;
 
 #[cfg(test)]
 mod tests {

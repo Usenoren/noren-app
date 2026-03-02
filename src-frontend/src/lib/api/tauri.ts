@@ -294,6 +294,7 @@ export interface ProfileOverview {
   exists: boolean;
   path: string;
   formats: string[];
+  is_server?: boolean;
 }
 
 export interface ProfileContent {
@@ -320,4 +321,12 @@ export async function saveProfileEdit(params: {
     contextFormat: params.contextFormat,
     contextContent: params.contextContent,
   });
+}
+
+export async function migrateProfileToServer(): Promise<string> {
+  return invoke("migrate_profile_to_server");
+}
+
+export async function exportProfile(): Promise<string> {
+  return invoke("export_profile");
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
-  import { checkPermissions, requestPermissions, getSettings, getProfileOverview } from "$lib/api/tauri";
+  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, getSubscriptionStatus, migrateProfileToServer } from "$lib/api/tauri";
   import GenerateView from "./GenerateView.svelte";
   import SettingsView from "./SettingsView.svelte";
   import ProfilesView from "./ProfilesView.svelte";
@@ -13,6 +13,7 @@
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
   let loading = $state(true);
+  let canExtract = $state(false);
 
   const viewLabels: Record<View, string> = {
     generate: "noren",
@@ -28,6 +29,8 @@
 
   $effect(() => {
     let cleanup: (() => void) | undefined;
+    let cleanup2: (() => void) | undefined;
+
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
       if (["generate", "profiles", "extract", "settings"].includes(target)) {
@@ -35,6 +38,16 @@
       }
     }).then((fn) => {
       cleanup = fn;
+    });
+
+    // Re-check permissions each time the window is shown
+    // (user may have granted access in System Settings while the app was hidden)
+    listen("tauri://focus", () => {
+      checkPermissions().then((ok) => {
+        hasPermissions = ok;
+      });
+    }).then((fn) => {
+      cleanup2 = fn;
     });
 
     checkPermissions().then((ok) => {
@@ -54,9 +67,23 @@
         view = "settings";
       }
       loading = false;
+
+      // Check extraction access
+      if (settings.noren_pro_logged_in) {
+        getSubscriptionStatus().then((sub) => {
+          canExtract = sub.can_extract;
+        }).catch(() => { canExtract = false; });
+
+        // Auto-migrate local profile to server for Pro users
+        if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
+          migrateProfileToServer().catch(() => {
+            // Migration failed silently — user can retry manually
+          });
+        }
+      }
     });
 
-    return () => cleanup?.();
+    return () => { cleanup?.(); cleanup2?.(); };
   });
 
   function handleOnboardingComplete() {
@@ -65,8 +92,19 @@
   }
 
   async function handleRequestPermissions() {
-    const granted = await requestPermissions();
-    hasPermissions = granted;
+    // Open System Settings → Accessibility
+    await requestPermissions();
+
+    // Poll until the user grants access (they need to toggle in System Settings)
+    const maxAttempts = 60; // 30 seconds
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const ok = await checkPermissions();
+      if (ok) {
+        hasPermissions = true;
+        return;
+      }
+    }
   }
 </script>
 
@@ -97,14 +135,16 @@
     </div>
     <div class="flex items-center gap-3">
       {#if view === "generate"}
-        <button
-          onclick={() => { view = "extract"; }}
-          class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"
-          aria-label="Extract"
-          title="Extract voice profile"
-        >
-          EXT
-        </button>
+        {#if canExtract}
+          <button
+            onclick={() => { view = "extract"; }}
+            class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"
+            aria-label="Extract"
+            title="Extract voice profile"
+          >
+            EXT
+          </button>
+        {/if}
         <button
           onclick={() => { view = "profiles"; }}
           class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"

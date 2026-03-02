@@ -41,10 +41,9 @@ pub fn load_profile(
 ) -> Result<(String, HashMap<String, String>), EngineError> {
     let core_path = profile_dir.join("core-identity.md");
     if !core_path.exists() {
-        return Err(EngineError::Profile(format!(
-            "Profile not found at {}. Run 'noren extract' first.",
-            profile_dir.display()
-        )));
+        return Err(EngineError::Profile(
+            "No voice profile found. Create one in Profiles or upgrade to Pro for AI extraction.".to_string()
+        ));
     }
 
     let core_identity = std::fs::read_to_string(&core_path)?;
@@ -126,7 +125,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let result = load_profile(&tmp.path().join("nonexistent"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Profile not found"));
+        assert!(result.unwrap_err().to_string().contains("No voice profile found"));
     }
 
     #[test]
