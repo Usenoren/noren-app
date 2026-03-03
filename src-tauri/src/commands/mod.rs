@@ -1,5 +1,6 @@
 pub mod attachments;
 pub mod billing;
+pub mod chat;
 pub mod extract;
 pub mod generate;
 pub mod living_profile;
@@ -9,6 +10,7 @@ pub mod sync;
 
 pub use attachments::*;
 pub use billing::*;
+pub use chat::*;
 pub use extract::*;
 pub use generate::*;
 pub use living_profile::*;

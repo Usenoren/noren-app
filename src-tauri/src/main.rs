@@ -170,6 +170,7 @@ fn main() {
             commands::migrate_profile_to_server,
             commands::export_profile,
             commands::update_hotkey,
+            commands::chat_send,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

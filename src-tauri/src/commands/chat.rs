@@ -1,0 +1,102 @@
+use serde::Deserialize;
+use tauri::State;
+
+use crate::AppState;
+use super::generate::GenerateResult;
+
+#[derive(Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// Build a chat-specific system prompt from the voice profile.
+fn build_chat_system_prompt(core_identity: &str, context_layer: Option<&str>) -> String {
+    let mut prompt = String::from(
+        "You are a helpful writing assistant. Be conversational and helpful.",
+    );
+    if !core_identity.is_empty() {
+        prompt.push_str(
+            " Write in the user's voice and style as described in their profile:\n\n",
+        );
+        prompt.push_str(core_identity);
+    }
+    if let Some(ctx) = context_layer {
+        prompt.push_str("\n\nAdditional context for this format:\n");
+        prompt.push_str(ctx);
+    }
+    prompt
+}
+
+#[tauri::command]
+pub async fn chat_send(
+    state: State<'_, AppState>,
+    messages: Vec<ChatMessage>,
+    format: String,
+) -> Result<GenerateResult, String> {
+    let config = state.config.lock().unwrap().clone();
+
+    // Load local profile for voice-aware system prompt
+    let (core_identity, contexts) = noren_engine::load_profile(&config.profile_dir)
+        .unwrap_or_else(|_| (String::new(), std::collections::HashMap::new()));
+
+    let context_layer = contexts.get(&format);
+    let system_prompt = build_chat_system_prompt(&core_identity, context_layer.map(String::as_str));
+
+    // Build full message array: system prompt + conversation history
+    let mut llm_messages = vec![noren_engine::LlmMessage {
+        role: noren_engine::Role::System,
+        content: system_prompt,
+    }];
+
+    for msg in &messages {
+        let role = match msg.role.as_str() {
+            "assistant" => noren_engine::Role::Assistant,
+            _ => noren_engine::Role::User,
+        };
+        llm_messages.push(noren_engine::LlmMessage {
+            role,
+            content: msg.content.clone(),
+        });
+    }
+
+    let options = noren_engine::LlmOptions {
+        temperature: Some(0.7),
+        max_tokens: Some(4096),
+    };
+
+    // Create LLM client (same dual-path as generate)
+    let client: Box<dyn noren_engine::LlmClient> =
+        if config.inference_mode == noren_engine::InferenceMode::NorenPro {
+            let server_url = config
+                .server_url
+                .as_deref()
+                .unwrap_or("https://api.noren.ink")
+                .to_string();
+            let auth_token = crate::keychain::get_api_key("noren-pro-token")
+                .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
+            Box::new(noren_engine::NorenProxyClient::new(
+                server_url,
+                auth_token,
+                format,
+            ))
+        } else {
+            let api_key = if config.provider.requires_key {
+                crate::keychain::get_api_key(&config.provider.keychain_id())
+            } else {
+                None
+            };
+            noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
+        };
+
+    let response = client
+        .complete(&llm_messages, &options)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(GenerateResult {
+        text: response.content,
+        input_tokens: response.input_tokens,
+        output_tokens: response.output_tokens,
+    })
+}

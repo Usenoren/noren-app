@@ -337,3 +337,17 @@ export async function migrateProfileToServer(): Promise<string> {
 export async function exportProfile(): Promise<string> {
   return invoke("export_profile");
 }
+
+// --- Chat ---
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function chatSend(params: {
+  messages: ChatMessage[];
+  format: string;
+}): Promise<GenerateResult> {
+  return invoke("chat_send", params);
+}
