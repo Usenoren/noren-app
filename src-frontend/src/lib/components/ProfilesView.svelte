@@ -14,6 +14,7 @@
     syncProfileDown,
     getSyncStatus,
     exportProfile,
+    createCheckout,
     type ProfileOverview,
     type ProfileContent,
     type LivingProfileStatus,
@@ -21,6 +22,9 @@
     type SyncStatus,
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
+  import { open } from "@tauri-apps/plugin-shell";
+  import { canLivingProfile, canSync, canExport } from "$lib/stores/subscription.svelte";
+  import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -235,6 +239,20 @@
       isExporting = false;
     }
   }
+
+  async function handleUpgrade(target: string) {
+    error = "";
+    try {
+      const result = await createCheckout(target);
+      if (result.checkout_url === "dev://granted") {
+        await refreshSubscription();
+      } else {
+        await open(result.checkout_url);
+      }
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
 </script>
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-hidden animate-fade-in-up">
@@ -260,17 +278,26 @@
         ></textarea>
       </div>
 
-      <!-- Pro nudge -->
-      <div class="p-2 bg-tint border border-secondary/20 rounded-md flex items-start justify-between gap-2">
+      <!-- AI extraction nudge -->
+      <div class="p-2 bg-tint border border-secondary/20 rounded-md flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
-          <span class="text-secondary font-medium">Noren Pro</span> analyzes your real writing to build a much richer profile — sentence patterns, vocabulary, rhetorical style, and format-specific contexts. No API key needed.
+          <span class="text-secondary font-medium">AI Extraction</span> analyzes your real writing — sentence patterns, vocabulary, rhetorical style, and format-specific contexts.
         </p>
-        <button
-          onclick={() => emit("navigate", "settings")}
-          class="text-[10px] text-secondary hover:text-foreground font-medium cursor-pointer whitespace-nowrap shrink-0 uppercase tracking-wide"
-        >
-          Upgrade
-        </button>
+        <div class="flex gap-2 items-center">
+          <button
+            onclick={() => handleUpgrade("extraction")}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+          >
+            One-time $29
+          </button>
+          <span class="text-[10px] text-muted">or</span>
+          <button
+            onclick={() => handleUpgrade("pro")}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+          >
+            Included with Pro
+          </button>
+        </div>
       </div>
 
       <button
@@ -321,10 +348,14 @@
               : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
         >
           Living Profile
+          {#if !canLivingProfile()}
+            <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-white/70' : 'text-secondary'} font-medium">PRO</span>
+          {/if}
         </button>
       </div>
 
       {#if activeTab === "living"}
+        {#if canLivingProfile()}
         <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
           <div class="p-3 bg-surface border border-border rounded-md">
             <div class="flex items-center justify-between">
@@ -344,17 +375,43 @@
             </div>
           </div>
         </div>
+        {:else}
+        <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
+          <div class="p-4 bg-tint border border-secondary/20 rounded-md text-center max-w-[260px]">
+            <p class="text-xs font-medium text-secondary">Living Profile</p>
+            <p class="text-[10px] text-muted mt-1 leading-relaxed">
+              Your profile evolves as you write. Noren tracks your edits and suggests refinements automatically.
+            </p>
+            <button
+              onclick={() => handleUpgrade("pro")}
+              class="mt-3 px-4 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
+            >
+              Upgrade to Pro
+            </button>
+          </div>
+        </div>
+        {/if}
       {/if}
 
       <div class="flex items-center justify-between shrink-0 mt-auto">
         <span class="text-[10px] text-muted">Stored on Noren servers</span>
-        <button
-          onclick={handleExport}
-          disabled={isExporting}
-          class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
-        >
-          {isExporting ? "Exporting..." : "Export to disk"}
-        </button>
+        {#if canExport()}
+          <button
+            onclick={handleExport}
+            disabled={isExporting}
+            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
+          >
+            {isExporting ? "Exporting..." : "Export to disk"}
+          </button>
+        {:else}
+          <button
+            onclick={() => handleUpgrade("export")}
+            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            title="One-time purchase to export your profile"
+          >
+            Export to disk <span class="text-[8px] text-secondary font-medium">$</span>
+          </button>
+        {/if}
       </div>
 
       {#if error}
@@ -388,18 +445,22 @@
       {/each}
       <button
         onclick={() => switchTab("living")}
-        class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md
+        class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md relative
           {activeTab === 'living'
             ? 'bg-secondary text-white font-medium'
             : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
       >
         Living
+        {#if !canLivingProfile()}
+          <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-white/70' : 'text-secondary'} font-medium">PRO</span>
+        {/if}
       </button>
     </div>
 
     <!-- Content -->
     <div class="flex-1 flex flex-col min-h-0">
       {#if activeTab === "living"}
+        {#if canLivingProfile()}
         <!-- Living Profile panel -->
         <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
           <!-- Opt-in toggle -->
@@ -496,6 +557,23 @@
             </p>
           {/if}
         </div>
+        {:else}
+        <!-- Living Profile locked -->
+        <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
+          <div class="p-4 bg-tint border border-secondary/20 rounded-md text-center max-w-[260px]">
+            <p class="text-xs font-medium text-secondary">Living Profile</p>
+            <p class="text-[10px] text-muted mt-1 leading-relaxed">
+              Your profile evolves as you write. Noren tracks your edits and suggests refinements automatically.
+            </p>
+            <button
+              onclick={() => handleUpgrade("pro")}
+              class="mt-3 px-4 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
+            >
+              Upgrade to Pro
+            </button>
+          </div>
+        </div>
+        {/if}
       {:else if isEditing}
         <textarea
           bind:value={editContent}
@@ -510,16 +588,25 @@
 
     <!-- Upgrade nudge for manual-only profiles (no format contexts) -->
     {#if overview.formats.length === 0 && activeTab === "core" && !isEditing}
-      <div class="p-2 bg-tint border border-secondary/15 rounded-md shrink-0 flex items-start justify-between gap-2">
+      <div class="p-2 bg-tint border border-secondary/15 rounded-md shrink-0 flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
-          Your profile covers the basics. <span class="text-secondary font-medium">Noren Pro</span> adds AI extraction, format-specific contexts, and vocabulary analysis for significantly more accurate voice matching.
+          Your profile covers the basics. <span class="text-secondary font-medium">AI extraction</span> adds format-specific contexts and vocabulary analysis.
         </p>
-        <button
-          onclick={() => emit("navigate", "settings")}
-          class="text-[10px] text-secondary hover:text-foreground font-medium cursor-pointer whitespace-nowrap shrink-0 uppercase tracking-wide"
-        >
-          Upgrade
-        </button>
+        <div class="flex gap-2 items-center">
+          <button
+            onclick={() => handleUpgrade("extraction")}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+          >
+            One-time $29
+          </button>
+          <span class="text-[10px] text-muted">or</span>
+          <button
+            onclick={() => handleUpgrade("pro")}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+          >
+            Included with Pro
+          </button>
+        </div>
       </div>
     {/if}
 
@@ -560,22 +647,32 @@
             >
               Edit
             </button>
-            <button
-              onclick={handleSyncUp}
-              disabled={isSyncing}
-              class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md uppercase tracking-wide"
-              title="Push profile to cloud"
-            >
-              {isSyncing ? "..." : "Push"}
-            </button>
-            {#if syncStatus?.has_remote}
+            {#if canSync()}
               <button
-                onclick={handleSyncDown}
+                onclick={handleSyncUp}
                 disabled={isSyncing}
                 class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md uppercase tracking-wide"
-                title="Pull profile from cloud"
+                title="Push profile to cloud"
               >
-                Pull
+                {isSyncing ? "..." : "Push"}
+              </button>
+              {#if syncStatus?.has_remote}
+                <button
+                  onclick={handleSyncDown}
+                  disabled={isSyncing}
+                  class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md uppercase tracking-wide"
+                  title="Pull profile from cloud"
+                >
+                  Pull
+                </button>
+              {/if}
+            {:else}
+              <button
+                onclick={() => handleUpgrade("pro")}
+                class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md uppercase tracking-wide"
+                title="Sync requires Pro"
+              >
+                Sync <span class="text-[8px] text-secondary font-medium">PRO</span>
               </button>
             {/if}
           {/if}

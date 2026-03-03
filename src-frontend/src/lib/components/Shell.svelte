@@ -1,7 +1,8 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
-  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, getSubscriptionStatus, migrateProfileToServer } from "$lib/api/tauri";
+  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
+  import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
   import GenerateView from "./GenerateView.svelte";
   import SettingsView from "./SettingsView.svelte";
   import ProfilesView from "./ProfilesView.svelte";
@@ -13,7 +14,6 @@
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
   let loading = $state(true);
-  let canExtract = $state(false);
 
   const viewLabels: Record<View, string> = {
     generate: "noren",
@@ -46,6 +46,8 @@
       checkPermissions().then((ok) => {
         hasPermissions = ok;
       });
+      // Refresh subscription on focus (catches post-checkout return)
+      refreshSubscription();
     }).then((fn) => {
       cleanup2 = fn;
     });
@@ -68,11 +70,9 @@
       }
       loading = false;
 
-      // Check extraction access
+      // Load subscription status for feature gating
       if (settings.noren_pro_logged_in) {
-        getSubscriptionStatus().then((sub) => {
-          canExtract = sub.can_extract;
-        }).catch(() => { canExtract = false; });
+        refreshSubscription();
 
         // Auto-migrate local profile to server for Pro users
         if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
@@ -135,16 +135,17 @@
     </div>
     <div class="flex items-center gap-3">
       {#if view === "generate"}
-        {#if canExtract}
-          <button
-            onclick={() => { view = "extract"; }}
-            class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"
-            aria-label="Extract"
-            title="Extract voice profile"
-          >
-            EXT
-          </button>
-        {/if}
+        <button
+          onclick={() => { view = "extract"; }}
+          class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide relative"
+          aria-label="Extract"
+          title="Extract voice profile"
+        >
+          EXT
+          {#if !canExtract()}
+            <span class="absolute -top-1.5 -right-2.5 px-0.5 text-[7px] font-medium text-secondary">$</span>
+          {/if}
+        </button>
         <button
           onclick={() => { view = "profiles"; }}
           class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"

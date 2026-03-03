@@ -1,8 +1,10 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, createCheckout, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
+  import { open as openUrl } from "@tauri-apps/plugin-shell";
+  import { isFree } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -20,6 +22,7 @@
   let error = $state("");
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
   let hasProfile = $state(true);
+  let showCompareLock = $state(false);
 
   const levels = ["strict", "guided", "light"] as const;
 
@@ -249,16 +252,37 @@
 
     <div class="flex items-center gap-2 ml-auto">
       <!-- Compare toggle -->
-      <button
-        onclick={() => { compareMode = !compareMode; }}
-        class="px-2 py-1 text-[10px] transition-colors cursor-pointer rounded-md
-          {compareMode
-            ? 'bg-secondary text-white font-medium'
-            : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-        title="Compare with and without your voice"
-      >
-        Compare
-      </button>
+      <div class="relative">
+        <button
+          onclick={() => {
+            if (isFree()) {
+              showCompareLock = true;
+              setTimeout(() => { showCompareLock = false; }, 3000);
+              return;
+            }
+            compareMode = !compareMode;
+          }}
+          class="px-2 py-1 text-[10px] transition-colors cursor-pointer rounded-md
+            {compareMode
+              ? 'bg-secondary text-white font-medium'
+              : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+          title={isFree() ? "Compare requires Pro" : "Compare with and without your voice"}
+        >
+          Compare
+          {#if isFree()}
+            <span class="ml-0.5 text-[8px] text-secondary font-medium">PRO</span>
+          {/if}
+        </button>
+        {#if showCompareLock}
+          <div class="absolute top-full mt-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-md shadow-sm whitespace-nowrap animate-fade-in-up">
+            <p class="text-[10px] text-muted">Compare is a <span class="text-secondary font-medium">Pro</span> feature.</p>
+            <button
+              onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch {} }}
+              class="mt-1 text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            >Upgrade</button>
+          </div>
+        {/if}
+      </div>
 
       {#if !compareMode}
         <div class="flex gap-1">

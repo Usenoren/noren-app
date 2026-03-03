@@ -11,9 +11,11 @@ pub struct SubscriptionStatus {
     pub can_generate_bundled: bool,
     pub can_living_profile: bool,
     pub can_sync: bool,
+    pub can_export: bool,
     pub tokens_limit: u64,
     pub current_period_end: Option<String>,
     pub cancel_at_period_end: bool,
+    pub one_time_purchases: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -61,9 +63,18 @@ pub async fn get_subscription_status(
         can_generate_bundled: ents["can_generate_bundled"].as_bool().unwrap_or(false),
         can_living_profile: ents["can_living_profile"].as_bool().unwrap_or(false),
         can_sync: ents["can_sync"].as_bool().unwrap_or(false),
+        can_export: ents["can_export"].as_bool().unwrap_or(false),
         tokens_limit: ents["tokens_limit"].as_u64().unwrap_or(0),
         current_period_end: data["current_period_end"].as_str().map(|s| s.to_string()),
         cancel_at_period_end: data["cancel_at_period_end"].as_bool().unwrap_or(false),
+        one_time_purchases: data["one_time_purchases"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 

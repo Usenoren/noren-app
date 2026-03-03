@@ -225,7 +225,7 @@
         >
           <span class="flex items-center gap-2">
             AI-powered extraction
-            <span class="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
+            <span class="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded uppercase tracking-wide">$29 or Pro</span>
           </span>
           <span class="block text-[10px] font-normal text-white/70 mt-0.5">4-pass deep analysis of your writing patterns, vocabulary, and rhetorical style</span>
         </button>
@@ -235,7 +235,7 @@
         >
           <span class="flex items-center gap-2">
             Guided interview
-            <span class="text-[10px] font-normal text-secondary bg-secondary/10 px-1.5 py-0.5 rounded uppercase tracking-wide">Pro</span>
+            <span class="text-[10px] font-normal text-secondary bg-secondary/10 px-1.5 py-0.5 rounded uppercase tracking-wide">$29 or Pro</span>
           </span>
           <span class="block text-[10px] font-normal text-muted mt-0.5">7 questions + style calibration, then AI builds your profile</span>
         </button>
@@ -284,17 +284,26 @@
         ></textarea>
       </div>
 
-      <!-- Subtle upgrade nudge -->
-      <div class="p-2.5 bg-tint border border-secondary/20 rounded-md flex items-start justify-between gap-2">
+      <!-- AI extraction nudge -->
+      <div class="p-2.5 bg-tint border border-secondary/20 rounded-md flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
-          <span class="text-secondary font-medium">Noren Pro</span> uses AI to analyze your actual writing — detecting sentence rhythm, vocabulary fingerprint, rhetorical moves, and format-specific adaptations you might not even notice.
+          <span class="text-secondary font-medium">AI extraction</span> analyzes your actual writing — detecting sentence rhythm, vocabulary fingerprint, rhetorical moves, and format-specific adaptations.
         </p>
-        <button
-          onclick={goToSettings}
-          class="text-[10px] text-secondary hover:text-foreground font-medium cursor-pointer whitespace-nowrap shrink-0 uppercase tracking-wide"
-        >
-          Upgrade
-        </button>
+        <div class="flex gap-2 items-center">
+          <button
+            onclick={goToSettings}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+          >
+            One-time $29
+          </button>
+          <span class="text-[10px] text-muted">or</span>
+          <button
+            onclick={goToSettings}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+          >
+            Included with Pro
+          </button>
+        </div>
       </div>
 
       <button
@@ -529,14 +538,6 @@
             </div>
             <div class="flex items-start gap-1.5">
               <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
-              <span class="text-[10px] text-muted">No API key needed — inference included</span>
-            </div>
-            <div class="flex items-start gap-1.5">
-              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
-              <span class="text-[10px] text-muted">Advanced voice enforcement prompt</span>
-            </div>
-            <div class="flex items-start gap-1.5">
-              <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
               <span class="text-[10px] text-muted">Format-specific contexts (Twitter, email, Slack...)</span>
             </div>
             <div class="flex items-start gap-1.5">
@@ -544,12 +545,21 @@
               <span class="text-[10px] text-muted">Living profile that evolves with your edits</span>
             </div>
           </div>
-          <button
-            onclick={goToSettings}
-            class="mt-2 w-full py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
-          >
-            Upgrade to Noren Pro
-          </button>
+          <div class="flex gap-2 items-center mt-2">
+            <button
+              onclick={goToSettings}
+              class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            >
+              Extraction $29
+            </button>
+            <span class="text-[10px] text-muted">or</span>
+            <button
+              onclick={goToSettings}
+              class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            >
+              Pro $19/mo
+            </button>
+          </div>
         </div>
       {/if}
 

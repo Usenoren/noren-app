@@ -1,7 +1,10 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
-  import { startExtraction, type ExtractionProgress } from "../api/tauri";
+  import { startExtraction, createCheckout, type ExtractionProgress } from "../api/tauri";
+  import { open } from "@tauri-apps/plugin-shell";
+  import { canExtract } from "$lib/stores/subscription.svelte";
+  import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -67,6 +70,20 @@
     if (!text) return 0;
     return text.split(/\n\s*\n/).filter((s) => s.trim()).length;
   }
+
+  async function handleUpgrade(target: "extraction" | "pro") {
+    error = "";
+    try {
+      const result = await createCheckout(target);
+      if (result.checkout_url === "dev://granted") {
+        await refreshSubscription();
+      } else {
+        await open(result.checkout_url);
+      }
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
 </script>
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
@@ -117,6 +134,35 @@
 
   {:else}
     <!-- Input state -->
+    <div class="relative flex-1 flex flex-col gap-3">
+    {#if !canExtract()}
+      <!-- Paywall overlay -->
+      <div class="absolute inset-0 z-10 flex items-center justify-center bg-background/80 rounded-md">
+        <div class="p-4 bg-tint border border-secondary/20 rounded-md text-center max-w-[260px]">
+          <p class="text-xs font-medium text-secondary">Voice Extraction</p>
+          <p class="text-[10px] text-muted mt-1 leading-relaxed">
+            AI-powered 4-pass analysis of your writing patterns, vocabulary, and rhetorical style.
+          </p>
+          <div class="flex flex-col gap-1.5 mt-3">
+            <button
+              onclick={() => handleUpgrade("extraction")}
+              class="w-full py-1.5 text-[10px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded uppercase tracking-wide"
+            >
+              One-time $29
+            </button>
+            <button
+              onclick={() => handleUpgrade("pro")}
+              class="w-full py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
+            >
+              Included with Pro ($19/mo)
+            </button>
+          </div>
+          {#if error}
+            <p class="text-[10px] text-error mt-2">{error}</p>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     <!-- Format selector -->
     <div>
@@ -182,10 +228,11 @@ Example formats: tweets, emails, blog posts, Slack messages, LinkedIn posts..."
     {/if}
 
     <!-- Error -->
-    {#if error}
+    {#if error && canExtract()}
       <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
         {error}
       </div>
     {/if}
+    </div>
   {/if}
 </div>
