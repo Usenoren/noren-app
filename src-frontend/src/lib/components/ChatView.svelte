@@ -12,10 +12,15 @@
   } from "$lib/api/tauri";
   import { friendlyError } from "$lib/utils/errors";
   import { marked } from "marked";
+  import DOMPurify from "dompurify";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   // Configure marked for inline rendering
   marked.setOptions({ breaks: true });
+
+  function renderMarkdown(content: string): string {
+    return DOMPurify.sanitize(marked.parse(content) as string);
+  }
 
   // --- State ---
   let messages: ChatMessage[] = $state([]);
@@ -105,11 +110,27 @@
   }
 
   let copiedIndex: number | null = $state(null);
+  let editSnapshot: ChatMessage[] | null = $state(null);
 
   async function handleCopyMessage(content: string, index: number) {
     await navigator.clipboard.writeText(content);
     copiedIndex = index;
     setTimeout(() => { copiedIndex = null; }, 1500);
+  }
+
+  function handleEditMessage(index: number) {
+    editSnapshot = [...messages];
+    input = messages[index].content;
+    messages = messages.slice(0, index);
+  }
+
+  function handleCancelEdit() {
+    if (editSnapshot) {
+      messages = editSnapshot;
+      editSnapshot = null;
+      input = "";
+      scrollToBottom();
+    }
   }
 
   // --- Actions ---
@@ -146,6 +167,7 @@
     messages = [...messages, userMessage];
     input = "";
     error = "";
+    editSnapshot = null;
     isLoading = true;
     scrollToBottom();
 
@@ -315,16 +337,27 @@
       <div class="flex flex-col gap-3 max-w-2xl mx-auto">
         {#each messages as msg, i}
           {#if msg.role === "user"}
-            <div class="flex justify-end animate-fade-in-up">
-              <div class="max-w-[80%] px-3.5 py-2.5 bg-primary/10 text-foreground rounded-2xl rounded-br-md selectable">
-                <p class="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+            <div class="flex justify-end animate-fade-in-up group/usr">
+              <div class="max-w-[80%]">
+                <div class="px-3.5 py-2.5 bg-primary/10 text-foreground rounded-2xl rounded-br-md selectable">
+                  <p class="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                </div>
+                <div class="flex items-center justify-end gap-1 mt-1 mr-1 h-5 opacity-0 group-hover/usr:opacity-100 transition-opacity">
+                  <button
+                    onclick={() => handleEditMessage(i)}
+                    class="px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground cursor-pointer rounded transition-colors"
+                    disabled={isLoading}
+                  >
+                    Edit
+                  </button>
+                </div>
               </div>
             </div>
           {:else}
             <div class="flex justify-start animate-fade-in-up group/msg">
               <div class="max-w-[80%]">
                 <div class="px-3.5 py-2.5 bg-surface border border-border text-foreground rounded-2xl rounded-bl-md selectable">
-                  <div class="text-sm leading-relaxed prose-chat">{@html marked.parse(msg.content)}</div>
+                  <div class="text-sm leading-relaxed prose-chat">{@html renderMarkdown(msg.content)}</div>
                 </div>
                 <div class="flex items-center gap-1 mt-1 ml-1 h-5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
                   <button
@@ -361,6 +394,17 @@
 
   <!-- Input -->
   <div class="px-4 py-3 border-t border-border shrink-0">
+    {#if editSnapshot}
+      <div class="flex items-center justify-between max-w-2xl mx-auto mb-2">
+        <span class="text-[10px] text-secondary font-medium uppercase tracking-wide">Editing message</span>
+        <button
+          onclick={handleCancelEdit}
+          class="text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    {/if}
     <div class="flex items-end gap-2 max-w-2xl mx-auto">
       <textarea
         bind:value={input}

@@ -141,10 +141,21 @@ pub async fn chat_send(
     })
 }
 
+fn validate_chat_id(id: &str) -> Result<(), String> {
+    if id.is_empty() || id.len() > 64 {
+        return Err("Invalid chat ID".to_string());
+    }
+    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err("Invalid chat ID".to_string());
+    }
+    Ok(())
+}
+
 // --- Chat history commands ---
 
 #[tauri::command]
 pub fn save_chat(conversation: Conversation) -> Result<(), String> {
+    validate_chat_id(&conversation.id)?;
     let dir = chats_dir();
     let path = dir.join(format!("{}.json", conversation.id));
     let json = serde_json::to_string_pretty(&conversation)
@@ -189,6 +200,7 @@ pub fn list_chats() -> Result<Vec<ConversationSummary>, String> {
 
 #[tauri::command]
 pub fn load_chat(id: String) -> Result<Conversation, String> {
+    validate_chat_id(&id)?;
     let path = chats_dir().join(format!("{}.json", id));
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read chat: {}", e))?;
@@ -198,6 +210,7 @@ pub fn load_chat(id: String) -> Result<Conversation, String> {
 
 #[tauri::command]
 pub fn delete_chat(id: String) -> Result<(), String> {
+    validate_chat_id(&id)?;
     let path = chats_dir().join(format!("{}.json", id));
     if path.exists() {
         std::fs::remove_file(&path)

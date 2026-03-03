@@ -53,7 +53,7 @@ pub fn set_living_profile_enabled(
 ) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     config.living_profile_enabled = enabled;
-    save_config_file(&config);
+    save_config_file(&config)?;
     Ok(())
 }
 

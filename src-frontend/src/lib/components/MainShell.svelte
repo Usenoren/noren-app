@@ -69,6 +69,8 @@
           migrateProfileToServer().catch(() => {});
         }
       }
+    }).catch(() => {
+      loading = false;
     });
 
     return () => cleanups.forEach((fn) => fn());

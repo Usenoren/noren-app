@@ -81,7 +81,7 @@ pub fn set_provider(
 
     let mut config = state.config.lock().unwrap();
     config.provider = provider_config;
-    save_config_file(&config);
+    save_config_file(&config)?;
 
     Ok(())
 }
@@ -93,7 +93,7 @@ pub fn update_model(
 ) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     config.provider.model = model;
-    save_config_file(&config);
+    save_config_file(&config)?;
     Ok(())
 }
 
@@ -104,7 +104,7 @@ pub fn update_base_url(
 ) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     config.provider.base_url = base_url;
-    save_config_file(&config);
+    save_config_file(&config)?;
     Ok(())
 }
 
@@ -452,7 +452,7 @@ pub fn set_inference_mode(
         "noren_pro" => noren_engine::InferenceMode::NorenPro,
         _ => noren_engine::InferenceMode::Byok,
     };
-    save_config_file(&config);
+    save_config_file(&config)?;
     Ok(())
 }
 
@@ -469,15 +469,16 @@ pub fn update_hotkey(
     // Persist
     let mut config = state.config.lock().unwrap();
     config.hotkey = hotkey_str;
-    save_config_file(&config);
+    save_config_file(&config)?;
     Ok(())
 }
 
 /// Persist config to ~/.noren/config.json
-pub fn save_config_file(config: &noren_engine::Config) {
+pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let config_dir = std::path::PathBuf::from(home).join(".noren");
-    let _ = std::fs::create_dir_all(&config_dir);
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to create config directory: {}", e))?;
 
     let mut json = serde_json::json!({
         "provider": config.provider,
@@ -494,8 +495,9 @@ pub fn save_config_file(config: &noren_engine::Config) {
         json["serverUrl"] = serde_json::Value::String(url.clone());
     }
 
-    let _ = std::fs::write(
-        config_dir.join("config.json"),
-        serde_json::to_string_pretty(&json).unwrap_or_default(),
-    );
+    let pretty = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    std::fs::write(config_dir.join("config.json"), pretty)
+        .map_err(|e| format!("Failed to write config: {}", e))?;
+    Ok(())
 }

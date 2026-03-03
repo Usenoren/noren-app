@@ -1,6 +1,7 @@
 use std::path::Path;
 
 const MAX_TEXT_LENGTH: usize = 50_000;
+const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
 
 #[tauri::command]
 pub fn read_file_as_text(path: String) -> Result<String, String> {
@@ -8,6 +9,15 @@ pub fn read_file_as_text(path: String) -> Result<String, String> {
 
     if !file_path.exists() {
         return Err(format!("File not found: {}", path));
+    }
+
+    let metadata = std::fs::metadata(file_path)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(format!(
+            "File too large ({:.1} MB). Maximum size is 10 MB.",
+            metadata.len() as f64 / (1024.0 * 1024.0)
+        ));
     }
 
     let ext = file_path
