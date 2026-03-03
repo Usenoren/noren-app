@@ -44,7 +44,7 @@ fn inject_generated_text(
     let source_app_name = state.source_app_name.lock().unwrap().take();
 
     // Hide our popup
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_webview_window("popup") {
         let _ = w.hide();
     }
 
@@ -105,7 +105,7 @@ fn main() {
     let config = noren_engine::load_config(None);
     let encryption_key = load_or_create_encryption_key();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -169,10 +169,11 @@ fn main() {
             commands::read_file_as_text,
             commands::migrate_profile_to_server,
             commands::export_profile,
+            commands::update_hotkey,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             // Request accessibility permission on first launch (opens System Settings if not granted)
             if !accessibility::check_accessibility_trusted(false) {
@@ -180,10 +181,21 @@ fn main() {
             }
 
             tray::setup_tray(app.handle())?;
-            hotkey::register(app.handle())?;
+            {
+                let state = app.state::<AppState>();
+                let config = state.config.lock().unwrap();
+                hotkey::register(app.handle(), &config.hotkey)?;
+            }
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Noren");
+        .build(tauri::generate_context!())
+        .expect("error while building Noren");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = &event {
+            window::show_main_window(app_handle);
+        }
+    });
 }
