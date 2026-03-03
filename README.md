@@ -128,6 +128,16 @@ cargo tauri build
 
 The dev build creates a popup window (triggered by global hotkey) and a main app window. The production build outputs `Noren.app` and a `.dmg` installer.
 
+### Install (unsigned)
+
+The app is not notarized with Apple. macOS will block it on first launch. After copying to `/Applications`, run:
+
+```bash
+xattr -cr /Applications/Noren.app
+```
+
+Then open normally.
+
 ### Inference modes
 
 **BYOK (Bring Your Own Key)** — Use your own API key with any supported provider. Keys are stored in macOS Keychain, never in config files.
