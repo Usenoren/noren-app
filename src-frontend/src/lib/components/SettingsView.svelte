@@ -8,6 +8,7 @@
     updateBaseUrl,
     testConnection,
     setInferenceMode,
+    updateHotkey,
     norenProLogin,
     norenProSignup,
     norenProLogout,
@@ -24,6 +25,10 @@
   import { open } from "@tauri-apps/plugin-shell";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+
+  function focusOnMount(node: HTMLElement) {
+    node.focus();
+  }
 
   const presets = [
     { id: "anthropic", label: "Anthropic" },
@@ -55,13 +60,23 @@
   // Subscription state
   let subscription = $state<SubscriptionStatus | null>(null);
 
+  // Hotkey state
+  let isRecording = $state(false);
+  let recordedHotkey = $state("");
+  let hotkeyError = $state("");
+
   let requiresKey = $derived(settings?.provider.requiresKey ?? true);
   let isCustom = $derived(selectedPreset === "custom");
   let showProSection = $state(false);
   let isNorenPro = $derived(settings?.inference_mode === "noren_pro");
 
   const tiers = [
-    { id: "pro", label: "Noren Pro", price: "$19", period: "/mo", desc: "AI extraction, bundled inference, living profile" },
+    { id: "pro", label: "Noren Pro", price: "$19", period: "/mo", desc: "Everything: extraction, inference, living profile, sync" },
+  ] as const;
+
+  const addons = [
+    { id: "extraction", label: "Voice Extraction", price: "$29", period: " one-time", desc: "AI extraction without a subscription" },
+    { id: "export", label: "Profile Export", price: "TBD", period: " one-time", desc: "Export server-side profile to local disk" },
   ] as const;
 
   $effect(() => {
@@ -103,6 +118,59 @@
     } catch (e) {
       error = friendlyError(e);
     }
+  }
+
+  function formatHotkeyHuman(s: string): string {
+    return s
+      .replace("Meta", "Cmd")
+      .replace("Control", "Ctrl")
+      .replace("Alt", "Option")
+      .replace(/Key([A-Z])/g, "$1")
+      .replace(/Digit(\d)/g, "$1")
+      .split("+")
+      .join(" + ");
+  }
+
+  function handleHotkeyKeydown(e: KeyboardEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Ignore lone modifier presses
+    if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
+
+    const parts: string[] = [];
+    if (e.metaKey) parts.push("Meta");
+    if (e.ctrlKey) parts.push("Control");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+
+    if (parts.length === 0) {
+      hotkeyError = "At least one modifier key (Cmd, Ctrl, Alt, Shift) is required";
+      return;
+    }
+
+    parts.push(e.code);
+    recordedHotkey = parts.join("+");
+    hotkeyError = "";
+  }
+
+  async function handleHotkeySave() {
+    if (!recordedHotkey) return;
+    hotkeyError = "";
+    try {
+      await updateHotkey(recordedHotkey);
+      isRecording = false;
+      recordedHotkey = "";
+      await loadSettings();
+    } catch (e) {
+      hotkeyError = friendlyError(e);
+    }
+  }
+
+  function handleHotkeyCancel() {
+    isRecording = false;
+    recordedHotkey = "";
+    hotkeyError = "";
   }
 
   async function handleModeSwitch(mode: "byok" | "noren_pro") {
@@ -304,6 +372,54 @@
       <LoadingSpinner />
     </div>
   {:else}
+    <!-- Keyboard Shortcut -->
+    <div>
+      <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Quick Access Shortcut</span>
+      {#if isRecording}
+        <div class="flex flex-col gap-2">
+          <div
+            tabindex="-1"
+            role="textbox"
+            class="px-3 py-2 text-xs border-2 border-secondary bg-surface text-foreground rounded-md focus:outline-none text-center font-medium"
+            onkeydown={handleHotkeyKeydown}
+            use:focusOnMount
+          >
+            {recordedHotkey ? formatHotkeyHuman(recordedHotkey) : "Press a key combination..."}
+          </div>
+          <div class="flex gap-2">
+            <button
+              onclick={handleHotkeySave}
+              disabled={!recordedHotkey}
+              class="flex-1 px-3 py-1.5 text-xs bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+            >
+              Save
+            </button>
+            <button
+              onclick={handleHotkeyCancel}
+              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            >
+              Cancel
+            </button>
+          </div>
+          {#if hotkeyError}
+            <p class="text-[10px] text-error">{hotkeyError}</p>
+          {/if}
+        </div>
+      {:else}
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-foreground font-medium">
+            {formatHotkeyHuman(settings.hotkey)}
+          </span>
+          <button
+            onclick={() => { isRecording = true; recordedHotkey = ""; hotkeyError = ""; }}
+            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+          >
+            Change
+          </button>
+        </div>
+      {/if}
+    </div>
+
     <!-- Inference Mode Toggle -->
     <div>
       <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Inference</span>
@@ -378,7 +494,7 @@
           <!-- Subscription tiers -->
           {#if !subscription?.active || subscription.tier === "free"}
             <div>
-              <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Upgrade</span>
+              <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Subscription</span>
               <div class="flex flex-col gap-2">
                 {#each tiers as t}
                   <button
@@ -391,6 +507,31 @@
                     </div>
                     <span class="text-xs font-medium text-secondary">{t.price}<span class="text-[10px] text-muted font-normal">{t.period}</span></span>
                   </button>
+                {/each}
+              </div>
+            </div>
+
+            <div>
+              <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">One-time add-ons</span>
+              <div class="flex flex-col gap-2">
+                {#each addons as a}
+                  {#if !subscription?.one_time_purchases?.includes(a.id)}
+                    <button
+                      onclick={() => handleUpgrade(a.id)}
+                      class="flex items-center justify-between p-3 bg-surface border border-border rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
+                    >
+                      <div>
+                        <span class="text-xs font-medium text-foreground">{a.label}</span>
+                        <span class="block text-[10px] text-muted mt-0.5">{a.desc}</span>
+                      </div>
+                      <span class="text-xs font-medium text-secondary">{a.price}<span class="text-[10px] text-muted font-normal">{a.period}</span></span>
+                    </button>
+                  {:else}
+                    <div class="flex items-center justify-between p-3 bg-surface border border-signal/20 rounded-md">
+                      <span class="text-xs text-foreground">{a.label}</span>
+                      <span class="text-[10px] text-signal font-medium">Purchased</span>
+                    </div>
+                  {/if}
                 {/each}
               </div>
             </div>

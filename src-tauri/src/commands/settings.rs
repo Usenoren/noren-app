@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::{keychain, AppState};
+use crate::{hotkey, keychain, AppState};
 
 #[derive(Serialize)]
 pub struct SettingsInfo {
@@ -9,6 +9,7 @@ pub struct SettingsInfo {
     pub has_key: bool,
     pub inference_mode: String,
     pub noren_pro_logged_in: bool,
+    pub hotkey: String,
 }
 
 #[tauri::command]
@@ -32,6 +33,7 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
         has_key,
         inference_mode: mode.to_string(),
         noren_pro_logged_in: keychain::get_api_key("noren-pro-token").is_some(),
+        hotkey: config.hotkey.clone(),
     }
 }
 
@@ -454,6 +456,23 @@ pub fn set_inference_mode(
     Ok(())
 }
 
+#[tauri::command]
+pub fn update_hotkey(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    hotkey_str: String,
+) -> Result<(), String> {
+    // Validate first
+    hotkey::parse_shortcut(&hotkey_str)?;
+    // Swap the live shortcut
+    hotkey::re_register(&app, &hotkey_str)?;
+    // Persist
+    let mut config = state.config.lock().unwrap();
+    config.hotkey = hotkey_str;
+    save_config_file(&config);
+    Ok(())
+}
+
 /// Persist config to ~/.noren/config.json
 pub fn save_config_file(config: &noren_engine::Config) {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -468,6 +487,7 @@ pub fn save_config_file(config: &noren_engine::Config) {
             noren_engine::InferenceMode::Byok => "byok",
         },
         "livingProfileEnabled": config.living_profile_enabled,
+        "hotkey": config.hotkey,
     });
 
     if let Some(ref url) = config.server_url {

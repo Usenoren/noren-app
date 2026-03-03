@@ -19,6 +19,7 @@ export interface SettingsInfo {
   has_key: boolean;
   inference_mode: "byok" | "noren_pro";
   noren_pro_logged_in: boolean;
+  hotkey: string;
 }
 
 export interface NorenProStatus {
@@ -122,6 +123,10 @@ export async function setInferenceMode(mode: "byok" | "noren_pro"): Promise<void
   return invoke("set_inference_mode", { mode });
 }
 
+export async function updateHotkey(hotkeyStr: string): Promise<void> {
+  return invoke("update_hotkey", { hotkeyStr });
+}
+
 // --- Google OAuth ---
 
 export interface GoogleOAuthInitResult {
@@ -145,15 +150,17 @@ export async function googleOAuthPoll(sessionId: string): Promise<GoogleOAuthPol
 // --- Billing ---
 
 export interface SubscriptionStatus {
-  tier: "free" | "extraction" | "living" | "pro" | "teams";
+  tier: "free" | "pro" | "teams";
   active: boolean;
   can_extract: boolean;
   can_generate_bundled: boolean;
   can_living_profile: boolean;
   can_sync: boolean;
+  can_export: boolean;
   tokens_limit: number;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  one_time_purchases: string[];
 }
 
 export interface CheckoutResult {

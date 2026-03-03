@@ -37,6 +37,7 @@ pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
             .or(defaults.server_url),
         inference_mode: file_config.inference_mode.unwrap_or(defaults.inference_mode),
         living_profile_enabled: file_config.living_profile_enabled.unwrap_or(false),
+        hotkey: file_config.hotkey.unwrap_or(defaults.hotkey),
     }
 }
 
@@ -49,6 +50,7 @@ struct PartialConfig {
     server_url: Option<String>,
     inference_mode: Option<InferenceMode>,
     living_profile_enabled: Option<bool>,
+    hotkey: Option<String>,
 }
 
 fn config_dir() -> PathBuf {
@@ -138,6 +140,10 @@ fn load_file_config() -> PartialConfig {
         living_profile_enabled: json
             .get("livingProfileEnabled")
             .and_then(|v| v.as_bool()),
+        hotkey: json
+            .get("hotkey")
+            .and_then(|v| v.as_str())
+            .map(String::from),
     }
 }
 

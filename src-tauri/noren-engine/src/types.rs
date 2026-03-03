@@ -172,6 +172,10 @@ impl Default for InferenceMode {
 
 // --- Config ---
 
+fn default_hotkey() -> String {
+    "Meta+KeyK".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub provider: ProviderConfig,
@@ -186,6 +190,9 @@ pub struct Config {
     /// Living profile opt-in (edit tracking + server analysis)
     #[serde(rename = "livingProfileEnabled", default)]
     pub living_profile_enabled: bool,
+    /// Global hotkey string, e.g. "Meta+KeyK", "Meta+Shift+KeyN"
+    #[serde(default = "default_hotkey")]
+    pub hotkey: String,
 }
 
 impl Default for Config {
@@ -197,6 +204,7 @@ impl Default for Config {
             server_url: None,
             inference_mode: InferenceMode::Byok,
             living_profile_enabled: false,
+            hotkey: default_hotkey(),
         }
     }
 }
