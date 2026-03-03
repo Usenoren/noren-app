@@ -279,7 +279,7 @@
       </div>
 
       <!-- AI extraction nudge -->
-      <div class="p-2 bg-tint border border-secondary/20 rounded-md flex flex-col gap-1.5">
+      <div class="p-2 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
           <span class="text-secondary font-medium">AI Extraction</span> analyzes your real writing — sentence patterns, vocabulary, rhetorical style, and format-specific contexts.
         </p>
@@ -312,7 +312,7 @@
       </button>
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
+        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
           {error}
         </div>
       {/if}
@@ -320,7 +320,7 @@
   {:else if overview.is_server}
     <!-- Server profile — metadata only -->
     <div class="flex flex-col gap-3 h-full">
-      <div class="p-3 bg-surface border border-secondary/20 rounded-md">
+      <div class="p-3 bg-surface border border-secondary/20 rounded-lg">
         <p class="text-sm font-medium text-foreground">Voice profile on Noren servers</p>
         <p class="text-[10px] text-muted mt-1">
           Your extracted profile is securely stored on Noren servers and used automatically when generating text.
@@ -328,7 +328,7 @@
       </div>
 
       {#if overview.formats.length > 0}
-        <div class="p-3 bg-surface border border-border rounded-md">
+        <div class="p-3 bg-surface border border-border rounded-lg">
           <span class="text-[10px] font-medium text-muted uppercase tracking-wide">Formats</span>
           <div class="flex gap-1.5 mt-1.5 flex-wrap">
             {#each overview.formats as fmt}
@@ -357,7 +357,7 @@
       {#if activeTab === "living"}
         {#if canLivingProfile()}
         <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
-          <div class="p-3 bg-surface border border-border rounded-md">
+          <div class="p-3 bg-surface border border-border rounded-lg">
             <div class="flex items-center justify-between">
               <div>
                 <span class="text-xs font-medium text-foreground">Edit tracking</span>
@@ -377,7 +377,7 @@
         </div>
         {:else}
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
-          <div class="p-4 bg-tint border border-secondary/20 rounded-md text-center max-w-[260px]">
+          <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
             <p class="text-xs font-medium text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
               Your profile evolves as you write. Noren tracks your edits and suggests refinements automatically.
@@ -415,7 +415,7 @@
       </div>
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed shrink-0">
+        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed shrink-0">
           {error}
         </div>
       {/if}
@@ -464,7 +464,7 @@
         <!-- Living Profile panel -->
         <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
           <!-- Opt-in toggle -->
-          <div class="p-3 bg-surface border border-border rounded-md">
+          <div class="p-3 bg-surface border border-border rounded-lg">
             <div class="flex items-center justify-between">
               <div>
                 <span class="text-xs font-medium text-foreground">Edit tracking</span>
@@ -517,7 +517,7 @@
                 </span>
                 <div class="flex flex-col gap-2">
                   {#each patches as patch}
-                    <div class="p-3 bg-surface border border-border rounded-md">
+                    <div class="p-3 bg-surface border border-border rounded-lg">
                       <p class="text-xs text-foreground">{patch.description}</p>
                       {#if patch.new_text}
                         <p class="text-[10px] text-secondary mt-1 font-mono">{patch.new_text}</p>
@@ -560,7 +560,7 @@
         {:else}
         <!-- Living Profile locked -->
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
-          <div class="p-4 bg-tint border border-secondary/20 rounded-md text-center max-w-[260px]">
+          <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
             <p class="text-xs font-medium text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
               Your profile evolves as you write. Noren tracks your edits and suggests refinements automatically.
@@ -580,7 +580,7 @@
           class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none rounded-md focus:outline-none focus:border-secondary font-mono"
         ></textarea>
       {:else}
-        <div class="flex-1 p-3 bg-surface border border-border rounded-md overflow-y-auto">
+        <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
           <pre class="text-xs text-foreground whitespace-pre-wrap leading-relaxed font-mono">{displayContent}</pre>
         </div>
       {/if}
@@ -588,7 +588,7 @@
 
     <!-- Upgrade nudge for manual-only profiles (no format contexts) -->
     {#if overview.formats.length === 0 && activeTab === "core" && !isEditing}
-      <div class="p-2 bg-tint border border-secondary/15 rounded-md shrink-0 flex flex-col gap-1.5">
+      <div class="p-2 bg-tint border border-secondary/15 rounded-lg shrink-0 flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
           Your profile covers the basics. <span class="text-secondary font-medium">AI extraction</span> adds format-specific contexts and vocabulary analysis.
         </p>
@@ -682,7 +682,7 @@
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed shrink-0">
+      <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed shrink-0">
         {error}
       </div>
     {/if}

@@ -178,7 +178,7 @@
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
   <!-- No profile nudge -->
   {#if !hasProfile}
-    <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-md">
+    <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg">
       <p class="flex-1 text-[10px] text-muted leading-relaxed">
         No voice profile yet — output will be generic.
         <button
@@ -193,64 +193,26 @@
     </div>
   {/if}
 
-  <!-- Context banner -->
-  {#if contextText}
-    <div class="flex items-start gap-2 p-2 bg-tint border border-border rounded-md text-xs">
-      <div class="flex-1 min-w-0">
-        <span class="font-medium text-secondary">Selected text:</span>
-        <span class="text-muted ml-1">
-          {contextText.length > 150 ? contextText.slice(0, 150) + "..." : contextText}
-        </span>
-      </div>
-      <button
-        onclick={clearContext}
-        class="text-muted hover:text-foreground shrink-0 cursor-pointer"
-        aria-label="Clear context"
-      >&times;</button>
-    </div>
-  {/if}
-
-  <!-- Attachments -->
-  {#if attachedFiles.length > 0}
-    <div class="flex items-center gap-1.5 flex-wrap">
-      {#each attachedFiles as file, i}
-        <div class="inline-flex items-center gap-1 px-2 py-0.5 bg-tint border border-border rounded text-[10px] text-secondary">
-          <span class="max-w-[120px] truncate">{file.name}</span>
-          <button
-            onclick={() => removeAttachment(i)}
-            class="text-muted hover:text-error cursor-pointer ml-0.5"
-            aria-label="Remove attachment"
-          >&times;</button>
-        </div>
-      {/each}
-    </div>
-  {/if}
-
   <!-- Format + Enforcement selectors -->
-  <div class="flex items-center gap-3">
-    <div class="flex items-center gap-2">
-      <select
-        bind:value={format}
-        class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-      >
-        {#each formats as fmt}
-          <option value={fmt}>{fmt}</option>
-        {/each}
-      </select>
-      {#if detectedApp}
-        <span class="text-[10px] text-secondary">{detectedApp}</span>
-      {/if}
-      <button
-        onclick={handleAttachFile}
-        class="px-2 py-1 text-[10px] bg-surface text-muted border border-border hover:border-secondary hover:text-foreground transition-colors cursor-pointer rounded-md"
-        title="Attach a file (PDF, text, etc.)"
-        disabled={attachedFiles.length >= 3}
-      >
-        Attach{#if attachedFiles.length > 0} ({attachedFiles.length}/3){/if}
-      </button>
-    </div>
+  <div class="flex items-center gap-2">
+    <select
+      bind:value={format}
+      class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+    >
+      {#each formats as fmt}
+        <option value={fmt}>{fmt}</option>
+      {/each}
+    </select>
+    <button
+      onclick={handleAttachFile}
+      class="px-2 py-1 text-[10px] bg-surface text-muted border border-border hover:border-secondary hover:text-foreground transition-colors cursor-pointer rounded-md"
+      title="Attach a file (PDF, text, etc.)"
+      disabled={attachedFiles.length >= 3}
+    >
+      Attach{#if attachedFiles.length > 0} ({attachedFiles.length}/3){/if}
+    </button>
 
-    <div class="flex items-center gap-2 ml-auto">
+    <div class="flex items-center gap-1.5 ml-auto">
       <!-- Compare toggle -->
       <div class="relative">
         <button
@@ -274,7 +236,7 @@
           {/if}
         </button>
         {#if showCompareLock}
-          <div class="absolute top-full mt-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-md shadow-sm whitespace-nowrap animate-fade-in-up">
+          <div class="absolute top-full mt-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-lg whitespace-nowrap animate-fade-in-up" style="box-shadow: var(--shadow-dropdown)">
             <p class="text-[10px] text-muted">Compare is a <span class="text-secondary font-medium">Pro</span> feature.</p>
             <button
               onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch {} }}
@@ -289,7 +251,7 @@
           {#each levels as lvl}
             <button
               onclick={() => { level = lvl; }}
-              class="px-2.5 py-1 text-xs transition-colors cursor-pointer uppercase tracking-wide rounded-md
+              class="px-1.5 py-1 text-[10px] transition-colors cursor-pointer uppercase tracking-wide rounded-md
                 {level === lvl
                   ? 'bg-primary text-white font-medium'
                   : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
@@ -302,18 +264,54 @@
     </div>
   </div>
 
-  <!-- Prompt input -->
-  <div class="relative">
-    <textarea
-      bind:value={prompt}
-      onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) handleGenerate(); }}
-      class="w-full p-3 text-sm border border-border resize-none bg-surface text-foreground placeholder-muted rounded-md focus:outline-none focus:border-secondary"
-      rows={3}
-      placeholder="What do you want to write?"
-      disabled={isGenerating}
-    ></textarea>
-    <div class="absolute bottom-2 right-2 text-[10px] text-muted pointer-events-none">
-      {#if !isGenerating}Cmd+Enter{/if}
+  <!-- Prompt input area — context + attachments + textarea as one block -->
+  <div class="border border-border rounded-lg bg-surface overflow-hidden focus-within:border-secondary transition-colors">
+    <!-- Context banner -->
+    {#if contextText}
+      <div class="flex items-start gap-2 px-3 py-2 bg-tint/50 border-b border-border text-xs">
+        <div class="flex-1 min-w-0">
+          <span class="font-medium text-secondary">Context:</span>
+          <span class="text-muted ml-1">
+            {contextText.length > 150 ? contextText.slice(0, 150) + "..." : contextText}
+          </span>
+        </div>
+        <button
+          onclick={clearContext}
+          class="text-muted hover:text-foreground shrink-0 cursor-pointer"
+          aria-label="Clear context"
+        >&times;</button>
+      </div>
+    {/if}
+
+    <!-- Attachments -->
+    {#if attachedFiles.length > 0}
+      <div class="flex items-center gap-1.5 flex-wrap px-3 py-1.5 {contextText ? '' : 'border-b border-border'}">
+        {#each attachedFiles as file, i}
+          <div class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-tint border border-border rounded text-[10px] text-secondary">
+            <span class="max-w-[120px] truncate">{file.name}</span>
+            <button
+              onclick={() => removeAttachment(i)}
+              class="text-muted hover:text-error cursor-pointer ml-0.5"
+              aria-label="Remove attachment"
+            >&times;</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Textarea -->
+    <div class="relative">
+      <textarea
+        bind:value={prompt}
+        onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) handleGenerate(); }}
+        class="w-full p-3 text-sm resize-none bg-transparent text-foreground placeholder-muted border-none focus:outline-none"
+        rows={2}
+        placeholder="What do you want to write?"
+        disabled={isGenerating}
+      ></textarea>
+      <div class="absolute bottom-2 right-2 text-[10px] text-muted pointer-events-none">
+        {#if !isGenerating}Cmd+Enter{/if}
+      </div>
     </div>
   </div>
 
@@ -337,7 +335,7 @@
 
   <!-- Error -->
   {#if error}
-    <div class="p-3 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
+    <div class="p-3 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
       {error}
     </div>
   {/if}
@@ -349,13 +347,13 @@
       <div class="flex-1 grid grid-cols-2 gap-2 min-h-0">
         <div class="flex flex-col min-h-0">
           <span class="text-[10px] font-medium text-primary mb-1 uppercase tracking-wide">With your voice</span>
-          <div class="flex-1 p-3 bg-surface border border-primary/30 rounded-md overflow-y-auto">
+          <div class="flex-1 p-3 bg-surface border border-primary/30 rounded-lg overflow-y-auto">
             <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.with_voice.text}</p>
           </div>
         </div>
         <div class="flex flex-col min-h-0">
           <span class="text-[10px] font-medium text-muted mb-1 uppercase tracking-wide">Without voice</span>
-          <div class="flex-1 p-3 bg-surface border border-border rounded-md overflow-y-auto">
+          <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
             <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.without_voice.text}</p>
           </div>
         </div>
@@ -383,7 +381,7 @@
     </div>
   {:else if output}
     <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fade-in-up">
-      <div class="flex-1 p-3 bg-surface border border-border rounded-md overflow-y-auto">
+      <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
         <p class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{output.text}</p>
       </div>
 

@@ -285,7 +285,7 @@
       </div>
 
       <!-- AI extraction nudge -->
-      <div class="p-2.5 bg-tint border border-secondary/20 rounded-md flex flex-col gap-1.5">
+      <div class="p-2.5 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
           <span class="text-secondary font-medium">AI extraction</span> analyzes your actual writing — detecting sentence rhythm, vocabulary fingerprint, rhetorical moves, and format-specific adaptations.
         </p>
@@ -318,7 +318,7 @@
       </button>
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">{error}</div>
+        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <button
@@ -381,7 +381,7 @@
       {/if}
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">{error}</div>
+        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <button
@@ -529,7 +529,7 @@
 
       {#if wasManual}
         <!-- Upgrade nudge for manual profiles -->
-        <div class="w-full max-w-[280px] p-3 bg-tint border border-secondary/20 rounded-md">
+        <div class="w-full max-w-[280px] p-3 bg-tint border border-secondary/20 rounded-lg">
           <p class="text-[10px] font-medium text-secondary mb-1.5">Want a deeper profile?</p>
           <div class="flex flex-col gap-1">
             <div class="flex items-start gap-1.5">

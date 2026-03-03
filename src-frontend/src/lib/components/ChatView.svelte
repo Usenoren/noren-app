@@ -275,7 +275,8 @@
         <div class="fixed inset-0 z-10" onclick={() => { showHistory = false; }}></div>
 
         <div
-          class="absolute top-full left-0 mt-1 z-20 w-72 max-h-80 overflow-y-auto bg-background border border-border rounded-lg shadow-lg"
+          class="absolute top-full left-0 mt-1 z-20 w-72 max-h-80 overflow-y-auto bg-background border border-border rounded-lg"
+          style="box-shadow: var(--shadow-dropdown)"
         >
           {#if conversations.length === 0}
             <p class="p-3 text-xs text-muted text-center">No previous chats</p>
@@ -387,7 +388,7 @@
 
   <!-- Error -->
   {#if error}
-    <div class="mx-4 mb-2 p-2.5 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
+    <div class="mx-4 mb-2 p-2.5 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
       {error}
     </div>
   {/if}

@@ -452,7 +452,7 @@
       {#if settings.noren_pro_logged_in && proStatus}
         <div class="flex flex-col gap-3">
           <!-- Account info -->
-          <div class="p-3 bg-tint border border-secondary/30 rounded-md">
+          <div class="p-3 bg-tint border border-secondary/30 rounded-lg">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-medium text-secondary">
                 {subscription?.tier === "pro" ? "Noren Pro" : "Free"}
@@ -499,7 +499,7 @@
                 {#each tiers as t}
                   <button
                     onclick={() => handleUpgrade(t.id)}
-                    class="flex items-center justify-between p-3 bg-surface border border-border rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
+                    class="flex items-center justify-between p-3 card hover:border-secondary cursor-pointer text-left"
                   >
                     <div>
                       <span class="text-xs font-medium text-foreground">{t.label}</span>
@@ -518,7 +518,7 @@
                   {#if !subscription?.one_time_purchases?.includes(a.id)}
                     <button
                       onclick={() => handleUpgrade(a.id)}
-                      class="flex items-center justify-between p-3 bg-surface border border-border rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
+                      class="flex items-center justify-between p-3 card hover:border-secondary cursor-pointer text-left"
                     >
                       <div>
                         <span class="text-xs font-medium text-foreground">{a.label}</span>
@@ -527,7 +527,7 @@
                       <span class="text-xs font-medium text-secondary">{a.price}<span class="text-[10px] text-muted font-normal">{a.period}</span></span>
                     </button>
                   {:else}
-                    <div class="flex items-center justify-between p-3 bg-surface border border-signal/20 rounded-md">
+                    <div class="flex items-center justify-between p-3 bg-surface border border-signal/20 rounded-lg">
                       <span class="text-xs text-foreground">{a.label}</span>
                       <span class="text-[10px] text-signal font-medium">Purchased</span>
                     </div>
@@ -744,7 +744,7 @@
         </div>
       {:else}
         <!-- No key needed message -->
-        <div class="p-2 bg-tint border border-border rounded-md">
+        <div class="p-2 bg-tint border border-border rounded-lg">
           <p class="text-xs text-muted">
             No API key needed — {settings.provider.name} runs locally.
           </p>
@@ -769,14 +769,14 @@
 
     <!-- Test result -->
     {#if testResult}
-      <div class="p-2 bg-tint border border-signal/30 rounded-md text-xs text-signal">
+      <div class="p-2 bg-tint border border-signal/30 rounded-lg text-xs text-signal">
         {testResult}
       </div>
     {/if}
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
+      <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
         {error}
       </div>
     {/if}

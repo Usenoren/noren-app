@@ -6,8 +6,8 @@ use crate::{accessibility, ContextState};
 
 // --- Popup (Cmd+K quick access) ---
 const POPUP_LABEL: &str = "popup";
-const POPUP_WIDTH: f64 = 400.0;
-const POPUP_HEIGHT: f64 = 500.0;
+const POPUP_WIDTH: f64 = 440.0;
+const POPUP_HEIGHT: f64 = 480.0;
 
 // --- Main app window ---
 const MAIN_LABEL: &str = "main-app";
@@ -53,7 +53,7 @@ fn create_popup(app: &AppHandle) {
     let builder = WebviewWindowBuilder::new(app, POPUP_LABEL, WebviewUrl::default())
         .title("Noren")
         .inner_size(POPUP_WIDTH, POPUP_HEIGHT)
-        .min_inner_size(380.0, 480.0)
+        .min_inner_size(440.0, 360.0)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)

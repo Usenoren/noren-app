@@ -138,7 +138,7 @@
     {#if !canExtract()}
       <!-- Paywall overlay -->
       <div class="absolute inset-0 z-10 flex items-center justify-center bg-background/80 rounded-md">
-        <div class="p-4 bg-tint border border-secondary/20 rounded-md text-center max-w-[260px]">
+        <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
           <p class="text-xs font-medium text-secondary">Voice Extraction</p>
           <p class="text-[10px] text-muted mt-1 leading-relaxed">
             AI-powered 4-pass analysis of your writing patterns, vocabulary, and rhetorical style.
@@ -229,7 +229,7 @@ Example formats: tweets, emails, blog posts, Slack messages, LinkedIn posts..."
 
     <!-- Error -->
     {#if error && canExtract()}
-      <div class="p-2 bg-tint border border-border rounded-md text-xs text-muted leading-relaxed">
+      <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
         {error}
       </div>
     {/if}

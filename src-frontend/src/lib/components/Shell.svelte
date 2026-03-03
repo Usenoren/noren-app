@@ -14,6 +14,7 @@
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
   let loading = $state(true);
+  let detectedApp = $state("");
 
   const viewLabels: Record<View, string> = {
     generate: "noren",
@@ -28,29 +29,26 @@
   }
 
   $effect(() => {
-    let cleanup: (() => void) | undefined;
-    let cleanup2: (() => void) | undefined;
+    const cleanups: (() => void)[] = [];
 
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
       if (["generate", "profiles", "extract", "settings"].includes(target)) {
         view = target;
       }
-    }).then((fn) => {
-      cleanup = fn;
-    });
+    }).then((fn) => cleanups.push(fn));
+
+    listen<{ name: string; format: string | null }>("detected-app", (event) => {
+      detectedApp = event.payload.name;
+    }).then((fn) => cleanups.push(fn));
 
     // Re-check permissions each time the window is shown
-    // (user may have granted access in System Settings while the app was hidden)
     listen("tauri://focus", () => {
       checkPermissions().then((ok) => {
         hasPermissions = ok;
       });
-      // Refresh subscription on focus (catches post-checkout return)
       refreshSubscription();
-    }).then((fn) => {
-      cleanup2 = fn;
-    });
+    }).then((fn) => cleanups.push(fn))
 
     checkPermissions().then((ok) => {
       hasPermissions = ok;
@@ -83,7 +81,7 @@
       }
     });
 
-    return () => { cleanup?.(); cleanup2?.(); };
+    return () => cleanups.forEach((fn) => fn());
   });
 
   function handleOnboardingComplete() {
@@ -132,6 +130,10 @@
       <span data-tauri-drag-region class="text-xs font-medium text-foreground pointer-events-none tracking-wide {view === 'generate' || view === 'onboarding' ? 'font-heading' : ''}">
         {viewLabels[view]}
       </span>
+      {#if detectedApp && view === "generate"}
+        <span data-tauri-drag-region class="text-[10px] text-muted pointer-events-none">&rarr;</span>
+        <span data-tauri-drag-region class="text-[10px] text-secondary font-medium pointer-events-none">{detectedApp}</span>
+      {/if}
     </div>
     <div class="flex items-center gap-3">
       {#if view === "generate"}
