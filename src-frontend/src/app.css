@@ -3,9 +3,10 @@
 /* ============================================================
    NOREN INDIGO DESIGN SYSTEM
    Light · Warm · Japanese indigo palette
+   Uses @theme (not inline) so var() references enable dark mode
    ============================================================ */
 
-@theme inline {
+@theme {
   --color-background: #F6F1EB;
   --color-surface: #FFFFFF;
   --color-border: #D4CFC9;
@@ -27,6 +28,18 @@
   --shadow-card-hover: 0 2px 4px rgba(30,49,72,0.04), 0 8px 24px rgba(30,49,72,0.08), 0 20px 60px rgba(30,49,72,0.06);
   --shadow-popup: 0 4px 12px rgba(30,49,72,0.08), 0 16px 48px rgba(30,49,72,0.12), 0 32px 80px rgba(30,49,72,0.08);
   --shadow-dropdown: 0 2px 8px rgba(30,49,72,0.06), 0 8px 24px rgba(30,49,72,0.10);
+
+  /* Prose code backgrounds (need dedicated tokens for dark mode swap) */
+  --color-code-bg: rgba(30, 49, 72, 0.06);
+  --color-code-block-bg: rgba(30, 49, 72, 0.05);
+  --color-selection-bg: rgba(59, 107, 138, 0.2);
+
+  /* Shimmer gradient colors */
+  --color-shimmer: rgba(59, 107, 138, 0.10);
+  --color-shimmer-peak: rgba(59, 107, 138, 0.18);
+  --color-shimmer-chat: rgba(59, 107, 138, 0.08);
+  --color-shimmer-chat-peak: rgba(59, 107, 138, 0.14);
+  --color-loom-pulse: rgba(59, 107, 138, 0.45);
 }
 
 /* --- Base --- */
@@ -34,7 +47,7 @@
   font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   font-size: 13px;
   line-height: 1.5;
-  color: #2B2725;
+  color: var(--color-foreground);
   background-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -78,7 +91,7 @@ body::before {
 
 /* --- Focus --- */
 *:focus-visible {
-  outline: 1.5px solid #3B6B8A;
+  outline: 1.5px solid var(--color-secondary);
   outline-offset: 1px;
 }
 
@@ -90,17 +103,17 @@ body::before {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #D4CFC9;
+  background: var(--color-border);
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #7A746E;
+  background: var(--color-muted);
 }
 
 /* --- Selection --- */
 ::selection {
-  background: rgba(59, 107, 138, 0.2);
-  color: #2B2725;
+  background: var(--color-selection-bg);
+  color: var(--color-foreground);
 }
 
 /* --- Animations --- */
@@ -126,9 +139,9 @@ body::before {
 
 /* 1. Loom pulse — radial glow from the Weave button */
 @keyframes loom-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(59,107,138,0.45); }
-  50%  { box-shadow: 0 0 0 12px rgba(59,107,138,0); }
-  100% { box-shadow: 0 0 0 0 rgba(59,107,138,0); }
+  0%   { box-shadow: 0 0 0 0 var(--color-loom-pulse); }
+  50%  { box-shadow: 0 0 0 12px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .animate-loom-pulse {
@@ -170,9 +183,9 @@ body::before {
   background: linear-gradient(
     105deg,
     transparent 30%,
-    rgba(59,107,138,0.10) 45%,
-    rgba(59,107,138,0.18) 50%,
-    rgba(59,107,138,0.10) 55%,
+    var(--color-shimmer) 45%,
+    var(--color-shimmer-peak) 50%,
+    var(--color-shimmer) 55%,
     transparent 70%
   );
   animation: thread-shimmer 1s 0.3s ease-out forwards;
@@ -192,9 +205,9 @@ body::before {
   background: linear-gradient(
     105deg,
     transparent 30%,
-    rgba(59,107,138,0.08) 45%,
-    rgba(59,107,138,0.14) 50%,
-    rgba(59,107,138,0.08) 55%,
+    var(--color-shimmer-chat) 45%,
+    var(--color-shimmer-chat-peak) 50%,
+    var(--color-shimmer-chat) 55%,
     transparent 70%
   );
   animation: thread-shimmer 0.6s 0.2s ease-out forwards;
@@ -204,20 +217,20 @@ body::before {
 
 .divider {
   height: 1px;
-  background: #D4CFC9;
+  background: var(--color-border);
 }
 
 /* --- Form resets --- */
 input, textarea, select {
-  background-color: #FFFFFF;
-  border: 1px solid #D4CFC9;
-  color: #2B2725;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-foreground);
   font-family: inherit;
   border-radius: 6px;
 }
 
 input::placeholder, textarea::placeholder {
-  color: #7A746E;
+  color: var(--color-muted);
 }
 
 select {
@@ -244,14 +257,14 @@ button {
 .prose-chat code {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;
-  background: rgba(30,49,72,0.06);
+  background: var(--color-code-bg);
   padding: 0.15em 0.35em;
   border-radius: 4px;
 }
 .prose-chat pre {
   margin: 0.5em 0;
   padding: 0.75em;
-  background: rgba(30,49,72,0.05);
+  background: var(--color-code-block-bg);
   border-radius: 8px;
   overflow-x: auto;
 }
@@ -267,12 +280,12 @@ button {
 .prose-chat h2 { font-size: 1.1em; }
 .prose-chat h3 { font-size: 1em; }
 .prose-chat blockquote {
-  border-left: 3px solid #D4CFC9;
+  border-left: 3px solid var(--color-border);
   margin: 0.4em 0;
   padding-left: 0.75em;
-  color: #7A746E;
+  color: var(--color-muted);
 }
-.prose-chat a { color: #3B6B8A; text-decoration: underline; }
+.prose-chat a { color: var(--color-secondary); text-decoration: underline; }
 
 /* Allow text selection in chat messages */
 .selectable, .selectable * {
@@ -282,7 +295,7 @@ button {
 
 /* --- Popup window rounded shell --- */
 .popup-shell {
-  background: #F6F1EB;
+  background: var(--color-background);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-popup);
@@ -290,12 +303,62 @@ button {
 
 /* Brand card elevation */
 .card {
-  background: #FFFFFF;
-  border: 1px solid #D4CFC9;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: var(--shadow-card);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 .card:hover {
   box-shadow: var(--shadow-card-hover);
+}
+
+/* ============================================================
+   DARK MODE — Automatic macOS theme matching
+   Inverts the indigo depth: deep ink backgrounds, light text
+   ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #141211;
+    --color-surface: #1E1B19;
+    --color-border: #302C28;
+    --color-foreground: #E8E3DD;
+    --color-muted: #8A847E;
+    --color-primary: #5A9AC2;
+    --color-primary-hover: #6DAAD0;
+    --color-primary-muted: rgba(90, 154, 194, 0.15);
+    --color-accent: #E05B3C;
+    --color-accent-hover: #C44A2F;
+    --color-secondary: #6B9BB5;
+    --color-tint: #1A2430;
+    --color-signal: #3D9B65;
+    --color-warning: #D4A017;
+    --color-error: #E05B3C;
+
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.16);
+    --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.20);
+    --shadow-popup: 0 4px 12px rgba(0,0,0,0.20), 0 16px 48px rgba(0,0,0,0.28);
+    --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.24);
+
+    --color-code-bg: rgba(107, 155, 181, 0.10);
+    --color-code-block-bg: rgba(107, 155, 181, 0.08);
+    --color-selection-bg: rgba(107, 155, 181, 0.3);
+
+    --color-shimmer: rgba(107, 155, 181, 0.08);
+    --color-shimmer-peak: rgba(107, 155, 181, 0.15);
+    --color-shimmer-chat: rgba(107, 155, 181, 0.06);
+    --color-shimmer-chat-peak: rgba(107, 155, 181, 0.12);
+    --color-loom-pulse: rgba(107, 155, 181, 0.45);
+  }
+
+  /* Grain texture — softer on dark */
+  body::before {
+    opacity: 0.03;
+  }
+
+  /* Select chevron in dark muted color */
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A847E' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  }
 }
