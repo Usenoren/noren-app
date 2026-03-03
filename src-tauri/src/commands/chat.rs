@@ -73,6 +73,7 @@ pub async fn chat_send(
     state: State<'_, AppState>,
     messages: Vec<ChatMessage>,
     format: String,
+    attachments: Option<Vec<String>>,
 ) -> Result<GenerateResult, String> {
     let config = state.config.lock().unwrap().clone();
 
@@ -89,14 +90,37 @@ pub async fn chat_send(
         content: system_prompt,
     }];
 
-    for msg in &messages {
+    let last_user_idx = messages.iter().rposition(|m| m.role == "user");
+
+    for (i, msg) in messages.iter().enumerate() {
         let role = match msg.role.as_str() {
             "assistant" => noren_engine::Role::Assistant,
             _ => noren_engine::Role::User,
         };
+
+        // Prepend attachment contents to the last user message
+        let content = if Some(i) == last_user_idx {
+            if let Some(ref atts) = attachments {
+                if !atts.is_empty() {
+                    let mut parts = Vec::new();
+                    for (j, att) in atts.iter().enumerate() {
+                        parts.push(format!("[Attached file {}]\n{}", j + 1, att));
+                    }
+                    parts.push(msg.content.clone());
+                    parts.join("\n\n")
+                } else {
+                    msg.content.clone()
+                }
+            } else {
+                msg.content.clone()
+            }
+        } else {
+            msg.content.clone()
+        };
+
         llm_messages.push(noren_engine::LlmMessage {
             role,
-            content: msg.content.clone(),
+            content,
         });
     }
 

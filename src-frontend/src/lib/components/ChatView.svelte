@@ -7,9 +7,11 @@
     listChats,
     loadChat,
     deleteChat,
+    readFileAsText,
     type ChatMessage,
     type ConversationSummary,
   } from "$lib/api/tauri";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { friendlyError } from "$lib/utils/errors";
   import { marked } from "marked";
   import DOMPurify from "dompurify";
@@ -31,6 +33,9 @@
   let formats = $state<string[]>([]);
   let totalTokens = $state(0);
   let messagesContainer: HTMLDivElement | undefined = $state();
+
+  // Attachments
+  let attachedFiles = $state<{ name: string; content: string }[]>([]);
 
   // History state
   let conversationId: string | null = $state(null);
@@ -135,6 +140,39 @@
 
   // --- Actions ---
 
+  async function handleAttachFile() {
+    if (attachedFiles.length >= 3) {
+      error = "Maximum 3 attachments allowed";
+      return;
+    }
+
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "Documents",
+            extensions: ["txt", "md", "csv", "json", "xml", "html", "pdf", "yaml", "yml", "toml"],
+          },
+        ],
+      });
+
+      if (!selected) return;
+
+      const path = selected as string;
+      const content = await readFileAsText(path);
+      const name = path.split("/").pop() || path;
+
+      attachedFiles = [...attachedFiles, { name, content }];
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
+
+  function removeAttachment(index: number) {
+    attachedFiles = attachedFiles.filter((_, i) => i !== index);
+  }
+
   async function persistChat() {
     if (messages.length === 0) return;
 
@@ -172,7 +210,12 @@
     scrollToBottom();
 
     try {
-      const result = await chatSend({ messages, format });
+      const attachmentContents = attachedFiles.length > 0
+        ? attachedFiles.map((f) => f.content)
+        : undefined;
+
+      const result = await chatSend({ messages, format, attachments: attachmentContents });
+      attachedFiles = [];
       const assistantMessage: ChatMessage = { role: "assistant", content: result.text };
       messages = [...messages, assistantMessage];
       totalTokens += result.input_tokens + result.output_tokens;
@@ -355,9 +398,9 @@
               </div>
             </div>
           {:else}
-            <div class="flex justify-start animate-fade-in-up group/msg">
+            <div class="flex justify-start animate-weave-in group/msg">
               <div class="max-w-[80%]">
-                <div class="px-3.5 py-2.5 bg-surface border border-border text-foreground rounded-2xl rounded-bl-md selectable">
+                <div class="px-3.5 py-2.5 bg-surface border border-border text-foreground rounded-2xl rounded-bl-md selectable animate-weave-shimmer">
                   <div class="text-sm leading-relaxed prose-chat">{@html renderMarkdown(msg.content)}</div>
                 </div>
                 <div class="flex items-center gap-1 mt-1 ml-1 h-5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
@@ -406,29 +449,58 @@
         </button>
       </div>
     {/if}
-    <div class="flex items-end gap-2 max-w-2xl mx-auto">
-      <textarea
-        bind:value={input}
-        onkeydown={handleKeydown}
-        oninput={autoResize}
-        class="flex-1 p-3 text-sm border border-border resize-none bg-surface text-foreground placeholder-muted rounded-xl focus:outline-none focus:border-secondary"
-        rows={1}
-        placeholder="Message..."
-        disabled={isLoading}
-      ></textarea>
-      <button
-        onclick={handleSend}
-        disabled={!input.trim() || isLoading}
-        class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0
-          {!input.trim() || isLoading
-            ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-primary text-white hover:bg-primary-hover'}"
-        aria-label="Send"
-      >
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-        </svg>
-      </button>
+    <div class="max-w-2xl mx-auto">
+      <!-- Attachment chips -->
+      {#if attachedFiles.length > 0}
+        <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
+          {#each attachedFiles as file, i}
+            <div class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-tint border border-border rounded text-[10px] text-secondary">
+              <span class="max-w-[120px] truncate">{file.name}</span>
+              <button
+                onclick={() => removeAttachment(i)}
+                class="text-muted hover:text-error cursor-pointer ml-0.5"
+                aria-label="Remove attachment"
+              >&times;</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="flex items-end gap-2">
+        <button
+          onclick={handleAttachFile}
+          class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 text-muted hover:text-foreground border border-border hover:border-secondary"
+          title="Attach a file (PDF, text, etc.)"
+          disabled={attachedFiles.length >= 3 || isLoading}
+          aria-label="Attach file"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+          </svg>
+        </button>
+        <textarea
+          bind:value={input}
+          onkeydown={handleKeydown}
+          oninput={autoResize}
+          class="flex-1 p-3 text-sm border border-border resize-none bg-surface text-foreground placeholder-muted rounded-xl focus:outline-none focus:border-secondary"
+          rows={1}
+          placeholder="Message..."
+          disabled={isLoading}
+        ></textarea>
+        <button
+          onclick={handleSend}
+          disabled={!input.trim() || isLoading}
+          class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0
+            {!input.trim() || isLoading
+              ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
+              : 'bg-primary text-white hover:bg-primary-hover'}"
+          aria-label="Send"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
+      </div>
     </div>
     <p class="text-[10px] text-muted text-center mt-1.5">Cmd+Enter to send</p>
   </div>

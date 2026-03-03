@@ -367,6 +367,7 @@ export interface ConversationSummary {
 export async function chatSend(params: {
   messages: ChatMessage[];
   format: string;
+  attachments?: string[];
 }): Promise<GenerateResult> {
   return invoke("chat_send", params);
 }

@@ -17,7 +17,7 @@
   let loading = $state(true);
 
   const navItems: { id: View; label: string; icon: string }[] = [
-    { id: "generate", label: "Generate", icon: "pen" },
+    { id: "generate", label: "Weave", icon: "pen" },
     { id: "chat", label: "Chat", icon: "chat" },
     { id: "profiles", label: "Profiles", icon: "user" },
     { id: "extract", label: "Extract", icon: "wand" },
@@ -157,7 +157,7 @@
       </nav>
 
       <!-- Content area -->
-      <div class="flex-1 min-h-0 overflow-hidden">
+      <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
         <!-- Accessibility permission banner -->
         {#if !hasPermissions && view === "generate"}
           <div class="px-6 py-2.5 bg-tint border-b border-border shrink-0">
@@ -175,7 +175,7 @@
           </div>
         {/if}
 
-        <div class="h-full max-w-3xl mx-auto">
+        <div class="flex-1 min-h-0 max-w-3xl mx-auto w-full">
           {#if view === "generate"}
             <GenerateView />
           {:else if view === "chat"}

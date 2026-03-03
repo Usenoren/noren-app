@@ -105,6 +105,8 @@
         });
       }
       if (output) {
+        weaveComplete = true;
+        setTimeout(() => { weaveComplete = false; }, 1000);
         try {
           await navigator.clipboard.writeText(output.text);
           copied = true;
@@ -120,6 +122,7 @@
   }
 
   let copied = $state(false);
+  let weaveComplete = $state(false);
 
   async function handleCopy() {
     if (!output) return;
@@ -315,21 +318,22 @@
     </div>
   </div>
 
-  <!-- Generate button -->
+  <!-- Weave button -->
   <button
     onclick={handleGenerate}
     disabled={!prompt.trim() || isGenerating}
     class="w-full py-2.5 px-4 text-sm font-semibold tracking-wide transition-colors cursor-pointer rounded-md
       {!prompt.trim() || isGenerating
         ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-        : 'bg-primary text-white hover:bg-primary-hover'}"
+        : 'bg-primary text-white hover:bg-primary-hover'}
+      {weaveComplete ? 'animate-loom-pulse' : ''}"
   >
     {#if isGenerating}
       <span class="inline-flex items-center gap-2 animate-breathe">
-        <LoadingSpinner /> Generating
+        <LoadingSpinner /> Weaving
       </span>
     {:else}
-      Generate
+      Weave
     {/if}
   </button>
 
@@ -343,18 +347,22 @@
   <!-- Output -->
   {#if comparison}
     <!-- Side-by-side comparison -->
-    <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fade-in-up">
+    <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fabric-unfurl">
       <div class="flex-1 grid grid-cols-2 gap-2 min-h-0">
         <div class="flex flex-col min-h-0">
           <span class="text-[10px] font-medium text-primary mb-1 uppercase tracking-wide">With your voice</span>
           <div class="flex-1 p-3 bg-surface border border-primary/30 rounded-lg overflow-y-auto">
-            <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.with_voice.text}</p>
+            <div class="animate-shimmer rounded-lg">
+              <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.with_voice.text}</p>
+            </div>
           </div>
         </div>
         <div class="flex flex-col min-h-0">
           <span class="text-[10px] font-medium text-muted mb-1 uppercase tracking-wide">Without voice</span>
           <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
-            <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.without_voice.text}</p>
+            <div class="animate-shimmer rounded-lg">
+              <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.without_voice.text}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -380,9 +388,11 @@
       </div>
     </div>
   {:else if output}
-    <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fade-in-up">
+    <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fabric-unfurl">
       <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
-        <p class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{output.text}</p>
+        <div class="animate-shimmer rounded-lg">
+          <p class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{output.text}</p>
+        </div>
       </div>
 
       <div class="flex flex-col gap-1">

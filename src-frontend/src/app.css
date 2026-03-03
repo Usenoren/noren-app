@@ -122,6 +122,86 @@ body::before {
   animation: fade-in-up 0.3s ease-out both;
 }
 
+/* --- Weave completion effects --- */
+
+/* 1. Loom pulse — radial glow from the Weave button */
+@keyframes loom-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(59,107,138,0.45); }
+  50%  { box-shadow: 0 0 0 12px rgba(59,107,138,0); }
+  100% { box-shadow: 0 0 0 0 rgba(59,107,138,0); }
+}
+
+.animate-loom-pulse {
+  animation: loom-pulse 0.7s ease-out;
+}
+
+/* 2. Fabric unfurl — output reveals top-down like cloth pulled from a loom */
+@keyframes fabric-unfurl {
+  0%   { clip-path: inset(0 0 100% 0); opacity: 0; }
+  30%  { clip-path: inset(0 0 60% 0);  opacity: 0.4; }
+  60%  { clip-path: inset(0 0 20% 0);  opacity: 0.8; }
+  100% { clip-path: inset(0 0 0 0);    opacity: 1; }
+}
+
+.animate-fabric-unfurl {
+  animation: fabric-unfurl 0.9s ease-out both;
+}
+
+/* Smaller unfurl for chat bubbles */
+.animate-weave-in {
+  animation: fabric-unfurl 0.5s ease-out both;
+}
+
+/* 3. Thread shimmer — light streak sweeps across the output */
+@keyframes thread-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(59,107,138,0.10) 45%,
+    rgba(59,107,138,0.18) 50%,
+    rgba(59,107,138,0.10) 55%,
+    transparent 70%
+  );
+  animation: thread-shimmer 1s 0.3s ease-out forwards;
+  pointer-events: none;
+}
+
+/* Smaller shimmer for chat bubbles */
+.animate-weave-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-weave-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(59,107,138,0.08) 45%,
+    rgba(59,107,138,0.14) 50%,
+    rgba(59,107,138,0.08) 55%,
+    transparent 70%
+  );
+  animation: thread-shimmer 0.6s 0.2s ease-out forwards;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
 .divider {
   height: 1px;
   background: #D4CFC9;
