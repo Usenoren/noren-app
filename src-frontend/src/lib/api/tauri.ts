@@ -127,6 +127,10 @@ export async function updateHotkey(hotkeyStr: string): Promise<void> {
   return invoke("update_hotkey", { hotkeyStr });
 }
 
+export async function listOllamaModels(): Promise<string[]> {
+  return invoke("list_ollama_models");
+}
+
 // --- Google OAuth ---
 
 export interface GoogleOAuthInitResult {

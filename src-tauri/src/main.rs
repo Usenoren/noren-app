@@ -170,6 +170,7 @@ fn main() {
             commands::migrate_profile_to_server,
             commands::export_profile,
             commands::update_hotkey,
+            commands::list_ollama_models,
             commands::chat_send,
             commands::save_chat,
             commands::list_chats,

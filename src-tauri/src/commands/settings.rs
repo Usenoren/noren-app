@@ -473,6 +473,50 @@ pub fn update_hotkey(
     Ok(())
 }
 
+// --- Ollama model discovery ---
+
+#[tauri::command]
+pub async fn list_ollama_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let config = state.config.lock().unwrap().clone();
+    let base_url = config.provider.base_url
+        .trim_end_matches("/v1")
+        .trim_end_matches("/v1/")
+        .to_string();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(format!("{}/api/tags", base_url))
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach Ollama: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err("Ollama returned an error".to_string());
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let models = data["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m["name"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(models)
+}
+
 /// Persist config to ~/.noren/config.json
 pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());

@@ -7,6 +7,7 @@
     updateModel,
     updateBaseUrl,
     testConnection,
+    listOllamaModels,
     setInferenceMode,
     updateHotkey,
     norenProLogin,
@@ -65,8 +66,13 @@
   let recordedHotkey = $state("");
   let hotkeyError = $state("");
 
+  // Ollama model discovery
+  let ollamaModels = $state<string[]>([]);
+  let ollamaLoading = $state(false);
+
   let requiresKey = $derived(settings?.provider.requiresKey ?? true);
   let isCustom = $derived(selectedPreset === "custom");
+  let isOllama = $derived(selectedPreset === "ollama");
   let showProSection = $state(false);
   let isNorenPro = $derived(settings?.inference_mode === "noren_pro");
 
@@ -90,6 +96,10 @@
       modelInput = settings.provider.model;
       baseUrlInput = settings.provider.baseUrl;
       showProSection = settings.inference_mode === "noren_pro";
+
+      if (settings.provider.name === "ollama") {
+        fetchOllamaModels();
+      }
 
       // Load Noren Pro status + usage if logged in
       if (settings.noren_pro_logged_in) {
@@ -171,6 +181,22 @@
     isRecording = false;
     recordedHotkey = "";
     hotkeyError = "";
+  }
+
+  async function fetchOllamaModels() {
+    ollamaLoading = true;
+    try {
+      ollamaModels = await listOllamaModels();
+    } catch {
+      ollamaModels = [];
+    }
+    ollamaLoading = false;
+
+    // Auto-select first model if current model isn't available
+    if (ollamaModels.length > 0 && !ollamaModels.includes(modelInput)) {
+      modelInput = ollamaModels[0];
+      await updateModel(modelInput);
+    }
   }
 
   async function handleModeSwitch(mode: "byok" | "noren_pro") {
@@ -275,6 +301,7 @@
     testResult = "";
     apiKeyInput = "";
     showKey = false;
+    ollamaModels = [];
 
     if (presetId === "custom") {
       baseUrlInput = "";
@@ -285,6 +312,10 @@
     try {
       await setProvider({ name: presetId });
       await loadSettings();
+
+      if (presetId === "ollama") {
+        await fetchOllamaModels();
+      }
     } catch (e) {
       error = friendlyError(e);
     }
@@ -666,20 +697,39 @@
       <!-- Model -->
       <div>
         <span class="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Model</span>
-        <div class="flex gap-2">
-          <input
-            type="text"
+        {#if isOllama && ollamaLoading}
+          <div class="flex items-center gap-2 text-xs text-muted">
+            <LoadingSpinner /> Detecting models...
+          </div>
+        {:else if isOllama && ollamaModels.length > 0}
+          <select
             bind:value={modelInput}
-            class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-            placeholder="Model ID"
-          />
-          <button
-            onclick={handleModelSave}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            onchange={handleModelSave}
+            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
           >
-            Save
-          </button>
-        </div>
+            {#each ollamaModels as m}
+              <option value={m}>{m}</option>
+            {/each}
+          </select>
+        {:else}
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={modelInput}
+              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              placeholder="Model ID"
+            />
+            <button
+              onclick={handleModelSave}
+              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            >
+              Save
+            </button>
+          </div>
+          {#if isOllama}
+            <p class="text-[10px] text-warning mt-1">Could not detect models. Is Ollama running?</p>
+          {/if}
+        {/if}
       </div>
 
       <!-- API Key (only for providers that require one) -->
