@@ -109,11 +109,11 @@
 </script>
 
 {#if loading}
-  <div class="flex items-center justify-center h-screen bg-background">
+  <div class="flex items-center justify-center h-screen popup-shell">
     <span class="text-xs text-muted">Loading...</span>
   </div>
 {:else}
-<div class="flex flex-col h-screen overflow-hidden bg-background">
+<div class="flex flex-col h-screen overflow-hidden popup-shell">
   <!-- Title bar -->
   <div
     data-tauri-drag-region

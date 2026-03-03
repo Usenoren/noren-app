@@ -10,7 +10,7 @@ default-run = "noren-app"
 
 [dependencies]
 noren-engine = { path = "./noren-engine" }
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
@@ -21,6 +21,8 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 security-framework = "3"
+objc = "0.2"
+cocoa = "0.26"
 aes-gcm = "0.10"
 base64 = "0.22"
 sha2 = "0.10"

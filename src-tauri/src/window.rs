@@ -1,4 +1,6 @@
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+#[allow(unused_imports)]
+use cocoa::foundation::NSString as _;
 
 use crate::{accessibility, ContextState};
 
@@ -51,17 +53,45 @@ fn create_popup(app: &AppHandle) {
     let builder = WebviewWindowBuilder::new(app, POPUP_LABEL, WebviewUrl::default())
         .title("Noren")
         .inner_size(POPUP_WIDTH, POPUP_HEIGHT)
-        .min_inner_size(320.0, 400.0)
+        .min_inner_size(380.0, 480.0)
         .decorations(false)
+        .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .visible(true)
         .center();
 
     match builder.build() {
-        Ok(_) => {}
+        Ok(window) => {
+            apply_macos_transparency(&window);
+        }
         Err(e) => eprintln!("Failed to create popup window: {}", e),
     }
+}
+
+/// Make the native NSWindow + WKWebView fully transparent so CSS border-radius shows through.
+#[allow(deprecated)]
+fn apply_macos_transparency(window: &tauri::WebviewWindow) {
+    use cocoa::base::{id, NO};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    let _ = window.with_webview(|webview| {
+        unsafe {
+            let wk: id = webview.inner() as id;
+
+            // Make WKWebView background transparent (private API)
+            let no_val: id = msg_send![class!(NSNumber), numberWithBool: NO];
+            let key: id = cocoa::foundation::NSString::alloc(cocoa::base::nil)
+                .init_str("drawsBackground");
+            let _: () = msg_send![wk, setValue: no_val forKey: key];
+
+            // Make the NSWindow background transparent
+            let ns_window: id = msg_send![wk, window];
+            let _: () = msg_send![ns_window, setOpaque: NO];
+            let clear: id = msg_send![class!(NSColor), clearColor];
+            let _: () = msg_send![ns_window, setBackgroundColor: clear];
+        }
+    });
 }
 
 // ── Main app window ────────────────────────────────────────

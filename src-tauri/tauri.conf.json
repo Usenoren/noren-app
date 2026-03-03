@@ -10,6 +10,7 @@
     "beforeBuildCommand": "cd ../src-frontend && bun run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "withGlobalTauri": true,
     "windows": [],
     "security": {
