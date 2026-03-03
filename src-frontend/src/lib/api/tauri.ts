@@ -345,9 +345,44 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface Conversation {
+  id: string;
+  title: string;
+  format: string;
+  created_at: string;
+  updated_at: string;
+  total_tokens: number;
+  messages: ChatMessage[];
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  format: string;
+  updated_at: string;
+  message_count: number;
+  total_tokens: number;
+}
+
 export async function chatSend(params: {
   messages: ChatMessage[];
   format: string;
 }): Promise<GenerateResult> {
   return invoke("chat_send", params);
+}
+
+export async function saveChat(conversation: Conversation): Promise<void> {
+  return invoke("save_chat", { conversation });
+}
+
+export async function listChats(): Promise<ConversationSummary[]> {
+  return invoke("list_chats");
+}
+
+export async function loadChat(id: string): Promise<Conversation> {
+  return invoke("load_chat", { id });
+}
+
+export async function deleteChat(id: string): Promise<void> {
+  return invoke("delete_chat", { id });
 }

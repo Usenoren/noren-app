@@ -171,6 +171,10 @@ fn main() {
             commands::export_profile,
             commands::update_hotkey,
             commands::chat_send,
+            commands::save_chat,
+            commands::list_chats,
+            commands::load_chat,
+            commands::delete_chat,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

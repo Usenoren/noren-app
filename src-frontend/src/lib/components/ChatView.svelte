@@ -1,8 +1,23 @@
 <script lang="ts">
-  import { chatSend, getProfileOverview, listFormats, type ChatMessage } from "$lib/api/tauri";
+  import {
+    chatSend,
+    getProfileOverview,
+    listFormats,
+    saveChat,
+    listChats,
+    loadChat,
+    deleteChat,
+    type ChatMessage,
+    type ConversationSummary,
+  } from "$lib/api/tauri";
   import { friendlyError } from "$lib/utils/errors";
+  import { marked } from "marked";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
+  // Configure marked for inline rendering
+  marked.setOptions({ breaks: true });
+
+  // --- State ---
   let messages: ChatMessage[] = $state([]);
   let input = $state("");
   let isLoading = $state(false);
@@ -12,6 +27,13 @@
   let totalTokens = $state(0);
   let messagesContainer: HTMLDivElement | undefined = $state();
 
+  // History state
+  let conversationId: string | null = $state(null);
+  let conversationCreatedAt: string | null = $state(null);
+  let conversations = $state<ConversationSummary[]>([]);
+  let showHistory = $state(false);
+
+  // --- Init ---
   $effect(() => {
     getProfileOverview().then((overview) => {
       let f = overview.formats;
@@ -32,7 +54,32 @@
         formats = f;
       }
     });
+
+    refreshHistory();
   });
+
+  // --- Helpers ---
+
+  function generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function generateTitle(firstMessage: string): string {
+    const clean = firstMessage.replace(/\n/g, " ").trim();
+    return clean.length > 50 ? clean.slice(0, 50) + "..." : clean;
+  }
+
+  function nowISO(): string {
+    return new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  }
+
+  async function refreshHistory() {
+    try {
+      conversations = await listChats();
+    } catch {
+      // Ignore — history just won't show
+    }
+  }
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -40,6 +87,55 @@
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
     });
+  }
+
+  function relativeTime(iso: string): string {
+    const now = Date.now();
+    const then = new Date(iso).getTime();
+    const diffMs = now - then;
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay === 1) return "yesterday";
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return new Date(iso).toLocaleDateString();
+  }
+
+  let copiedIndex: number | null = $state(null);
+
+  async function handleCopyMessage(content: string, index: number) {
+    await navigator.clipboard.writeText(content);
+    copiedIndex = index;
+    setTimeout(() => { copiedIndex = null; }, 1500);
+  }
+
+  // --- Actions ---
+
+  async function persistChat() {
+    if (messages.length === 0) return;
+
+    if (!conversationId) {
+      conversationId = generateId();
+      conversationCreatedAt = nowISO();
+    }
+
+    try {
+      await saveChat({
+        id: conversationId,
+        title: generateTitle(messages[0].content),
+        format,
+        created_at: conversationCreatedAt!,
+        updated_at: nowISO(),
+        total_tokens: totalTokens,
+        messages,
+      });
+      await refreshHistory();
+    } catch {
+      // Non-critical — don't block the chat
+    }
   }
 
   async function handleSend() {
@@ -59,6 +155,9 @@
       messages = [...messages, assistantMessage];
       totalTokens += result.input_tokens + result.output_tokens;
       scrollToBottom();
+
+      // Auto-save after each successful exchange
+      await persistChat();
     } catch (e) {
       error = friendlyError(e);
     } finally {
@@ -67,10 +166,41 @@
   }
 
   function handleNewChat() {
+    conversationId = null;
+    conversationCreatedAt = null;
     messages = [];
     totalTokens = 0;
     error = "";
     input = "";
+    showHistory = false;
+  }
+
+  async function handleLoadChat(id: string) {
+    try {
+      const conv = await loadChat(id);
+      conversationId = conv.id;
+      conversationCreatedAt = conv.created_at;
+      format = conv.format;
+      totalTokens = conv.total_tokens;
+      messages = conv.messages;
+      showHistory = false;
+      scrollToBottom();
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
+
+  async function handleDeleteChat(id: string, e: MouseEvent) {
+    e.stopPropagation();
+    try {
+      await deleteChat(id);
+      if (conversationId === id) {
+        handleNewChat();
+      }
+      await refreshHistory();
+    } catch (err) {
+      error = friendlyError(err);
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -96,6 +226,67 @@
     >
       New Chat
     </button>
+
+    <div class="relative">
+      <button
+        onclick={() => { showHistory = !showHistory; }}
+        class="px-2.5 py-1 text-xs border transition-colors cursor-pointer rounded-md
+          {showHistory
+            ? 'border-secondary text-foreground'
+            : 'border-border text-muted hover:border-secondary hover:text-foreground'}"
+      >
+        <span class="inline-flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          History
+          {#if conversations.length > 0}
+            <span class="text-[10px] text-secondary">{conversations.length}</span>
+          {/if}
+        </span>
+      </button>
+
+      {#if showHistory}
+        <!-- Invisible backdrop to close dropdown on click-outside -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="fixed inset-0 z-10" onclick={() => { showHistory = false; }}></div>
+
+        <div
+          class="absolute top-full left-0 mt-1 z-20 w-72 max-h-80 overflow-y-auto bg-background border border-border rounded-lg shadow-lg"
+        >
+          {#if conversations.length === 0}
+            <p class="p-3 text-xs text-muted text-center">No previous chats</p>
+          {:else}
+            {#each conversations as conv}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div
+                onclick={() => handleLoadChat(conv.id)}
+                class="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-tint transition-colors cursor-pointer border-b border-border last:border-b-0 group
+                  {conversationId === conv.id ? 'bg-primary/5' : ''}"
+              >
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-foreground truncate">{conv.title}</p>
+                  <p class="text-[10px] text-muted mt-0.5">
+                    {relativeTime(conv.updated_at)} · {conv.message_count} messages
+                  </p>
+                </div>
+                <button
+                  onclick={(e) => handleDeleteChat(conv.id, e)}
+                  class="shrink-0 text-muted hover:text-error opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5"
+                  aria-label="Delete conversation"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     <select
       bind:value={format}
@@ -125,14 +316,24 @@
         {#each messages as msg, i}
           {#if msg.role === "user"}
             <div class="flex justify-end animate-fade-in-up">
-              <div class="max-w-[80%] px-3.5 py-2.5 bg-primary/10 text-foreground rounded-2xl rounded-br-md">
+              <div class="max-w-[80%] px-3.5 py-2.5 bg-primary/10 text-foreground rounded-2xl rounded-br-md selectable">
                 <p class="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               </div>
             </div>
           {:else}
-            <div class="flex justify-start animate-fade-in-up">
-              <div class="max-w-[80%] px-3.5 py-2.5 bg-surface border border-border text-foreground rounded-2xl rounded-bl-md">
-                <p class="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+            <div class="flex justify-start animate-fade-in-up group/msg">
+              <div class="max-w-[80%]">
+                <div class="px-3.5 py-2.5 bg-surface border border-border text-foreground rounded-2xl rounded-bl-md selectable">
+                  <div class="text-sm leading-relaxed prose-chat">{@html marked.parse(msg.content)}</div>
+                </div>
+                <div class="flex items-center gap-1 mt-1 ml-1 h-5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                  <button
+                    onclick={() => handleCopyMessage(msg.content, i)}
+                    class="px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground cursor-pointer rounded transition-colors"
+                  >
+                    {copiedIndex === i ? "Copied" : "Copy"}
+                  </button>
+                </div>
               </div>
             </div>
           {/if}
