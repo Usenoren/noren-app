@@ -33,3 +33,7 @@ tauri-build = { version = "2", features = [] }
 [[bin]]
 name = "noren-app"
 path = "src/main.rs"
+
+[[bin]]
+name = "noren-keychain-host"
+path = "src/bin/noren-keychain-host.rs"

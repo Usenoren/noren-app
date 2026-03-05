@@ -6,6 +6,7 @@ mod clipboard;
 mod commands;
 mod hotkey;
 mod keychain;
+mod native_messaging;
 mod tray;
 mod window;
 
@@ -188,6 +189,9 @@ fn main() {
             if !accessibility::check_accessibility_trusted(false) {
                 accessibility::check_accessibility_trusted(true);
             }
+
+            // Register Chrome native messaging host for keychain bridge
+            native_messaging::register_chrome_host();
 
             tray::setup_tray(app.handle())?;
             {
