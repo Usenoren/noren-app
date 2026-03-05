@@ -8,6 +8,9 @@
     updateBaseUrl,
     testConnection,
     listOllamaModels,
+    listClaudeModels,
+    getThinkingSettings,
+    setThinkingSettings,
     setInferenceMode,
     updateHotkey,
     norenProLogin,
@@ -32,6 +35,7 @@
   }
 
   const presets = [
+    { id: "claude-token", label: "Claude Token" },
     { id: "anthropic", label: "Anthropic" },
     { id: "openai", label: "OpenAI" },
     { id: "gemini", label: "Gemini" },
@@ -73,8 +77,18 @@
   let requiresKey = $derived(settings?.provider.requiresKey ?? true);
   let isCustom = $derived(selectedPreset === "custom");
   let isOllama = $derived(selectedPreset === "ollama");
+  let isClaudeToken = $derived(selectedPreset === "claude-token");
+  let isAnthropicType = $derived(selectedPreset === "claude-token" || selectedPreset === "anthropic");
   let showProSection = $state(false);
   let isNorenPro = $derived(settings?.inference_mode === "noren_pro");
+
+  // Dynamic Claude model list
+  let claudeModels = $state<{ id: string; label: string }[]>([]);
+  let claudeModelsLoading = $state(false);
+
+  // Extended thinking
+  let extendedThinking = $state(false);
+  let thinkingBudget = $state(10000);
 
   const tiers = [
     { id: "pro", label: "Noren Pro", price: "$19", period: "/mo", desc: "Everything: extraction, inference, living profile, sync" },
@@ -97,8 +111,18 @@
       baseUrlInput = settings.provider.baseUrl;
       showProSection = settings.inference_mode === "noren_pro";
 
+      // Load thinking settings
+      try {
+        const ts = await getThinkingSettings();
+        extendedThinking = ts.enabled;
+        thinkingBudget = ts.budget;
+      } catch { /* ignore */ }
+
       if (settings.provider.name === "ollama") {
         fetchOllamaModels();
+      }
+      if ((settings.provider.name === "claude-token" || settings.provider.name === "anthropic") && settings.has_key) {
+        fetchClaudeModels();
       }
 
       // Load Noren Pro status + usage if logged in
@@ -181,6 +205,31 @@
     isRecording = false;
     recordedHotkey = "";
     hotkeyError = "";
+  }
+
+  async function fetchClaudeModels() {
+    claudeModelsLoading = true;
+    try {
+      const models = await listClaudeModels();
+      claudeModels = models.map(m => ({ id: m.id, label: m.name }));
+      if (claudeModels.length > 0 && !claudeModels.find(m => m.id === modelInput)) {
+        modelInput = claudeModels[0].id;
+        await updateModel(modelInput);
+      }
+    } catch {
+      claudeModels = [];
+    } finally {
+      claudeModelsLoading = false;
+    }
+  }
+
+  async function handleThinkingToggle() {
+    extendedThinking = !extendedThinking;
+    await setThinkingSettings(extendedThinking, thinkingBudget);
+  }
+
+  async function handleThinkingBudgetSave() {
+    await setThinkingSettings(extendedThinking, thinkingBudget);
   }
 
   async function fetchOllamaModels() {
@@ -315,6 +364,9 @@
 
       if (presetId === "ollama") {
         await fetchOllamaModels();
+      }
+      if (presetId === "claude-token" || presetId === "anthropic") {
+        await fetchClaudeModels();
       }
     } catch (e) {
       error = friendlyError(e);
@@ -697,7 +749,21 @@
       <!-- Model -->
       <div>
         <span class="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Model</span>
-        {#if isOllama && ollamaLoading}
+        {#if isAnthropicType && claudeModelsLoading}
+          <div class="flex items-center gap-2 text-xs text-muted">
+            <LoadingSpinner /> Fetching models...
+          </div>
+        {:else if isAnthropicType && claudeModels.length > 0}
+          <select
+            bind:value={modelInput}
+            onchange={handleModelSave}
+            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          >
+            {#each claudeModels as m}
+              <option value={m.id}>{m.label}</option>
+            {/each}
+          </select>
+        {:else if isOllama && ollamaLoading}
           <div class="flex items-center gap-2 text-xs text-muted">
             <LoadingSpinner /> Detecting models...
           </div>
@@ -717,7 +783,7 @@
               type="text"
               bind:value={modelInput}
               class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-              placeholder="Model ID"
+              placeholder={isAnthropicType ? "claude-sonnet-4-6" : "Model ID"}
             />
             <button
               onclick={handleModelSave}
@@ -732,12 +798,50 @@
         {/if}
       </div>
 
+      <!-- Extended Thinking (Anthropic only) -->
+      {#if isAnthropicType}
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-muted uppercase tracking-wide">Extended Thinking</span>
+            <button
+              onclick={handleThinkingToggle}
+              class="relative w-9 h-5 rounded-full transition-colors cursor-pointer {extendedThinking ? 'bg-secondary' : 'bg-border'}"
+            >
+              <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {extendedThinking ? 'translate-x-4' : ''}"></span>
+            </button>
+          </div>
+          {#if extendedThinking}
+            <div class="flex items-center gap-2 mt-2">
+              <span class="text-[10px] text-muted whitespace-nowrap">Budget:</span>
+              <select
+                bind:value={thinkingBudget}
+                onchange={handleThinkingBudgetSave}
+                class="flex-1 px-2 py-1 text-[10px] border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              >
+                <option value={5000}>5k tokens (fast)</option>
+                <option value={10000}>10k tokens</option>
+                <option value={25000}>25k tokens</option>
+                <option value={50000}>50k tokens (deep)</option>
+              </select>
+            </div>
+          {/if}
+          <p class="text-[10px] text-muted mt-1.5">
+            {extendedThinking ? "Model will reason step-by-step before responding. Slower but higher quality." : "Direct responses without chain-of-thought reasoning."}
+          </p>
+        </div>
+      {/if}
+
       <!-- API Key (only for providers that require one) -->
       {#if requiresKey}
         <div>
+          {#if isClaudeToken}
+            <p class="text-[10px] text-muted mb-2 leading-relaxed">
+              Run <code class="bg-surface px-1 py-0.5 rounded text-foreground">claude setup-token</code> in your terminal, then paste the token below.
+            </p>
+          {/if}
           <div class="flex items-center justify-between mb-1.5">
             <span class="text-xs font-medium text-muted uppercase tracking-wide">
-              API Key
+              {isClaudeToken ? "Setup Token" : "API Key"}
               <span class="ml-1.5 text-[10px] font-normal normal-case tracking-normal {settings.has_key ? 'text-signal' : 'text-muted'}">
                 {settings.has_key ? "Stored in Keychain" : "Not set"}
               </span>
@@ -758,7 +862,9 @@
                 type={showKey ? "text" : "password"}
                 bind:value={apiKeyInput}
                 class="w-full px-3 py-1.5 pr-12 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-                placeholder={settings.has_key ? "Enter new key to replace" : "Enter API key"}
+                placeholder={isClaudeToken
+                  ? (settings.has_key ? "Paste new token to replace" : "sk-ant-oat01-...")
+                  : (settings.has_key ? "Enter new key to replace" : "Enter API key")}
               />
               <button
                 onclick={() => { showKey = !showKey; }}
@@ -787,7 +893,7 @@
                 disabled={isSaving}
                 class="px-3 py-1.5 text-xs bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
               >
-                {isSaving ? "Saving..." : "Save to Keychain"}
+                {isSaving ? "Saving..." : isClaudeToken ? "Save Token" : "Save to Keychain"}
               </button>
             </div>
           {/if}

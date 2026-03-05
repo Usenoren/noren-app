@@ -157,6 +157,7 @@ pub async fn test_connection(
     let options = noren_engine::LlmOptions {
         temperature: Some(0.0),
         max_tokens: Some(5),
+        thinking: None,
     };
 
     client
@@ -517,6 +518,110 @@ pub async fn list_ollama_models(
     Ok(models)
 }
 
+// --- Claude model discovery ---
+
+#[derive(Serialize)]
+pub struct ClaudeModelInfo {
+    pub id: String,
+    pub name: String,
+}
+
+#[tauri::command]
+pub async fn list_claude_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<ClaudeModelInfo>, String> {
+    let config = state.config.lock().unwrap().clone();
+    let provider = &config.provider;
+
+    // Derive API root from base_url (strip /v1/messages)
+    let base = provider.base_url
+        .trim_end_matches("/v1/messages")
+        .trim_end_matches("/v1/messages/")
+        .to_string();
+
+    let api_key = if provider.requires_key {
+        keychain::get_api_key(&provider.keychain_id())
+    } else {
+        None
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client
+        .get(format!("{}/v1/models", base))
+        .header("anthropic-version", "2023-06-01");
+
+    if let Some(key) = api_key {
+        if provider.name == "claude-token" {
+            req = req
+                .header("Authorization", format!("Bearer {}", key))
+                .header("anthropic-beta", "oauth-2025-04-20");
+        } else {
+            req = req.header("x-api-key", key);
+        }
+    }
+
+    let resp = req.send().await.map_err(|e| format!("Cannot reach API: {}", e))?;
+    if !resp.status().is_success() {
+        return Err("Failed to fetch models".to_string());
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let models = data["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    let id = m["id"].as_str()?;
+                    if !id.starts_with("claude-") {
+                        return None;
+                    }
+                    let name = m["display_name"].as_str().unwrap_or(id);
+                    Some(ClaudeModelInfo {
+                        id: id.to_string(),
+                        name: name.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(models)
+}
+
+// --- Thinking settings ---
+
+#[derive(Serialize)]
+pub struct ThinkingSettings {
+    pub enabled: bool,
+    pub budget: u32,
+}
+
+#[tauri::command]
+pub fn get_thinking_settings(state: State<'_, AppState>) -> ThinkingSettings {
+    let config = state.config.lock().unwrap();
+    ThinkingSettings {
+        enabled: config.extended_thinking,
+        budget: config.thinking_budget,
+    }
+}
+
+#[tauri::command]
+pub fn set_thinking_settings(
+    state: State<'_, AppState>,
+    enabled: bool,
+    budget: u32,
+) -> Result<(), String> {
+    let mut config = state.config.lock().unwrap();
+    config.extended_thinking = enabled;
+    config.thinking_budget = budget;
+    save_config_file(&config)?;
+    Ok(())
+}
+
 /// Persist config to ~/.noren/config.json
 pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -533,6 +638,8 @@ pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
         },
         "livingProfileEnabled": config.living_profile_enabled,
         "hotkey": config.hotkey,
+        "extendedThinking": config.extended_thinking,
+        "thinkingBudget": config.thinking_budget,
     });
 
     if let Some(ref url) = config.server_url {

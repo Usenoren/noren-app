@@ -23,6 +23,7 @@ pub fn create_llm_client(
             Ok(Box::new(AnthropicClient::new(
                 key,
                 provider.model.clone(),
+                provider.name.clone(),
             )))
         }
         ProviderType::OpenaiCompatible => {

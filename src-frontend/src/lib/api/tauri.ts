@@ -131,6 +131,18 @@ export async function listOllamaModels(): Promise<string[]> {
   return invoke("list_ollama_models");
 }
 
+export async function listClaudeModels(): Promise<{ id: string; name: string }[]> {
+  return invoke("list_claude_models");
+}
+
+export async function getThinkingSettings(): Promise<{ enabled: boolean; budget: number }> {
+  return invoke("get_thinking_settings");
+}
+
+export async function setThinkingSettings(enabled: boolean, budget: number): Promise<void> {
+  return invoke("set_thinking_settings", { enabled, budget });
+}
+
 // --- Google OAuth ---
 
 export interface GoogleOAuthInitResult {

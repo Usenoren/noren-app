@@ -38,6 +38,8 @@ pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
         inference_mode: file_config.inference_mode.unwrap_or(defaults.inference_mode),
         living_profile_enabled: file_config.living_profile_enabled.unwrap_or(false),
         hotkey: file_config.hotkey.unwrap_or(defaults.hotkey),
+        extended_thinking: file_config.extended_thinking.unwrap_or(false),
+        thinking_budget: file_config.thinking_budget.unwrap_or(10000),
     }
 }
 
@@ -51,6 +53,8 @@ struct PartialConfig {
     inference_mode: Option<InferenceMode>,
     living_profile_enabled: Option<bool>,
     hotkey: Option<String>,
+    extended_thinking: Option<bool>,
+    thinking_budget: Option<u32>,
 }
 
 fn config_dir() -> PathBuf {
@@ -144,6 +148,13 @@ fn load_file_config() -> PartialConfig {
             .get("hotkey")
             .and_then(|v| v.as_str())
             .map(String::from),
+        extended_thinking: json
+            .get("extendedThinking")
+            .and_then(|v| v.as_bool()),
+        thinking_budget: json
+            .get("thinkingBudget")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32),
     }
 }
 
@@ -166,10 +177,13 @@ mod tests {
 
     #[test]
     fn defaults_are_sane() {
-        let config = load_config(None);
+        // Test Config::default() directly to avoid depending on disk config
+        let config = Config::default();
         assert_eq!(config.provider.provider_type, ProviderType::Anthropic);
-        assert_eq!(config.provider.model, "claude-sonnet-4-20250514");
+        assert_eq!(config.provider.model, "claude-sonnet-4-6");
         assert!(config.profile_dir.to_string_lossy().contains(".noren/profiles"));
+        assert!(!config.extended_thinking);
+        assert_eq!(config.thinking_budget, 10000);
     }
 
     #[test]

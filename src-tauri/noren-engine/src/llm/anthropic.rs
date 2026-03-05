@@ -12,14 +12,16 @@ pub struct AnthropicClient {
     client: reqwest::Client,
     api_key: String,
     model: String,
+    provider_name: String,
 }
 
 impl AnthropicClient {
-    pub fn new(api_key: String, model: String) -> Self {
+    pub fn new(api_key: String, model: String, provider_name: String) -> Self {
         Self {
             client: reqwest::Client::new(),
             api_key,
             model,
+            provider_name,
         }
     }
 }
@@ -35,6 +37,15 @@ struct ApiRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     system: Option<String>,
     messages: Vec<ApiMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<ApiThinking>,
+}
+
+#[derive(Serialize)]
+struct ApiThinking {
+    #[serde(rename = "type")]
+    thinking_type: String,
+    budget_tokens: u32,
 }
 
 #[derive(Serialize)]
@@ -94,23 +105,42 @@ impl LlmClient for AnthropicClient {
             })
             .collect();
 
-        let request = ApiRequest {
-            model: self.model.clone(),
-            max_tokens: options.max_tokens.unwrap_or(8192),
-            temperature: options.temperature,
-            system: system_message.map(|m| m.content.clone()),
-            messages: non_system,
+        let (thinking_field, max_tokens) = if let Some(ref tc) = options.thinking {
+            (
+                Some(ApiThinking {
+                    thinking_type: "enabled".to_string(),
+                    budget_tokens: tc.budget_tokens,
+                }),
+                tc.budget_tokens + options.max_tokens.unwrap_or(4096),
+            )
+        } else {
+            (None, options.max_tokens.unwrap_or(8192))
         };
 
-        let resp = self
+        let request = ApiRequest {
+            model: self.model.clone(),
+            max_tokens,
+            temperature: if thinking_field.is_some() { None } else { options.temperature },
+            system: system_message.map(|m| m.content.clone()),
+            messages: non_system,
+            thinking: thinking_field,
+        };
+
+        let mut req_builder = self
             .client
             .post(API_URL)
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", API_VERSION)
             .header("content-type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+            .header("anthropic-version", API_VERSION);
+
+        if self.provider_name == "claude-token" {
+            req_builder = req_builder
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("anthropic-beta", "oauth-2025-04-20");
+        } else {
+            req_builder = req_builder.header("x-api-key", &self.api_key);
+        }
+
+        let resp = req_builder.json(&request).send().await?;
 
         let status = resp.status();
         if !status.is_success() {

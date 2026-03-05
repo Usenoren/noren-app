@@ -22,6 +22,12 @@ pub struct LlmMessage {
 pub struct LlmOptions {
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    pub thinking: Option<ThinkingConfig>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ThinkingConfig {
+    pub budget_tokens: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +85,17 @@ impl ProviderConfig {
             name: "anthropic".to_string(),
             provider_type: ProviderType::Anthropic,
             base_url: "https://api.anthropic.com/v1/messages".to_string(),
-            model: "claude-sonnet-4-20250514".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
+            requires_key: true,
+        }
+    }
+
+    pub fn claude_token() -> Self {
+        Self {
+            name: "claude-token".to_string(),
+            provider_type: ProviderType::Anthropic,
+            base_url: "https://api.anthropic.com/v1/messages".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
             requires_key: true,
         }
     }
@@ -127,6 +143,7 @@ impl ProviderConfig {
     pub fn preset_by_name(name: &str) -> Option<Self> {
         match name {
             "anthropic" => Some(Self::anthropic()),
+            "claude-token" => Some(Self::claude_token()),
             "openai" => Some(Self::openai()),
             "gemini" => Some(Self::gemini()),
             "ollama" => Some(Self::ollama()),
@@ -193,6 +210,16 @@ pub struct Config {
     /// Global hotkey string, e.g. "Meta+KeyK", "Meta+Shift+KeyN"
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+    /// Extended thinking for Anthropic models
+    #[serde(rename = "extendedThinking", default)]
+    pub extended_thinking: bool,
+    /// Thinking budget in tokens (default 10000)
+    #[serde(rename = "thinkingBudget", default = "default_thinking_budget")]
+    pub thinking_budget: u32,
+}
+
+fn default_thinking_budget() -> u32 {
+    10000
 }
 
 impl Default for Config {
@@ -205,6 +232,8 @@ impl Default for Config {
             inference_mode: InferenceMode::Byok,
             living_profile_enabled: false,
             hotkey: default_hotkey(),
+            extended_thinking: false,
+            thinking_budget: default_thinking_budget(),
         }
     }
 }

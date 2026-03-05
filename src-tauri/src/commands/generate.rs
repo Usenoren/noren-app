@@ -52,6 +52,7 @@ async fn generate_pro(
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
         max_tokens: Some(4096),
+        thinking: None,
     };
 
     let response = client
@@ -134,6 +135,14 @@ async fn generate_byok(
         noren_engine::create_llm_client(config, api_key).map_err(|e| e.to_string())?
     };
 
+    let thinking = if config.extended_thinking {
+        Some(noren_engine::ThinkingConfig {
+            budget_tokens: config.thinking_budget,
+        })
+    } else {
+        None
+    };
+
     let messages = vec![
         noren_engine::LlmMessage {
             role: noren_engine::Role::System,
@@ -146,7 +155,8 @@ async fn generate_byok(
     ];
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(4096),
+        max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
+        thinking,
     };
 
     let response = client
@@ -217,6 +227,7 @@ pub async fn generate_comparison(
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
         max_tokens: Some(4096),
+        thinking: None,
     };
 
     // For "without voice", always use legacy messages path (even for Pro)

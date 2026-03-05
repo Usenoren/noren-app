@@ -124,9 +124,18 @@ pub async fn chat_send(
         });
     }
 
+    let thinking = if config.extended_thinking {
+        Some(noren_engine::ThinkingConfig {
+            budget_tokens: config.thinking_budget,
+        })
+    } else {
+        None
+    };
+
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(4096),
+        max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
+        thinking,
     };
 
     // Create LLM client (same dual-path as generate)
