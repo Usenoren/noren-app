@@ -1,5 +1,6 @@
 # Build artifacts
 src-tauri/target/
+src-tauri/binaries/
 src-frontend/dist/
 src-frontend/node_modules/
 
