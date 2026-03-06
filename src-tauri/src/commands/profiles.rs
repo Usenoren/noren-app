@@ -35,16 +35,25 @@ pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileO
                 .unwrap_or("https://api.noren.ink");
 
             match fetch_server_profile_metadata(server_url, &auth_token).await {
-                Ok(meta) => {
+                Ok(meta) if meta.has_profile => {
                     return Ok(ProfileOverview {
-                        exists: meta.has_profile,
+                        exists: true,
                         path: String::new(),
                         formats: meta.formats,
                         is_server: true,
                     });
                 }
-                Err(_) => {
-                    // Fall through to local check if server unreachable
+                Ok(meta) if !meta.has_profile && !config.debug_mode => {
+                    // Production: server is authoritative — no profile means no profile
+                    return Ok(ProfileOverview {
+                        exists: false,
+                        path: String::new(),
+                        formats: vec![],
+                        is_server: true,
+                    });
+                }
+                _ => {
+                    // Debug mode or server unreachable — fall through to local check
                 }
             }
         }

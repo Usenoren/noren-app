@@ -27,7 +27,15 @@
   import { canLivingProfile, canSync, canExport } from "$lib/stores/subscription.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
+  import { marked } from "marked";
+  import DOMPurify from "dompurify";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+
+  marked.setOptions({ breaks: true });
+
+  function renderMarkdown(content: string): string {
+    return DOMPurify.sanitize(marked.parse(content) as string);
+  }
 
   let overview = $state<ProfileOverview | null>(null);
   let profile = $state<ProfileContent | null>(null);
@@ -463,7 +471,7 @@
     </div>
   {:else}
     <!-- Tabs -->
-    <div class="flex gap-1 overflow-x-auto shrink-0">
+    <div class="flex flex-wrap gap-1 shrink-0">
       <button
         onclick={() => switchTab("core")}
         class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md
@@ -622,7 +630,7 @@
         ></textarea>
       {:else}
         <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
-          <pre class="text-xs text-foreground whitespace-pre-wrap leading-relaxed font-mono">{displayContent}</pre>
+          <div class="prose-profile text-xs text-foreground leading-relaxed selectable">{@html renderMarkdown(displayContent)}</div>
         </div>
       {/if}
     </div>

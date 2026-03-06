@@ -287,6 +287,67 @@ button {
 }
 .prose-chat a { color: var(--color-secondary); text-decoration: underline; }
 
+/* --- Profile markdown prose --- */
+.prose-profile p { margin: 0.5em 0; }
+.prose-profile p:first-child { margin-top: 0; }
+.prose-profile p:last-child { margin-bottom: 0; }
+.prose-profile strong { font-weight: 600; }
+.prose-profile em { font-style: italic; }
+.prose-profile ul, .prose-profile ol { margin: 0.5em 0; padding-left: 1.4em; }
+.prose-profile li { margin: 0.2em 0; }
+.prose-profile code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--color-code-bg);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+}
+.prose-profile pre {
+  margin: 0.5em 0;
+  padding: 0.75em;
+  background: var(--color-code-block-bg);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.prose-profile pre code {
+  background: none;
+  padding: 0;
+}
+.prose-profile h1, .prose-profile h2, .prose-profile h3 {
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+}
+.prose-profile h1 { font-size: 1.3em; }
+.prose-profile h2 { font-size: 1.15em; }
+.prose-profile h3 { font-size: 1.05em; }
+.prose-profile blockquote {
+  border-left: 3px solid var(--color-border);
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  color: var(--color-muted);
+}
+.prose-profile a { color: var(--color-secondary); text-decoration: underline; }
+.prose-profile hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+.prose-profile table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.95em;
+}
+.prose-profile th, .prose-profile td {
+  border: 1px solid var(--color-border);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.prose-profile th {
+  background: var(--color-code-bg);
+  font-weight: 600;
+}
+
 /* Allow text selection in chat messages */
 .selectable, .selectable * {
   user-select: text;
