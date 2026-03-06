@@ -10,6 +10,8 @@ pub struct SettingsInfo {
     pub inference_mode: String,
     pub noren_pro_logged_in: bool,
     pub hotkey: String,
+    pub server_url: Option<String>,
+    pub debug_mode: bool,
 }
 
 #[tauri::command]
@@ -34,6 +36,8 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
         inference_mode: mode.to_string(),
         noren_pro_logged_in: keychain::get_api_key("noren-pro-token").is_some(),
         hotkey: config.hotkey.clone(),
+        server_url: config.server_url.clone(),
+        debug_mode: config.debug_mode,
     }
 }
 
@@ -673,6 +677,7 @@ pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
         "hotkey": config.hotkey,
         "extendedThinking": config.extended_thinking,
         "thinkingBudget": config.thinking_budget,
+        "debugMode": config.debug_mode,
     });
 
     if let Some(ref url) = config.server_url {

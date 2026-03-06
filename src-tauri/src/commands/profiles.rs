@@ -72,8 +72,10 @@ pub fn read_profile_content(
 ) -> Result<noren_engine::ProfileContent, String> {
     let config = state.config.lock().unwrap();
 
-    // Server profiles can't be read locally
-    if config.inference_mode == noren_engine::InferenceMode::NorenPro {
+    // Server profiles can't be read locally — use Export to download first
+    if config.inference_mode == noren_engine::InferenceMode::NorenPro
+        && !config.profile_dir.join("core-identity.md").exists()
+    {
         return Err("Profile is stored on Noren servers. Use Export to download.".to_string());
     }
 

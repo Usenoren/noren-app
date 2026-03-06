@@ -40,6 +40,7 @@ pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
         hotkey: file_config.hotkey.unwrap_or(defaults.hotkey),
         extended_thinking: file_config.extended_thinking.unwrap_or(false),
         thinking_budget: file_config.thinking_budget.unwrap_or(10000),
+        debug_mode: file_config.debug_mode.unwrap_or(false),
     }
 }
 
@@ -55,6 +56,7 @@ struct PartialConfig {
     hotkey: Option<String>,
     extended_thinking: Option<bool>,
     thinking_budget: Option<u32>,
+    debug_mode: Option<bool>,
 }
 
 fn config_dir() -> PathBuf {
@@ -155,6 +157,9 @@ fn load_file_config() -> PartialConfig {
             .get("thinkingBudget")
             .and_then(|v| v.as_u64())
             .map(|v| v as u32),
+        debug_mode: json
+            .get("debugMode")
+            .and_then(|v| v.as_bool()),
     }
 }
 

@@ -216,6 +216,9 @@ pub struct Config {
     /// Thinking budget in tokens (default 10000)
     #[serde(rename = "thinkingBudget", default = "default_thinking_budget")]
     pub thinking_budget: u32,
+    /// Developer debug mode — enables dev-only features like viewing server profiles
+    #[serde(rename = "debugMode", default)]
+    pub debug_mode: bool,
 }
 
 fn default_thinking_budget() -> u32 {
@@ -234,6 +237,7 @@ impl Default for Config {
             hotkey: default_hotkey(),
             extended_thinking: false,
             thinking_budget: default_thinking_budget(),
+            debug_mode: false,
         }
     }
 }

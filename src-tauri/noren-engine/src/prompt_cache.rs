@@ -80,9 +80,13 @@ pub async fn get_enforcement_prompt(
         }
     };
 
-    let auth_token = auth_token.ok_or_else(|| {
-        EngineError::PromptCache("No auth token configured for prompt server.".to_string())
-    })?;
+    let auth_token = match auth_token {
+        Some(token) => token,
+        None => {
+            // No auth token — use built-in fallback prompt
+            return Ok(BUILTIN_ENFORCEMENT_PROMPT.to_string());
+        }
+    };
 
     let response = fetch_enforcement_prompt(server_url, auth_token).await?;
     cache_prompt(&response.content, &response.version, response.ttl_hours, cache_dir, encryption_key)?;

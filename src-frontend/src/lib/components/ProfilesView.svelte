@@ -15,6 +15,7 @@
     getSyncStatus,
     exportProfile,
     createCheckout,
+    getSettings,
     type ProfileOverview,
     type ProfileContent,
     type LivingProfileStatus,
@@ -51,6 +52,7 @@
 
   // Export state (server profiles)
   let isExporting = $state(false);
+  let isDevMode = $state(false);
 
   let displayContent = $derived(
     activeTab === "core"
@@ -64,6 +66,8 @@
 
   async function loadProfile() {
     try {
+      const settings = await getSettings();
+      isDevMode = settings.debug_mode ?? false;
       overview = await getProfileOverview();
       if (overview.exists && !overview.is_server) {
         profile = await readProfileContent();
@@ -336,6 +340,43 @@
             {/each}
           </div>
         </div>
+      {/if}
+
+      <!-- Debug inspector -->
+      {#if isDevMode}
+        {#if profile}
+          <div class="flex gap-1 shrink-0">
+            <button
+              onclick={() => { activeTab = "core"; }}
+              class="px-2.5 py-1 text-xs cursor-pointer uppercase tracking-wide rounded-md
+                {activeTab === 'core' ? 'bg-primary text-white font-medium' : 'bg-surface text-muted border border-border hover:border-secondary'}"
+            >Core</button>
+            {#each Object.keys(profile.contexts || {}) as ctx}
+              <button
+                onclick={() => { activeTab = ctx; }}
+                class="px-2.5 py-1 text-xs cursor-pointer uppercase tracking-wide rounded-md
+                  {activeTab === ctx ? 'bg-primary text-white font-medium' : 'bg-surface text-muted border border-border hover:border-secondary'}"
+              >{ctx}</button>
+            {/each}
+          </div>
+          <div class="flex-1 min-h-0 overflow-y-auto">
+            <pre class="p-3 text-xs leading-relaxed text-foreground bg-surface border border-border rounded-lg whitespace-pre-wrap">{displayContent}</pre>
+          </div>
+        {:else}
+          <button
+            onclick={async () => {
+              try {
+                await exportProfile();
+                profile = await readProfileContent();
+              } catch (e) {
+                error = friendlyError(e);
+              }
+            }}
+            class="px-4 py-2 text-xs font-medium bg-surface border border-border text-muted hover:border-secondary hover:text-foreground rounded-md cursor-pointer transition-colors"
+          >
+            Inspect profile
+          </button>
+        {/if}
       {/if}
 
       <!-- Living Profile tab -->

@@ -20,6 +20,8 @@ export interface SettingsInfo {
   inference_mode: "byok" | "noren_pro";
   noren_pro_logged_in: boolean;
   hotkey: string;
+  server_url: string | null;
+  debug_mode: boolean;
 }
 
 export interface NorenProStatus {
