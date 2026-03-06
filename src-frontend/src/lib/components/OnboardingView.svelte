@@ -210,6 +210,9 @@
   {#if step === "welcome"}
     <!-- Welcome screen -->
     <div class="flex-1 flex flex-col items-center justify-center gap-6 max-w-[280px] mx-auto">
+      <div class="w-16 h-16 rounded-2xl flex items-center justify-center">
+        <img src="/noren-logo.png" alt="Noren" class="w-full h-full object-contain" />
+      </div>
       <div class="text-center">
         <h1 class="text-lg font-heading font-semibold text-foreground">Welcome to Noren</h1>
         <p class="text-xs text-muted mt-2 leading-relaxed">
