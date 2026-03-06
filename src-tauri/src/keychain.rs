@@ -36,6 +36,11 @@ pub fn store_encryption_key(key: &[u8; 32]) -> Result<(), String> {
         .map_err(|e| format!("Failed to store encryption key: {}", e))
 }
 
+pub fn delete_encryption_key() -> Result<(), String> {
+    delete_generic_password(SERVICE, ENCRYPTION_KEY_ACCOUNT)
+        .map_err(|e| format!("Failed to delete encryption key: {}", e))
+}
+
 pub fn get_encryption_key() -> Option<[u8; 32]> {
     get_generic_password(SERVICE, ENCRYPTION_KEY_ACCOUNT)
         .ok()

@@ -4,7 +4,8 @@
   import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, createCheckout, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
-  import { isFree } from "$lib/stores/subscription.svelte";
+  import { isFree, canExtract } from "$lib/stores/subscription.svelte";
+  import { getIsExtracting } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -180,18 +181,30 @@
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
   <!-- No profile nudge -->
-  {#if !hasProfile}
+  {#if !hasProfile && !getIsExtracting()}
     <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg">
       <p class="flex-1 text-[10px] text-muted leading-relaxed">
-        No voice profile yet — output will be generic.
-        <button
-          onclick={() => emit("navigate", "profiles")}
-          class="text-secondary font-medium cursor-pointer hover:text-foreground"
-        >Create one</button> or
-        <button
-          onclick={() => emit("navigate", "settings")}
-          class="text-secondary font-medium cursor-pointer hover:text-foreground"
-        >upgrade to Pro</button> for AI extraction.
+        {#if canExtract()}
+          No voice profile yet — output will be generic.
+          <button
+            onclick={() => emit("navigate", "extract")}
+            class="text-secondary font-medium cursor-pointer hover:text-foreground"
+          >Extract one</button> from your writing or
+          <button
+            onclick={() => emit("navigate", "profiles")}
+            class="text-secondary font-medium cursor-pointer hover:text-foreground"
+          >create one manually</button>.
+        {:else}
+          No voice profile yet — output will be generic.
+          <button
+            onclick={() => emit("navigate", "profiles")}
+            class="text-secondary font-medium cursor-pointer hover:text-foreground"
+          >Create one</button> or
+          <button
+            onclick={() => emit("navigate", "settings")}
+            class="text-secondary font-medium cursor-pointer hover:text-foreground"
+          >upgrade to Pro</button> for AI extraction.
+        {/if}
       </p>
     </div>
   {/if}

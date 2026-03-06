@@ -180,6 +180,7 @@ fn main() {
             commands::list_chats,
             commands::load_chat,
             commands::delete_chat,
+            commands::factory_reset,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

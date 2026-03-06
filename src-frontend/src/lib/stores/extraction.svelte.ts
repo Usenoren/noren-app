@@ -1,0 +1,108 @@
+import { listen } from "@tauri-apps/api/event";
+import { startExtraction, type ExtractionProgress } from "$lib/api/tauri";
+
+function friendlyExtractionError(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("rate limit") || lower.includes("429"))
+    return "Extraction was rate-limited. Please try again in a minute.";
+  if (lower.includes("authentication") || lower.includes("invalid") || lower.includes("401"))
+    return "Server error. Please try again shortly.";
+  if (lower.includes("timeout"))
+    return "Extraction timed out. Please try again.";
+  if (lower.includes("connection") || lower.includes("network"))
+    return "Connection error. Check your internet and try again.";
+  return "Extraction failed. Please try again.";
+}
+
+let isExtracting = $state(false);
+let currentFormat = $state("");
+let currentIndex = $state(0);
+let totalFormats = $state(0);
+let progress = $state<ExtractionProgress | null>(null);
+let error = $state("");
+let done = $state(false);
+
+let lastQueue: { samples: string; format: string }[] = [];
+let initialized = false;
+let resolveCurrentJob: (() => void) | null = null;
+
+export function init() {
+  if (initialized) return;
+  initialized = true;
+
+  listen<ExtractionProgress>("extraction-progress", (event) => {
+    progress = event.payload;
+    if (progress.status === "saved" || progress.status === "stored_server") {
+      if (resolveCurrentJob) {
+        resolveCurrentJob();
+        resolveCurrentJob = null;
+      }
+    } else if (progress.status === "failed") {
+      error = friendlyExtractionError(progress.error || "Extraction failed");
+      if (resolveCurrentJob) {
+        resolveCurrentJob();
+        resolveCurrentJob = null;
+      }
+    }
+  });
+}
+
+export async function startQueue(formats: { samples: string; format: string }[]) {
+  if (isExtracting || formats.length === 0) return;
+
+  lastQueue = formats;
+  isExtracting = true;
+  error = "";
+  done = false;
+  totalFormats = formats.length;
+
+  for (let i = 0; i < formats.length; i++) {
+    currentFormat = formats[i].format;
+    currentIndex = i + 1;
+    progress = null;
+
+    try {
+      await startExtraction(formats[i]);
+
+      await new Promise<void>((resolve) => {
+        resolveCurrentJob = resolve;
+      });
+
+      if (error) break;
+    } catch (e) {
+      error = friendlyExtractionError(String(e));
+      break;
+    }
+  }
+
+  isExtracting = false;
+  if (!error) {
+    done = true;
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      done = false;
+    }, 5000);
+  }
+}
+
+// Getters (Svelte 5 reactive exports)
+export function getIsExtracting(): boolean { return isExtracting; }
+export function getCurrentFormat(): string { return currentFormat; }
+export function getCurrentIndex(): number { return currentIndex; }
+export function getTotalFormats(): number { return totalFormats; }
+export function getProgress(): ExtractionProgress | null { return progress; }
+export function getError(): string { return error; }
+export function isDone(): boolean { return done; }
+
+export function canRetry(): boolean { return !!error && lastQueue.length > 0 && !isExtracting; }
+
+export function retry() {
+  if (!canRetry()) return;
+  error = "";
+  startQueue(lastQueue);
+}
+
+export function dismiss() {
+  error = "";
+  done = false;
+}

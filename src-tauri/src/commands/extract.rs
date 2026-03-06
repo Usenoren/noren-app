@@ -61,10 +61,14 @@ pub async fn run_extraction(
     }
 }
 
-/// Get auth token — for now, auto-register with a device-based identity.
-/// In production, this will use proper login UI.
+/// Get auth token — use Noren Pro token if logged in, otherwise fall back to device registration.
 async fn get_or_create_auth_token(server_url: &str) -> Result<String, String> {
-    // Check keychain for existing token
+    // Prefer Noren Pro token (user signed in via account)
+    if let Some(token) = crate::keychain::get_api_key("noren-pro-token") {
+        return Ok(token);
+    }
+
+    // Fall back to existing device token
     if let Some(token) = crate::keychain::get_api_key("noren-server-token") {
         return Ok(token);
     }

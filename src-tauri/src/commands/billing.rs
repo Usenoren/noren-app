@@ -95,7 +95,7 @@ pub async fn create_checkout(
     let resp: reqwest::Response = client
         .post(format!("{}/v1/billing/checkout", server_url))
         .bearer_auth(&auth_token)
-        .json(&serde_json::json!({ "tier": tier }))
+        .json(&serde_json::json!({ "target": tier }))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;

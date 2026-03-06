@@ -3,6 +3,19 @@
   import { onMount } from "svelte";
   import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
   import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
+  import {
+    init as initExtraction,
+    getIsExtracting,
+    getCurrentFormat,
+    getCurrentIndex,
+    getTotalFormats,
+    getProgress,
+    getError as getExtractionError,
+    isDone as isExtractionDone,
+    dismiss as dismissExtraction,
+    retry as retryExtraction,
+    canRetry as canRetryExtraction,
+  } from "$lib/stores/extraction.svelte";
   import GenerateView from "./GenerateView.svelte";
   import ChatView from "./ChatView.svelte";
   import SettingsView from "./SettingsView.svelte";
@@ -29,6 +42,7 @@
   });
 
   $effect(() => {
+    initExtraction();
     const cleanups: (() => void)[] = [];
 
     listen<string>("navigate", (event) => {
@@ -171,6 +185,53 @@
               >
                 Grant
               </button>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Extraction progress banner -->
+        {#if getIsExtracting()}
+          <div class="px-6 py-2 bg-primary/5 border-b border-primary/20 shrink-0">
+            <div class="flex items-center gap-3 max-w-3xl mx-auto">
+              <div class="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-medium text-foreground">
+                  Building voice profile{getTotalFormats() > 1 ? ` — ${getCurrentFormat()} (${getCurrentIndex()}/${getTotalFormats()})` : ""}
+                </p>
+                {#if getProgress()}
+                  <p class="text-[10px] text-muted">{getProgress()?.progress}% complete</p>
+                {/if}
+              </div>
+              <div class="w-20 h-1 bg-primary/10 rounded-full overflow-hidden shrink-0">
+                <div
+                  class="h-full bg-primary rounded-full transition-all duration-500"
+                  style="width: {getProgress()?.progress ?? 0}%"
+                ></div>
+              </div>
+            </div>
+          </div>
+        {:else if isExtractionDone()}
+          <div class="px-6 py-2 bg-signal/5 border-b border-signal/20 shrink-0">
+            <div class="flex items-center justify-between max-w-3xl mx-auto">
+              <div class="flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <p class="text-xs font-medium text-foreground">Voice profile ready</p>
+              </div>
+              <button onclick={dismissExtraction} class="text-[10px] text-muted hover:text-foreground cursor-pointer">Dismiss</button>
+            </div>
+          </div>
+        {:else if getExtractionError()}
+          <div class="px-6 py-2 bg-warning/5 border-b border-warning/20 shrink-0">
+            <div class="flex items-center justify-between max-w-3xl mx-auto">
+              <p class="text-xs text-warning">{getExtractionError()}</p>
+              <div class="flex items-center gap-3 shrink-0">
+                {#if canRetryExtraction()}
+                  <button onclick={retryExtraction} class="text-[10px] text-primary font-medium hover:text-foreground cursor-pointer uppercase tracking-wide">Retry</button>
+                {/if}
+                <button onclick={dismissExtraction} class="text-[10px] text-muted hover:text-foreground cursor-pointer">Dismiss</button>
+              </div>
             </div>
           </div>
         {/if}

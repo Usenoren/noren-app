@@ -22,6 +22,7 @@
     openBillingPortal,
     googleOAuthInit,
     googleOAuthPoll,
+    factoryReset,
     type SettingsInfo,
     type NorenProStatus,
     type SubscriptionStatus,
@@ -89,6 +90,20 @@
   // Extended thinking
   let extendedThinking = $state(false);
   let thinkingBudget = $state(10000);
+
+  let showResetConfirm = $state(false);
+  let resetting = $state(false);
+
+  async function handleFactoryReset() {
+    resetting = true;
+    try {
+      await factoryReset();
+      window.location.reload();
+    } catch (e) {
+      error = friendlyError(e);
+      resetting = false;
+    }
+  }
 
   const tiers = [
     { id: "pro", label: "Noren Pro", price: "$19", period: "/mo", desc: "Everything: extraction, inference, living profile, sync" },
@@ -948,6 +963,38 @@
           Any OpenAI-compatible provider works — Groq, Together, Mistral, OpenRouter, LM Studio, and more.
         {/if}
       </p>
+
+      <!-- Factory Reset -->
+      <div class="pt-4">
+        {#if showResetConfirm}
+          <div class="p-3 border border-error/30 bg-tint rounded-lg">
+            <p class="text-xs text-foreground font-medium mb-1">Reset everything?</p>
+            <p class="text-[10px] text-muted mb-3">This will delete all config, profiles, chat history, and keychain entries. The app will restart as if freshly installed.</p>
+            <div class="flex gap-2">
+              <button
+                onclick={handleFactoryReset}
+                disabled={resetting}
+                class="px-3 py-1.5 text-xs bg-error text-white hover:bg-error/80 transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+              >
+                {resetting ? "Resetting..." : "Yes, reset everything"}
+              </button>
+              <button
+                onclick={() => { showResetConfirm = false; }}
+                class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        {:else}
+          <button
+            onclick={() => { showResetConfirm = true; }}
+            class="text-[10px] text-muted hover:text-error transition-colors cursor-pointer"
+          >
+            Factory reset
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>

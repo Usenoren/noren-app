@@ -622,6 +622,39 @@ pub fn set_thinking_settings(
     Ok(())
 }
 
+#[tauri::command]
+pub fn factory_reset(state: State<'_, AppState>) -> Result<(), String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let noren_dir = std::path::PathBuf::from(home).join(".noren");
+
+    // Delete ~/.noren/ entirely
+    if noren_dir.exists() {
+        std::fs::remove_dir_all(&noren_dir)
+            .map_err(|e| format!("Failed to delete ~/.noren: {}", e))?;
+    }
+
+    // Clear all Noren keychain entries
+    let keychain_accounts = [
+        "noren-pro-token",
+        "noren-pro-email",
+        "anthropic",
+        "openai",
+        "gemini",
+        "claude-token",
+        "custom",
+    ];
+    for account in keychain_accounts {
+        let _ = keychain::delete_api_key(account);
+    }
+    let _ = keychain::delete_encryption_key();
+
+    // Reset in-memory config to defaults
+    let mut config = state.config.lock().unwrap();
+    *config = noren_engine::Config::default();
+
+    Ok(())
+}
+
 /// Persist config to ~/.noren/config.json
 pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());

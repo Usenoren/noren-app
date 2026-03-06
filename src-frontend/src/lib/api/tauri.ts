@@ -403,3 +403,7 @@ export async function loadChat(id: string): Promise<Conversation> {
 export async function deleteChat(id: string): Promise<void> {
   return invoke("delete_chat", { id });
 }
+
+export async function factoryReset(): Promise<void> {
+  return invoke("factory_reset");
+}
