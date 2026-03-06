@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use tauri::State;
 
 use crate::{keychain, AppState};
+
+// --- Structs ---
 
 #[derive(Serialize, Deserialize)]
 pub struct SubscriptionStatus {
@@ -24,15 +27,115 @@ pub struct CheckoutResult {
     pub session_id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ExtractionReceipt {
+    pub extraction_granted: bool,
+    pub session_id: String,
+    pub granted_at: String,
+    #[serde(default)]
+    pub used: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PendingCheckout {
+    pub session_id: String,
+    pub email: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct GuestCheckoutStatus {
+    pub paid: bool,
+    pub tier: String,
+}
+
+#[derive(Serialize)]
+pub struct RestoreResult {
+    pub found: bool,
+    pub session_id: Option<String>,
+}
+
+// --- Path helpers ---
+
+fn noren_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".noren")
+}
+
+fn receipt_path() -> PathBuf {
+    noren_dir().join("extraction_receipt.json")
+}
+
+fn pending_path() -> PathBuf {
+    noren_dir().join("extraction_pending.json")
+}
+
+fn server_url_from_config(state: &State<'_, AppState>) -> String {
+    let config = state.config.lock().unwrap();
+    config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai")
+        .to_string()
+}
+
+fn now_iso() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let days_since_epoch = secs / 86400;
+    let time_of_day = secs % 86400;
+    let h = time_of_day / 3600;
+    let m = (time_of_day % 3600) / 60;
+    let s = time_of_day % 60;
+
+    let mut y = 1970i64;
+    let mut remaining = days_since_epoch as i64;
+
+    loop {
+        let days_in_year = if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 {
+            366
+        } else {
+            365
+        };
+        if remaining < days_in_year {
+            break;
+        }
+        remaining -= days_in_year;
+        y += 1;
+    }
+
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let month_days = if leap {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut mo = 0;
+    for (i, &d) in month_days.iter().enumerate() {
+        if remaining < d as i64 {
+            mo = i + 1;
+            break;
+        }
+        remaining -= d as i64;
+    }
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y, mo, remaining + 1, h, m, s
+    )
+}
+
+// --- Existing auth-required commands ---
+
 #[tauri::command]
 pub async fn get_subscription_status(
     state: State<'_, AppState>,
 ) -> Result<SubscriptionStatus, String> {
-    let config = state.config.lock().unwrap().clone();
-    let server_url = config
-        .server_url
-        .as_deref()
-        .unwrap_or("https://api.noren.ink");
+    let server_url = server_url_from_config(&state);
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -83,13 +186,9 @@ pub async fn create_checkout(
     state: State<'_, AppState>,
     tier: String,
 ) -> Result<CheckoutResult, String> {
-    let config = state.config.lock().unwrap().clone();
-    let server_url = config
-        .server_url
-        .as_deref()
-        .unwrap_or("https://api.noren.ink");
+    let server_url = server_url_from_config(&state);
     let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in — sign in first")?;
+        .ok_or("Not logged in. Sign in first.")?;
 
     let client = reqwest::Client::new();
     let resp: reqwest::Response = client
@@ -126,11 +225,7 @@ pub async fn create_checkout(
 pub async fn open_billing_portal(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let config = state.config.lock().unwrap().clone();
-    let server_url = config
-        .server_url
-        .as_deref()
-        .unwrap_or("https://api.noren.ink");
+    let server_url = server_url_from_config(&state);
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -156,4 +251,187 @@ pub async fn open_billing_portal(
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "No portal URL in response".to_string())
+}
+
+// --- Guest checkout commands (no auth required) ---
+
+#[tauri::command]
+pub async fn create_guest_checkout(
+    state: State<'_, AppState>,
+    email: String,
+    tier: String,
+) -> Result<CheckoutResult, String> {
+    if tier != "extraction" {
+        return Err("Guest checkout is only available for extraction.".to_string());
+    }
+
+    let server_url = server_url_from_config(&state);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/billing/checkout/guest", server_url))
+        .json(&serde_json::json!({ "email": email, "tier": tier }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Checkout failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    Ok(CheckoutResult {
+        checkout_url: data["checkout_url"]
+            .as_str()
+            .ok_or("No checkout URL in response")?
+            .to_string(),
+        session_id: data["session_id"]
+            .as_str()
+            .ok_or("No session ID in response")?
+            .to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn poll_guest_checkout(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<GuestCheckoutStatus, String> {
+    let server_url = server_url_from_config(&state);
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!(
+            "{}/v1/billing/checkout/status/{}",
+            server_url, session_id
+        ))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if resp.status().as_u16() == 404 {
+        return Err("Session not found.".to_string());
+    }
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Status check failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    Ok(GuestCheckoutStatus {
+        paid: data["paid"].as_bool().unwrap_or(false),
+        tier: data["tier"].as_str().unwrap_or("extraction").to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn restore_guest_purchase(
+    state: State<'_, AppState>,
+    email: String,
+) -> Result<RestoreResult, String> {
+    let server_url = server_url_from_config(&state);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/billing/checkout/restore", server_url))
+        .json(&serde_json::json!({ "email": email }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Restore failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    Ok(RestoreResult {
+        found: data["found"].as_bool().unwrap_or(false),
+        session_id: data["session_id"].as_str().map(|s| s.to_string()),
+    })
+}
+
+// --- Local receipt commands ---
+
+#[tauri::command]
+pub fn store_extraction_receipt(session_id: String) -> Result<(), String> {
+    let receipt = ExtractionReceipt {
+        extraction_granted: true,
+        session_id,
+        granted_at: now_iso(),
+        used: false,
+    };
+    let dir = noren_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
+    std::fs::write(receipt_path(), json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn has_extraction_receipt() -> bool {
+    match std::fs::read_to_string(receipt_path()) {
+        Ok(data) => match serde_json::from_str::<ExtractionReceipt>(&data) {
+            Ok(r) => r.extraction_granted && !r.used,
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+pub fn has_used_extraction() -> bool {
+    match std::fs::read_to_string(receipt_path()) {
+        Ok(data) => match serde_json::from_str::<ExtractionReceipt>(&data) {
+            Ok(r) => r.extraction_granted && r.used,
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+pub fn mark_extraction_used() -> Result<(), String> {
+    let data = std::fs::read_to_string(receipt_path())
+        .map_err(|e| format!("No receipt found: {}", e))?;
+    let mut receipt: ExtractionReceipt =
+        serde_json::from_str(&data).map_err(|e| format!("Invalid receipt: {}", e))?;
+    receipt.used = true;
+    let json = serde_json::to_string_pretty(&receipt).map_err(|e| e.to_string())?;
+    std::fs::write(receipt_path(), json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// --- Pending checkout commands ---
+
+#[tauri::command]
+pub fn store_pending_checkout(session_id: String, email: String) -> Result<(), String> {
+    let pending = PendingCheckout {
+        session_id,
+        email,
+        created_at: now_iso(),
+    };
+    let dir = noren_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&pending).map_err(|e| e.to_string())?;
+    std::fs::write(pending_path(), json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_pending_checkout() -> Option<PendingCheckout> {
+    std::fs::read_to_string(pending_path())
+        .ok()
+        .and_then(|data| serde_json::from_str(&data).ok())
+}
+
+#[tauri::command]
+pub fn clear_pending_checkout() -> Result<(), String> {
+    let path = pending_path();
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

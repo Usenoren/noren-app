@@ -32,7 +32,7 @@ pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileO
             let server_url = config
                 .server_url
                 .as_deref()
-                .unwrap_or("https://api.noren.ink");
+                .unwrap_or("https://api.usenoren.ai");
 
             match fetch_server_profile_metadata(server_url, &auth_token).await {
                 Ok(meta) if meta.has_profile => {
@@ -141,7 +141,7 @@ pub async fn migrate_profile_to_server(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
 
     // Load local profile
     let (core_identity, contexts) =
@@ -188,7 +188,7 @@ pub async fn export_profile(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
     let resp = client

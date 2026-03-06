@@ -27,7 +27,7 @@ export function friendlyError(raw: unknown): string {
   if (msg.includes("error sending request") || msg.includes("Connection refused") || msg.includes("ConnectError")) {
     const urlMatch = msg.match(/\(https?:\/\/[^\s)]+\)/);
     const host = urlMatch ? ` (${extractHost(urlMatch[0])})` : "";
-    if (msg.includes("noren.ink")) {
+    if (msg.includes("usenoren.ai")) {
       return "Can't reach Noren servers. The service may not be available yet.";
     }
     if (msg.includes("localhost") || msg.includes("127.0.0.1")) {

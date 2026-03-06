@@ -99,7 +99,7 @@ pub async fn upload_edit_log(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -151,7 +151,7 @@ pub async fn refresh_living_profile(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -206,7 +206,7 @@ pub async fn get_profile_patches(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -258,7 +258,7 @@ pub async fn approve_profile_patch(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -287,7 +287,7 @@ pub async fn reject_profile_patch(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 

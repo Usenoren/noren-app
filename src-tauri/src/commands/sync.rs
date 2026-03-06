@@ -26,7 +26,7 @@ pub async fn sync_profile_up(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -79,7 +79,7 @@ pub async fn sync_profile_down(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 
@@ -136,7 +136,7 @@ pub async fn get_sync_status(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
 

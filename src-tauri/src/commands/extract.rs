@@ -75,7 +75,7 @@ async fn get_or_create_auth_token(server_url: &str) -> Result<String, String> {
 
     // Auto-register with device ID
     let device_id = format!("device-{}", whoami());
-    let email = format!("{}@device.noren.ink", device_id);
+    let email = format!("{}@device.usenoren.ai", device_id);
     let password = format!("noren-device-{}", device_id);
 
     // Try login first, then register

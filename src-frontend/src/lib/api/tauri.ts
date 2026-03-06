@@ -198,6 +198,64 @@ export async function openBillingPortal(): Promise<string> {
   return invoke("open_billing_portal");
 }
 
+// --- Guest Checkout ---
+
+export interface GuestCheckoutStatus {
+  paid: boolean;
+  tier: string;
+}
+
+export interface RestoreResult {
+  found: boolean;
+  session_id: string | null;
+}
+
+export interface PendingCheckout {
+  session_id: string;
+  email: string;
+  created_at: string;
+}
+
+export async function createGuestCheckout(email: string, tier: string): Promise<CheckoutResult> {
+  return invoke("create_guest_checkout", { email, tier });
+}
+
+export async function pollGuestCheckout(sessionId: string): Promise<GuestCheckoutStatus> {
+  return invoke("poll_guest_checkout", { sessionId });
+}
+
+export async function restoreGuestPurchase(email: string): Promise<RestoreResult> {
+  return invoke("restore_guest_purchase", { email });
+}
+
+export async function storeExtractionReceipt(sessionId: string): Promise<void> {
+  return invoke("store_extraction_receipt", { sessionId });
+}
+
+export async function hasExtractionReceipt(): Promise<boolean> {
+  return invoke("has_extraction_receipt");
+}
+
+export async function hasUsedExtraction(): Promise<boolean> {
+  return invoke("has_used_extraction");
+}
+
+export async function markExtractionUsed(): Promise<void> {
+  return invoke("mark_extraction_used");
+}
+
+export async function storePendingCheckout(sessionId: string, email: string): Promise<void> {
+  return invoke("store_pending_checkout", { sessionId, email });
+}
+
+export async function getPendingCheckout(): Promise<PendingCheckout | null> {
+  return invoke("get_pending_checkout");
+}
+
+export async function clearPendingCheckout(): Promise<void> {
+  return invoke("clear_pending_checkout");
+}
+
 // --- Extraction ---
 
 export interface ExtractionProgress {

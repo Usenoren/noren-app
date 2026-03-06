@@ -144,7 +144,7 @@ pub async fn chat_send(
             let server_url = config
                 .server_url
                 .as_deref()
-                .unwrap_or("https://api.noren.ink")
+                .unwrap_or("https://api.usenoren.ai")
                 .to_string();
             let auth_token = crate::keychain::get_api_key("noren-pro-token")
                 .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;

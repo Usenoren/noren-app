@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://noren.ink">Website</a> · <a href="https://noren.ink">Download</a>
+  <a href="https://usenoren.ai">Website</a> · <a href="https://usenoren.ai">Download</a>
 </p>
 
 ---
@@ -142,7 +142,7 @@ Then open normally.
 
 **BYOK (Bring Your Own Key)** — Use your own API key with any supported provider. Keys are stored in macOS Keychain, never in config files.
 
-**Noren Pro** — Managed inference through `api.noren.ink`. No API key needed. Includes server-side voice extraction and profile sync.
+**Noren Pro** — Managed inference through `api.usenoren.ai`. No API key needed. Includes server-side voice extraction and profile sync.
 
 ## License
 

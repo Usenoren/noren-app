@@ -214,7 +214,7 @@ pub async fn noren_pro_login(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
 
@@ -263,7 +263,7 @@ pub async fn noren_pro_signup(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
 
@@ -325,7 +325,7 @@ pub async fn google_oauth_init(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
     let resp = client
@@ -371,7 +371,7 @@ pub async fn google_oauth_poll(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
     let resp = client
@@ -424,7 +424,7 @@ pub async fn get_noren_pro_usage(
     let server_url = config
         .server_url
         .as_deref()
-        .unwrap_or("https://api.noren.ink");
+        .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in")?;
     let email = keychain::get_api_key("noren-pro-email");
