@@ -12,7 +12,7 @@ pub mod tracking;
 
 pub use config::{load_config, ConfigOverrides};
 pub use error::EngineError;
-pub use extraction::{ExtractionClient, ExtractionProgress, ServerExtractionClient};
+pub use extraction::{ExtractionClient, ExtractionProgress, FormatGroup, ServerExtractionClient};
 pub use generate::enforce::compose_system_prompt;
 pub use llm::noren_proxy::NorenProxyClient;
 pub use llm::router::create_llm_client;

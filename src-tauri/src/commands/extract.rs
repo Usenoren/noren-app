@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use noren_engine::extraction::client::{ExtractionProgress, ServerExtractionClient};
+use noren_engine::extraction::client::{ExtractionProgress, FormatGroup, ServerExtractionClient};
 use noren_engine::ExtractionClient;
 use tauri::Emitter;
 
@@ -136,60 +136,103 @@ pub async fn start_extraction(
             ));
 
         match client.extract(&samples, &format).await {
-            Ok(result) => {
-                if result.stored_server_side {
-                    // Pro path: profile stored on server — skip local save
-                    let _ = app_for_done.emit(
-                        "extraction-progress",
-                        &ExtractionProgress {
-                            status: "stored_server".to_string(),
-                            progress: 100,
-                            error: None,
-                        },
-                    );
-                } else {
-                    // BYOK path: save profile locally
-                    match noren_engine::save_profile(
-                        &profile_dir,
-                        &result.core_identity,
-                        &result.contexts,
-                        &result.quality_check,
-                    ) {
-                        Ok(_) => {
-                            let _ = app_for_done.emit(
-                                "extraction-progress",
-                                &ExtractionProgress {
-                                    status: "saved".to_string(),
-                                    progress: 100,
-                                    error: None,
-                                },
-                            );
-                        }
-                        Err(e) => {
-                            let _ = app_for_done.emit(
-                                "extraction-progress",
-                                &ExtractionProgress {
-                                    status: "failed".to_string(),
-                                    progress: 0,
-                                    error: Some(format!("Failed to save profile: {}", e)),
-                                },
-                            );
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                let _ = app_for_done.emit(
-                    "extraction-progress",
-                    &ExtractionProgress {
-                        status: "failed".to_string(),
-                        progress: 0,
-                        error: Some(e.to_string()),
-                    },
-                );
-            }
+            Ok(result) => handle_extraction_result(result, &app_for_done, &profile_dir),
+            Err(e) => emit_failure(&app_for_done, e.to_string()),
         }
     });
 
     Ok(())
+}
+
+/// Start multi-format extraction (single job with shared core identity).
+/// Progress is emitted via "extraction-progress" events.
+#[tauri::command]
+pub async fn start_extraction_multi(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    format_groups: Vec<FormatGroup>,
+) -> Result<(), String> {
+    let server_url = {
+        let config = state.config.lock().unwrap();
+        config
+            .server_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_SERVER_URL.to_string())
+    };
+
+    let profile_dir = {
+        let config = state.config.lock().unwrap();
+        config.profile_dir.clone()
+    };
+
+    let auth_token = get_or_create_auth_token(&server_url).await?;
+
+    let app_handle = Arc::new(app.clone());
+    let app_for_progress = app_handle.clone();
+    let app_for_done = app_handle.clone();
+
+    tokio::spawn(async move {
+        let client =
+            ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
+                move |progress: ExtractionProgress| {
+                    let _ = app_for_progress.emit("extraction-progress", &progress);
+                },
+            ));
+
+        match client.extract_multi(&format_groups).await {
+            Ok(result) => handle_extraction_result(result, &app_for_done, &profile_dir),
+            Err(e) => emit_failure(&app_for_done, e.to_string()),
+        }
+    });
+
+    Ok(())
+}
+
+fn handle_extraction_result(
+    result: noren_engine::extraction::client::ExtractionResult,
+    app: &Arc<tauri::AppHandle>,
+    profile_dir: &std::path::Path,
+) {
+    if result.stored_server_side {
+        let _ = app.emit(
+            "extraction-progress",
+            &ExtractionProgress {
+                status: "stored_server".to_string(),
+                progress: 100,
+                error: None,
+            },
+        );
+    } else {
+        match noren_engine::save_profile(
+            profile_dir,
+            &result.core_identity,
+            &result.contexts,
+            &result.quality_check,
+        ) {
+            Ok(_) => {
+                let _ = app.emit(
+                    "extraction-progress",
+                    &ExtractionProgress {
+                        status: "saved".to_string(),
+                        progress: 100,
+                        error: None,
+                    },
+                );
+            }
+            Err(e) => {
+                emit_failure(app, format!("Failed to save profile: {}", e));
+            }
+        }
+    }
+}
+
+fn emit_failure(app: &Arc<tauri::AppHandle>, error: String) {
+    let _ = app.emit(
+        "extraction-progress",
+        &ExtractionProgress {
+            status: "failed".to_string(),
+            progress: 0,
+            error: Some(error),
+        },
+    );
 }

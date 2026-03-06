@@ -1,5 +1,10 @@
 import { listen } from "@tauri-apps/api/event";
-import { startExtraction, type ExtractionProgress } from "$lib/api/tauri";
+import {
+  startExtraction,
+  startExtractionMulti,
+  type ExtractionProgress,
+  type FormatGroup,
+} from "$lib/api/tauri";
 
 function friendlyExtractionError(raw: string): string {
   const lower = raw.toLowerCase();
@@ -22,7 +27,7 @@ let progress = $state<ExtractionProgress | null>(null);
 let error = $state("");
 let done = $state(false);
 
-let lastQueue: { samples: string; format: string }[] = [];
+let lastFormats: { samples: string; format: string }[] = [];
 let initialized = false;
 let resolveCurrentJob: (() => void) | null = null;
 
@@ -50,29 +55,33 @@ export function init() {
 export async function startQueue(formats: { samples: string; format: string }[]) {
   if (isExtracting || formats.length === 0) return;
 
-  lastQueue = formats;
+  lastFormats = formats;
   isExtracting = true;
   error = "";
   done = false;
   totalFormats = formats.length;
+  currentIndex = 1;
+  currentFormat = formats.map((f) => f.format).join(", ");
 
-  for (let i = 0; i < formats.length; i++) {
-    currentFormat = formats[i].format;
-    currentIndex = i + 1;
-    progress = null;
-
-    try {
-      await startExtraction(formats[i]);
-
-      await new Promise<void>((resolve) => {
-        resolveCurrentJob = resolve;
-      });
-
-      if (error) break;
-    } catch (e) {
-      error = friendlyExtractionError(String(e));
-      break;
+  try {
+    if (formats.length === 1) {
+      // Single format — use the original endpoint
+      await startExtraction(formats[0]);
+    } else {
+      // Multi-format — single job with shared core identity
+      const formatGroups: FormatGroup[] = formats.map((f) => ({
+        format: f.format,
+        samples: f.samples,
+      }));
+      await startExtractionMulti({ formatGroups });
     }
+
+    // Wait for completion via event listener
+    await new Promise<void>((resolve) => {
+      resolveCurrentJob = resolve;
+    });
+  } catch (e) {
+    error = friendlyExtractionError(String(e));
   }
 
   isExtracting = false;
@@ -94,12 +103,12 @@ export function getProgress(): ExtractionProgress | null { return progress; }
 export function getError(): string { return error; }
 export function isDone(): boolean { return done; }
 
-export function canRetry(): boolean { return !!error && lastQueue.length > 0 && !isExtracting; }
+export function canRetry(): boolean { return !!error && lastFormats.length > 0 && !isExtracting; }
 
 export function retry() {
   if (!canRetry()) return;
   error = "";
-  startQueue(lastQueue);
+  startQueue(lastFormats);
 }
 
 export function dismiss() {

@@ -213,6 +213,17 @@ export async function startExtraction(params: {
   return invoke("start_extraction", params);
 }
 
+export interface FormatGroup {
+  format: string;
+  samples: string;
+}
+
+export async function startExtractionMulti(params: {
+  formatGroups: FormatGroup[];
+}): Promise<void> {
+  return invoke("start_extraction_multi", params);
+}
+
 // --- Comparison ---
 
 export interface ComparisonResult {

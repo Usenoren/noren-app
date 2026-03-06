@@ -23,6 +23,13 @@ pub struct ExtractionProgress {
     pub error: Option<String>,
 }
 
+/// A format group for multi-format extraction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormatGroup {
+    pub format: String,
+    pub samples: String,
+}
+
 /// Trait for extraction clients (server-side extraction is the moat)
 #[async_trait]
 pub trait ExtractionClient: Send + Sync {
@@ -30,6 +37,11 @@ pub trait ExtractionClient: Send + Sync {
         &self,
         samples: &str,
         format: &str,
+    ) -> Result<ExtractionResult, EngineError>;
+
+    async fn extract_multi(
+        &self,
+        format_groups: &[FormatGroup],
     ) -> Result<ExtractionResult, EngineError>;
 }
 
@@ -160,15 +172,40 @@ impl ExtractionClient for ServerExtractionClient {
         samples: &str,
         format: &str,
     ) -> Result<ExtractionResult, EngineError> {
+        let payload = serde_json::json!({
+            "samples": samples,
+            "format": format,
+        });
+        self.run_extraction_job(payload).await
+    }
+
+    async fn extract_multi(
+        &self,
+        format_groups: &[FormatGroup],
+    ) -> Result<ExtractionResult, EngineError> {
+        let groups: Vec<_> = format_groups
+            .iter()
+            .map(|fg| serde_json::json!({"format": fg.format, "samples": fg.samples}))
+            .collect();
+        let payload = serde_json::json!({
+            "format_groups": groups,
+        });
+        self.run_extraction_job(payload).await
+    }
+}
+
+impl ServerExtractionClient {
+    /// Shared extraction job logic: start, poll, get result.
+    async fn run_extraction_job(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<ExtractionResult, EngineError> {
         // Step 1: Start the extraction job
         let resp = self
             .http
             .post(format!("{}/v1/extract", self.server_url))
             .bearer_auth(&self.auth_token)
-            .json(&serde_json::json!({
-                "samples": samples,
-                "format": format,
-            }))
+            .json(&payload)
             .send()
             .await?;
 

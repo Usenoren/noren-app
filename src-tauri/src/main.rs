@@ -144,6 +144,7 @@ fn main() {
             commands::save_profile_edit,
             commands::run_extraction,
             commands::start_extraction,
+            commands::start_extraction_multi,
             commands::generate_comparison,
             commands::get_noren_pro_status,
             commands::noren_pro_login,
