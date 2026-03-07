@@ -9,19 +9,35 @@
     googleOAuthInit,
     googleOAuthPoll,
     createCheckout,
+    createGuestCheckout,
+    pollGuestCheckout,
+    storePendingCheckout,
+    clearPendingCheckout,
+    storeExtractionReceipt,
+    readFileAsText,
   } from "$lib/api/tauri";
   import { open } from "@tauri-apps/plugin-shell";
+  import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
   import { canExtract, refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { startQueue as startExtractionQueue } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import NorenMark from "./NorenMark.svelte";
 
   // Events
   let { onComplete }: { onComplete: () => void } = $props();
 
-  type Step = "welcome" | "auth" | "paywall" | "paste" | "guided" | "guided-pairs" | "done" | "manual";
+  type Step = "welcome" | "auth" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "guided" | "guided-pairs" | "done" | "manual";
   let step: Step = $state("welcome");
   let pendingPath: "paste" | "guided" = $state("paste");
+
+  // Guest checkout state
+  let guestEmail = $state("");
+  let guestSessionId = $state("");
+  let checkoutLoading = $state(false);
+
+  // Pro intent: auto-trigger upgrade after auth
+  let proIntent = $state(false);
 
   // Auth state
   let authMode = $state<"login" | "signup">("login");
@@ -152,22 +168,15 @@
     pendingPath = path;
     error = "";
 
-    // Check auth state
-    const settings = await getSettings();
-    isLoggedIn = settings.noren_pro_logged_in;
-
-    if (!isLoggedIn) {
-      step = "auth";
-      return;
-    }
-
-    // Refresh subscription and check entitlement
+    // Check entitlement (works for both authed and non-authed users)
     await refreshSubscription();
     if (canExtract()) {
-      step = path;
       if (path === "guided") {
+        step = "guided";
         currentQuestion = 0;
         guidedAnswers = [];
+      } else {
+        step = "input-method";
       }
     } else {
       step = "paywall";
@@ -188,17 +197,7 @@
       authEmail = "";
       authPassword = "";
 
-      // Check entitlement after login
-      await refreshSubscription();
-      if (canExtract()) {
-        step = pendingPath;
-        if (pendingPath === "guided") {
-          currentQuestion = 0;
-          guidedAnswers = [];
-        }
-      } else {
-        step = "paywall";
-      }
+      await afterAuth();
     } catch (e) {
       error = friendlyError(e);
     } finally {
@@ -220,16 +219,7 @@
           const result = await googleOAuthPoll(session_id);
           if (result.complete) {
             isLoggedIn = true;
-            await refreshSubscription();
-            if (canExtract()) {
-              step = pendingPath;
-              if (pendingPath === "guided") {
-                currentQuestion = 0;
-                guidedAnswers = [];
-              }
-            } else {
-              step = "paywall";
-            }
+            await afterAuth();
             return;
           }
         } catch (e) {
@@ -252,11 +242,7 @@
       if (result.checkout_url === "dev://granted") {
         await refreshSubscription();
         if (canExtract()) {
-          step = pendingPath;
-          if (pendingPath === "guided") {
-            currentQuestion = 0;
-            guidedAnswers = [];
-          }
+          proceedAfterPayment();
         }
       } else {
         await open(result.checkout_url);
@@ -265,15 +251,139 @@
           await new Promise((r) => setTimeout(r, 2000));
           await refreshSubscription();
           if (canExtract()) {
-            step = pendingPath;
-            if (pendingPath === "guided") {
-              currentQuestion = 0;
-              guidedAnswers = [];
-            }
+            proceedAfterPayment();
             return;
           }
         }
       }
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
+
+  // --- Post-auth routing ---
+
+  async function afterAuth() {
+    await refreshSubscription();
+    if (canExtract()) {
+      proIntent = false;
+      if (pendingPath === "guided") {
+        step = "guided";
+        currentQuestion = 0;
+        guidedAnswers = [];
+      } else {
+        step = "input-method";
+      }
+    } else if (proIntent) {
+      proIntent = false;
+      // Kick off Pro checkout and show the waiting screen
+      step = "awaiting-payment";
+      handleUpgrade("pro");
+    } else {
+      step = "paywall";
+    }
+  }
+
+  // --- Pro path (requires auth) ---
+
+  async function handleStartPro() {
+    error = "";
+    const settings = await getSettings();
+    isLoggedIn = settings.noren_pro_logged_in;
+    if (!isLoggedIn) {
+      proIntent = true;
+      step = "auth";
+      return;
+    }
+    handleUpgrade("pro");
+  }
+
+  // --- Guest checkout ---
+
+  async function handleGuestCheckout() {
+    if (!guestEmail.trim()) return;
+    checkoutLoading = true;
+    error = "";
+    try {
+      const result = await createGuestCheckout(guestEmail.trim(), "extraction");
+      guestSessionId = result.session_id;
+
+      // Persist pending before opening Stripe
+      await storePendingCheckout(result.session_id, guestEmail.trim());
+
+      if (result.checkout_url === "dev://granted") {
+        // Dev mode: skip Stripe
+        await storeExtractionReceipt(result.session_id);
+        await clearPendingCheckout();
+        await refreshSubscription();
+        proceedAfterPayment();
+        return;
+      }
+
+      await open(result.checkout_url);
+      step = "awaiting-payment";
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      checkoutLoading = false;
+    }
+  }
+
+  async function handleCheckPayment() {
+    if (!guestSessionId) return;
+    checkoutLoading = true;
+    error = "";
+    try {
+      const status = await pollGuestCheckout(guestSessionId);
+      if (status.paid) {
+        await storeExtractionReceipt(guestSessionId);
+        await clearPendingCheckout();
+        await refreshSubscription();
+        proceedAfterPayment();
+      } else {
+        error = "Payment not yet received. Complete checkout in your browser, then check again.";
+      }
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      checkoutLoading = false;
+    }
+  }
+
+  function proceedAfterPayment() {
+    step = "payment-confirmed";
+  }
+
+  function continueAfterPayment() {
+    if (pendingPath === "guided") {
+      step = "guided";
+      currentQuestion = 0;
+      guidedAnswers = [];
+    } else {
+      step = "input-method";
+    }
+  }
+
+  // --- File upload ---
+
+  async function handleFileUpload() {
+    error = "";
+    try {
+      const selected = await openFileDialog({
+        filters: [{ name: "Text", extensions: ["txt", "md"] }],
+        multiple: false,
+      });
+      if (!selected) return;
+      const content = await readFileAsText(selected);
+      if (!content.trim()) {
+        error = "File is empty.";
+        return;
+      }
+      formatSamples = {
+        twitter: "", email: "", longform: content, slack: "", linkedin: "",
+      };
+      activeFormat = "longform";
+      step = "paste";
     } catch (e) {
       error = friendlyError(e);
     }
@@ -305,11 +415,11 @@
     const filled = filledFormats();
     if (filled.length === 0) return;
 
-    // Fire off background extraction and move to main app
+    // Fire off background extraction and show done screen
     startExtractionQueue(
       filled.map((f) => ({ samples: formatSamples[f].trim(), format: f }))
     );
-    onComplete();
+    step = "done";
   }
 
   function handleGuidedExtraction() {
@@ -319,9 +429,9 @@
       .join("\n\n");
     const combinedSamples = guidedSamples + "\n\n" + pairContext;
 
-    // Fire off background extraction and move to main app
+    // Fire off background extraction and show done screen
     startExtractionQueue([{ samples: combinedSamples.trim(), format: "general" }]);
-    onComplete();
+    step = "done";
   }
 
   function submitGuidedAnswer() {
@@ -341,14 +451,7 @@
     if (currentPair < pairs.length - 1) {
       currentPair++;
     } else {
-      // Check auth before extraction
-      const settings = await getSettings();
-      isLoggedIn = settings.noren_pro_logged_in;
-      if (!isLoggedIn) {
-        pendingPath = "guided";
-        step = "auth";
-        return;
-      }
+      // Verify extraction access before running
       await refreshSubscription();
       if (!canExtract()) {
         pendingPath = "guided";
@@ -382,62 +485,100 @@
 <div class="flex flex-col h-full p-4 overflow-y-auto animate-fade-in-up">
 
   {#if step === "welcome"}
-    <!-- Welcome screen -->
-    <div class="flex-1 flex flex-col items-center justify-center gap-6 max-w-[280px] mx-auto">
-      <div class="w-16 h-16 rounded-2xl flex items-center justify-center">
-        <img src="/noren-logo.png" alt="Noren" class="w-full h-full object-contain" />
-      </div>
-      <div class="text-center">
-        <h1 class="text-lg font-heading font-semibold text-foreground">Welcome to Noren</h1>
-        <p class="text-xs text-muted mt-2 leading-relaxed">
-          Noren learns how you write and helps you stay consistent. Let's build your voice profile.
+    <!-- Welcome screen: v3 two-zone layout -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+
+      <!-- Zone 1: Brand header (warm background with woven grid) -->
+      <div
+        class="relative text-center shrink-0"
+        style="
+          padding: 40px 40px 32px;
+          background-color: var(--color-background);
+          background-image:
+            repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(30,49,72,0.025) 27px, rgba(30,49,72,0.025) 28px),
+            repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(30,49,72,0.025) 27px, rgba(30,49,72,0.025) 28px);
+        "
+      >
+        <div class="flex items-center justify-center mb-3.5" style="color: var(--color-primary)">
+          <NorenMark width={40} height={48} />
+        </div>
+        <h1 class="font-heading" style="font-size:34px; font-weight:300; letter-spacing:3px; line-height:1; color:var(--color-primary)">noren</h1>
+        <p class="text-muted mx-auto" style="font-size:12px; margin-top:12px; line-height:1.6; max-width:220px">
+          Learn how you write. Stay consistent across everything.
         </p>
+        <!-- Bottom divider gradient -->
+        <div class="absolute bottom-0 left-0 right-0 h-px" style="background: linear-gradient(90deg, transparent, rgba(30,49,72,0.1) 30%, rgba(30,49,72,0.1) 70%, transparent)"></div>
       </div>
 
-      <div class="flex flex-col gap-2 w-full">
+      <!-- Zone 2: Method selection (white background) -->
+      <div class="flex-1 flex flex-col gap-2.5 bg-surface" style="padding: 24px 32px 20px">
+
+        <!-- Primary card: Extract my voice -->
         <button
           onclick={() => checkAndProceed("paste")}
-          class="w-full py-2.5 px-4 text-sm font-semibold bg-secondary text-white rounded-md hover:bg-secondary/90 transition-colors cursor-pointer text-left"
+          class="relative overflow-hidden rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
+          style="
+            padding: 16px 18px;
+            background: var(--color-primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1);
+          "
+          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(30,49,72,0.2), 0 12px 32px rgba(30,49,72,0.15)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <span class="flex items-center gap-2">
-            AI-powered extraction
-            <span class="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded uppercase tracking-wide">$29 or Pro</span>
-          </span>
-          <span class="block text-[10px] font-normal text-white/70 mt-0.5">4-pass deep analysis of your writing patterns, vocabulary, and rhetorical style</span>
+          <!-- Thread texture overlay -->
+          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.02) 11px, rgba(255,255,255,0.02) 12px)"></div>
+
+          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.1); margin-top:1px">
+            <svg class="w-[17px] h-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M15 4V2M15 16v-2M8 9h10M8 5h2m-2 8h2m4 6l-6-6 6-6"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0 relative z-[1]">
+            <div style="font-size:13px; font-weight:600; line-height:1.3">Extract my voice</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.5">AI analyzes your writing patterns, vocabulary, and rhetorical style</div>
+          </div>
         </button>
+
+        <!-- Secondary card: Guided interview -->
         <button
           onclick={() => checkAndProceed("guided")}
-          class="w-full py-2.5 px-4 text-sm font-medium bg-surface border border-secondary/30 text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
+          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          style="
+            padding: 16px 18px;
+            border: 1px solid var(--color-border);
+          "
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <span class="flex items-center gap-2">
-            Guided interview
-            <span class="text-[10px] font-normal text-secondary bg-secondary/10 px-1.5 py-0.5 rounded uppercase tracking-wide">$29 or Pro</span>
-          </span>
-          <span class="block text-[10px] font-normal text-muted mt-0.5">7 questions + style calibration, then AI builds your profile</span>
+          <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:34px; height:34px; margin-top:1px">
+            <svg class="w-[17px] h-[17px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div style="font-size:13px; font-weight:600; line-height:1.3">Guided interview</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">7 questions + style calibration builds your profile</div>
+          </div>
         </button>
 
-        <div class="relative my-1">
-          <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t border-border"></div>
-          </div>
-          <div class="relative flex justify-center text-[10px]">
-            <span class="px-2 bg-background text-muted">or start free</span>
-          </div>
+        <!-- Tertiary section (pushed to bottom) -->
+        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+          <button
+            onclick={() => { step = "manual"; }}
+            class="cursor-pointer bg-transparent border-none text-secondary hover:text-primary transition-colors"
+            style="font-size:11px; font-weight:500; padding:4px"
+          >
+            Write my own profile
+          </button>
+          <button
+            onclick={onComplete}
+            class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
+            style="font-size:10px; padding:4px"
+          >
+            Skip for now
+          </button>
         </div>
-
-        <button
-          onclick={() => { step = "manual"; }}
-          class="w-full py-2.5 px-4 text-sm font-medium bg-surface border border-border text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
-        >
-          Describe my voice manually
-          <span class="block text-[10px] font-normal text-muted mt-0.5">Write your own profile description</span>
-        </button>
-        <button
-          onclick={onComplete}
-          class="w-full py-2 px-4 text-xs text-muted hover:text-foreground transition-colors cursor-pointer"
-        >
-          Skip for now
-        </button>
       </div>
     </div>
 
@@ -528,7 +669,7 @@
       {/if}
 
       <button
-        onclick={() => { step = "welcome"; error = ""; }}
+        onclick={() => { step = "paywall"; error = ""; proIntent = false; }}
         class="text-xs text-muted hover:text-foreground text-center cursor-pointer"
       >
         &larr; Back
@@ -536,47 +677,306 @@
     </div>
 
   {:else if step === "paywall"}
-    <!-- Paywall — authenticated but no extraction entitlement -->
-    <div class="flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
-      <div class="text-center mb-2">
-        <h2 class="text-lg font-heading font-semibold text-foreground">Unlock extraction</h2>
-        <p class="text-xs text-muted mt-1">AI extraction requires Pro or a one-time purchase</p>
+    <!-- Extraction gate -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+
+      <!-- Header -->
+      <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
+        <div class="flex items-center justify-center mb-3" style="color: var(--color-primary)">
+          <NorenMark width={28} height={34} />
+        </div>
+        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">Choose your path</h2>
+        <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
+          AI extraction analyzes your writing patterns. Included with Pro, or available as a one-time purchase.
+        </p>
       </div>
 
-      <div class="flex flex-col gap-2 w-full">
+      <!-- Cards -->
+      <div class="flex-1 flex flex-col gap-2.5 bg-surface" style="padding: 0 32px 20px">
+
+        <!-- Pro card (primary) -->
         <button
-          onclick={() => handleUpgrade("pro")}
-          class="w-full py-3 px-4 text-sm font-semibold bg-secondary text-white rounded-md hover:bg-secondary/90 transition-colors cursor-pointer text-left"
+          onclick={() => handleStartPro()}
+          class="relative overflow-hidden rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
+          style="
+            padding: 16px 18px;
+            background: var(--color-primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1);
+          "
+          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(30,49,72,0.2), 0 12px 32px rgba(30,49,72,0.15)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <span class="flex items-center justify-between">
-            <span>Noren Pro</span>
-            <span class="text-xs font-normal">$19<span class="text-[10px] text-white/70">/mo</span></span>
-          </span>
-          <span class="block text-[10px] font-normal text-white/70 mt-0.5">Extraction, inference, living profile, sync — everything</span>
+          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.02) 11px, rgba(255,255,255,0.02) 12px)"></div>
+
+          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.1); margin-top:1px">
+            <svg class="w-[17px] h-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0 relative z-[1]">
+            <div class="flex items-center justify-between">
+              <span style="font-size:13px; font-weight:600; line-height:1.3">Start Pro</span>
+              <span style="font-size:12px; font-weight:400">$5<span style="font-size:10px; opacity:0.6">/mo beta</span></span>
+            </div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.5">Extraction, inference, living profile, sync. Everything.</div>
+          </div>
         </button>
 
+        <!-- One-time card (secondary) -->
         <button
-          onclick={() => handleUpgrade("extraction")}
-          class="w-full py-3 px-4 text-sm font-medium bg-surface border border-secondary/30 text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer text-left"
+          onclick={() => { step = "guest-checkout"; error = ""; }}
+          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          style="
+            padding: 16px 18px;
+            border: 1px solid var(--color-border);
+          "
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <span class="flex items-center justify-between">
-            <span>Voice extraction only</span>
-            <span class="text-xs font-medium text-secondary">$29<span class="text-[10px] text-muted font-normal"> one-time</span></span>
-          </span>
-          <span class="block text-[10px] font-normal text-muted mt-0.5">AI extraction without a subscription</span>
+          <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:34px; height:34px; margin-top:1px">
+            <svg class="w-[17px] h-[17px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 4H3a1 1 0 00-1 1v14a1 1 0 001 1h18a1 1 0 001-1V5a1 1 0 00-1-1zM2 9h20M7 15h4"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between">
+              <span style="font-size:13px; font-weight:600; line-height:1.3">One-time extraction</span>
+              <span class="text-secondary" style="font-size:12px; font-weight:500">$19</span>
+            </div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">AI extraction without a subscription. No account needed.</div>
+          </div>
         </button>
+
+        {#if error}
+          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+        {/if}
+
+        <!-- Tertiary -->
+        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+          <button
+            onclick={() => { step = "welcome"; error = ""; }}
+            class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
+            style="font-size:10px; padding:4px"
+          >
+            &larr; Back
+          </button>
+        </div>
+      </div>
+    </div>
+
+  {:else if step === "guest-checkout"}
+    <!-- Guest checkout: email input -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
+        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">One-time extraction</h2>
+        <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
+          Enter your email for the receipt. No account created.
+        </p>
       </div>
 
-      {#if error}
-        <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
-      {/if}
+      <div class="flex-1 flex flex-col gap-3 bg-surface" style="padding: 0 32px 20px">
+        <div class="rounded-[10px] p-4" style="background: var(--color-tint); border: 1px solid var(--color-border)">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-foreground" style="font-size:13px; font-weight:600">AI voice extraction</span>
+            <span class="text-secondary" style="font-size:14px; font-weight:600">$19</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2">
+              <span class="text-secondary" style="font-size:10px">+</span>
+              <span class="text-muted" style="font-size:10.5px">4-pass analysis of your writing patterns</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-secondary" style="font-size:10px">+</span>
+              <span class="text-muted" style="font-size:10.5px">50+ named voice patterns extracted</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-secondary" style="font-size:10px">+</span>
+              <span class="text-muted" style="font-size:10.5px">One-time purchase, no subscription</span>
+            </div>
+          </div>
+        </div>
 
-      <button
-        onclick={() => { step = "welcome"; error = ""; }}
-        class="text-xs text-muted hover:text-foreground text-center cursor-pointer"
-      >
-        &larr; Back
-      </button>
+        <input
+          type="email"
+          bind:value={guestEmail}
+          onkeydown={(e) => { if (e.key === "Enter") handleGuestCheckout(); }}
+          class="w-full px-3 py-2.5 text-xs border border-border bg-surface text-foreground rounded-[10px] focus:outline-none focus:border-secondary"
+          placeholder="your@email.com"
+        />
+
+        <button
+          onclick={handleGuestCheckout}
+          disabled={checkoutLoading || !guestEmail.trim()}
+          class="w-full py-2.5 text-xs font-semibold transition-colors cursor-pointer rounded-[10px] disabled:opacity-50 disabled:cursor-not-allowed"
+          style="background: var(--color-primary); color: white"
+          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#243A54'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+        >
+          {#if checkoutLoading}
+            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Opening checkout...</span>
+          {:else}
+            Continue to checkout
+          {/if}
+        </button>
+
+        {#if error}
+          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+        {/if}
+
+        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+          <button
+            onclick={() => { step = "paywall"; error = ""; }}
+            class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
+            style="font-size:10px; padding:4px"
+          >
+            &larr; Back
+          </button>
+        </div>
+      </div>
+    </div>
+
+  {:else if step === "awaiting-payment"}
+    <!-- Awaiting payment: polling Stripe -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
+        <div class="flex items-center justify-center" style="color: var(--color-secondary)">
+          <svg class="w-10 h-10 animate-spin" style="animation-duration: 3s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="text-center">
+          <h2 class="font-heading text-foreground" style="font-size:16px; font-weight:600; line-height:1.3">Complete payment in your browser</h2>
+          <p class="text-muted mx-auto" style="font-size:11px; margin-top:8px; line-height:1.5; max-width:240px">
+            Stripe checkout is open in your browser. Come back here when you're done.
+          </p>
+        </div>
+
+        <button
+          onclick={handleCheckPayment}
+          disabled={checkoutLoading}
+          class="py-2.5 px-6 text-xs font-semibold transition-colors cursor-pointer rounded-[10px] disabled:opacity-50"
+          style="background: var(--color-primary); color: white"
+          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#243A54'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+        >
+          {#if checkoutLoading}
+            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Checking...</span>
+          {:else}
+            Check payment status
+          {/if}
+        </button>
+
+        {#if error}
+          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed max-w-[280px]">{error}</div>
+        {/if}
+
+        <button
+          onclick={() => { step = "paywall"; error = ""; guestSessionId = ""; }}
+          class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
+          style="font-size:10px; padding:4px"
+        >
+          Start over
+        </button>
+      </div>
+    </div>
+
+  {:else if step === "payment-confirmed"}
+    <!-- Payment confirmed -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background: rgba(45,122,79,0.1)">
+          <svg class="w-6 h-6 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div class="text-center">
+          <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">Payment confirmed</h2>
+          <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
+            {#if pendingPath === "guided"}
+              Now let's learn how you write through a short interview.
+            {:else}
+              Now paste your writing samples so we can extract your voice.
+            {/if}
+          </p>
+        </div>
+
+        <button
+          onclick={continueAfterPayment}
+          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-[10px]"
+          style="background: var(--color-primary); color: white"
+          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          Continue
+        </button>
+      </div>
+    </div>
+
+  {:else if step === "input-method"}
+    <!-- Input method choice -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
+        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">Provide your writing</h2>
+        <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
+          The more samples you provide, the better the extraction.
+        </p>
+      </div>
+
+      <div class="flex-1 flex flex-col gap-2.5 bg-surface" style="padding: 0 32px 20px">
+
+        <!-- Upload file -->
+        <button
+          onclick={handleFileUpload}
+          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          style="padding: 16px 18px; border: 1px solid var(--color-border)"
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:34px; height:34px; margin-top:1px">
+            <svg class="w-[17px] h-[17px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div style="font-size:13px; font-weight:600; line-height:1.3">Upload a file</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">.txt or .md with writing samples separated by blank lines</div>
+          </div>
+        </button>
+
+        <!-- Paste step by step -->
+        <button
+          onclick={() => { step = "paste"; }}
+          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          style="padding: 16px 18px; border: 1px solid var(--color-border)"
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:34px; height:34px; margin-top:1px">
+            <svg class="w-[17px] h-[17px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div style="font-size:13px; font-weight:600; line-height:1.3">Paste step by step</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">Guided, format-by-format: tweets, emails, long-form, and more</div>
+          </div>
+        </button>
+
+        {#if error}
+          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+        {/if}
+
+        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+          <button
+            onclick={() => { step = "welcome"; error = ""; }}
+            class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
+            style="font-size:10px; padding:4px"
+          >
+            &larr; Back
+          </button>
+        </div>
+      </div>
     </div>
 
   {:else if step === "manual"}
@@ -716,7 +1116,7 @@
       {/if}
 
       <button
-        onclick={() => { step = "welcome"; }}
+        onclick={() => { step = "input-method"; }}
         class="text-xs text-muted hover:text-foreground text-center cursor-pointer"
       >
         &larr; Back
@@ -807,59 +1207,71 @@
     </div>
 
   {:else if step === "done"}
-    <!-- Done (manual profile only) -->
-    <div class="flex-1 flex flex-col items-center justify-center gap-4">
-      <div class="w-12 h-12 rounded-full bg-signal/10 flex items-center justify-center">
-        <svg class="w-6 h-6 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-      <div class="text-center">
-        <p class="text-sm font-semibold text-foreground">Basic profile saved</p>
-        <p class="text-xs text-muted mt-1 leading-relaxed">
-          Good start. Noren will use your description to match your tone.
-        </p>
-      </div>
-
-      <div class="w-full max-w-[280px] p-3 bg-tint border border-secondary/20 rounded-lg">
-        <p class="text-[10px] font-medium text-secondary mb-1.5">Want a deeper profile?</p>
-        <div class="flex flex-col gap-1">
-          <div class="flex items-start gap-1.5">
-            <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
-            <span class="text-[10px] text-muted">AI extraction from your actual writing</span>
-          </div>
-          <div class="flex items-start gap-1.5">
-            <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
-            <span class="text-[10px] text-muted">Format-specific contexts (Twitter, email, Slack...)</span>
-          </div>
-          <div class="flex items-start gap-1.5">
-            <span class="text-secondary text-[10px] mt-0.5 shrink-0">+</span>
-            <span class="text-[10px] text-muted">Living profile that evolves with your edits</span>
-          </div>
+    <!-- Done -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background: rgba(45,122,79,0.1)">
+          <svg class="w-6 h-6 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
         </div>
-        <div class="flex gap-2 items-center mt-2">
-          <button
-            onclick={goToSettings}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
-          >
-            Extraction $29
-          </button>
-          <span class="text-[10px] text-muted">or</span>
-          <button
-            onclick={goToSettings}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
-          >
-            Pro $19/mo
-          </button>
+        <div class="text-center">
+          {#if manualProfile.trim()}
+            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600">Profile saved</h2>
+            <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
+              Good start. Noren will use your description to match your tone.
+            </p>
+          {:else}
+            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600">Extraction started</h2>
+            <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
+              Your voice profile is being built in the background. You can start writing right away.
+            </p>
+          {/if}
         </div>
-      </div>
 
-      <button
-        onclick={onComplete}
-        class="px-6 py-2.5 text-sm font-semibold bg-primary text-white rounded-md hover:bg-primary-hover transition-colors cursor-pointer"
-      >
-        Start writing
-      </button>
+        {#if manualProfile.trim()}
+          <div class="w-full max-w-[260px] rounded-[10px] p-3" style="background: var(--color-tint); border: 1px solid var(--color-border)">
+            <p class="text-secondary" style="font-size:10px; font-weight:500; margin-bottom:6px">Want a deeper profile?</p>
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <span class="text-secondary" style="font-size:10px">+</span>
+                <span class="text-muted" style="font-size:10px">AI extraction from your actual writing</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-secondary" style="font-size:10px">+</span>
+                <span class="text-muted" style="font-size:10px">Format-specific voice contexts</span>
+              </div>
+            </div>
+            <div class="flex gap-2 items-center mt-2">
+              <button
+                onclick={goToSettings}
+                class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
+                style="font-size:10px; font-weight:500"
+              >
+                Extraction $19
+              </button>
+              <span class="text-muted" style="font-size:10px">or</span>
+              <button
+                onclick={goToSettings}
+                class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
+                style="font-size:10px; font-weight:500"
+              >
+                Pro $5/mo
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <button
+          onclick={onComplete}
+          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-[10px]"
+          style="background: var(--color-primary); color: white"
+          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          Start writing
+        </button>
+      </div>
     </div>
   {/if}
 </div>

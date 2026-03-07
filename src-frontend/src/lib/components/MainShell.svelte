@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
   import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
+  import { getPatchCount, refreshPatches } from "$lib/stores/patches.svelte";
   import {
     init as initExtraction,
     getIsExtracting,
@@ -21,9 +22,11 @@
   import SettingsView from "./SettingsView.svelte";
   import ProfilesView from "./ProfilesView.svelte";
   import ExtractView from "./ExtractView.svelte";
+  import AccountView from "./AccountView.svelte";
   import OnboardingView from "./OnboardingView.svelte";
+  import NorenMark from "./NorenMark.svelte";
 
-  type View = "generate" | "chat" | "profiles" | "extract" | "settings" | "onboarding";
+  type View = "generate" | "chat" | "profiles" | "extract" | "account" | "settings" | "onboarding";
   let view: View = $state("generate");
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
@@ -34,6 +37,7 @@
     { id: "chat", label: "Chat", icon: "chat" },
     { id: "profiles", label: "Profiles", icon: "user" },
     { id: "extract", label: "Extract", icon: "wand" },
+    { id: "account", label: "Account", icon: "badge" },
     { id: "settings", label: "Settings", icon: "gear" },
   ];
 
@@ -47,7 +51,7 @@
 
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
-      if (["generate", "chat", "profiles", "extract", "settings"].includes(target)) {
+      if (["generate", "chat", "profiles", "extract", "account", "settings"].includes(target)) {
         view = target;
       }
     }).then((fn) => cleanups.push(fn));
@@ -56,7 +60,7 @@
       checkPermissions().then((ok) => {
         hasPermissions = ok;
       });
-      refreshSubscription();
+      refreshSubscription().then(() => refreshPatches());
     }).then((fn) => cleanups.push(fn));
 
     checkPermissions().then((ok) => {
@@ -77,7 +81,7 @@
       loading = false;
 
       if (settings.noren_pro_logged_in) {
-        refreshSubscription();
+        refreshSubscription().then(() => refreshPatches());
 
         if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
           migrateProfileToServer().catch(() => {});
@@ -123,50 +127,60 @@
   {:else}
     <!-- Main layout: sidebar + content -->
     <div class="flex flex-1 min-h-0">
-      <!-- Sidebar -->
-      <nav class="w-[180px] shrink-0 bg-surface border-r border-border flex flex-col py-3 px-2">
-        <div class="flex flex-col gap-0.5">
+      <!-- Nav rail -->
+      <nav class="w-14 shrink-0 bg-kon noise-texture flex flex-col items-center py-2.5 gap-0.5">
+        <div class="flex flex-col items-center gap-0.5 z-[1]">
           {#each navItems as item}
             <button
               onclick={() => { view = item.id; }}
-              class="flex items-center gap-2.5 px-3 py-2 text-sm rounded-md transition-colors cursor-pointer relative
+              class="w-[44px] flex flex-col items-center gap-[3px] py-[7px] rounded-md transition-colors cursor-pointer relative z-[1]
                 {view === item.id
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted hover:bg-tint hover:text-foreground'}"
+                  ? 'bg-white/[0.08] nav-active-indicator'
+                  : 'hover:bg-white/[0.06]'}"
             >
               {#if item.icon === "pen"}
-                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
                 </svg>
               {:else if item.icon === "chat"}
-                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
                 </svg>
               {:else if item.icon === "user"}
-                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
               {:else if item.icon === "wand"}
-                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M15 4V2M15 16v-2M8 9h10M8 5h2m-2 8h2m4 6l-6-6 6-6"/>
+                </svg>
+              {:else if item.icon === "badge"}
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="16" rx="2"/>
+                  <circle cx="9" cy="11" r="2.5"/>
+                  <path d="M15 10h2M15 14h2M5 20c0-2 2-3.5 4-3.5s4 1.5 4 3.5"/>
                 </svg>
               {:else if item.icon === "gear"}
-                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
                 </svg>
               {/if}
-              {item.label}
+              <span class="text-[7px] font-semibold uppercase tracking-wide" style="color:{view === item.id ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)'}">
+                {item.label}
+              </span>
               {#if item.id === "extract" && !canExtract()}
-                <span class="absolute top-1 right-1.5 text-[8px] font-medium text-secondary">$</span>
+                <span class="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-accent"></span>
+              {/if}
+              {#if item.id === "profiles" && getPatchCount() > 0}
+                <span class="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-secondary"></span>
               {/if}
             </button>
           {/each}
         </div>
 
         <!-- Bottom branding -->
-        <div class="mt-auto pt-3 px-3">
-          <span class="text-xs text-muted/50 font-heading tracking-wide">noren</span>
+        <div class="mt-auto pb-0.5 z-[1]" style="color:rgba(255,255,255,0.15)">
+          <NorenMark width={16} height={19} />
         </div>
       </nav>
 
@@ -245,6 +259,8 @@
             <ProfilesView />
           {:else if view === "extract"}
             <ExtractView />
+          {:else if view === "account"}
+            <AccountView />
           {:else}
             <SettingsView />
           {/if}

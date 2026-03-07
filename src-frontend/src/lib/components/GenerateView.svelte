@@ -1,13 +1,16 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, createCheckout, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
   import { isFree, canExtract } from "$lib/stores/subscription.svelte";
   import { getIsExtracting } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+
+  // --- Props ---
+  let { isPopup = false, hasProfile: hasProfileProp = true, noApiKey = false }: { isPopup?: boolean; hasProfile?: boolean; noApiKey?: boolean } = $props();
 
   // --- State ---
   let prompt = $state("");
@@ -22,7 +25,10 @@
   let isGenerating = $state(false);
   let error = $state("");
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
-  let hasProfile = $state(true);
+  let hasProfileLocal = $state(true);
+  let hasProfile = $derived(isPopup ? hasProfileProp : hasProfileLocal);
+  let noApiKeyLocal = $state(false);
+  let noKey = $derived(isPopup ? noApiKey : noApiKeyLocal);
   let showCompareLock = $state(false);
 
   const levels = ["strict", "guided", "light"] as const;
@@ -32,7 +38,7 @@
     // Use profile overview for both profile status and format list
     // (works for both local and server-side profiles)
     getProfileOverview().then((overview) => {
-      hasProfile = overview.exists;
+      hasProfileLocal = overview.exists;
       let f = overview.formats;
       if (!f.includes("general")) {
         f = ["general", ...f];
@@ -55,6 +61,14 @@
 
     getContextText().then((text) => {
       if (text) contextText = text;
+    });
+
+    getSettings().then((settings) => {
+      if (settings.inference_mode === "byok" && !settings.has_key && settings.provider.requiresKey) {
+        noApiKeyLocal = true;
+      } else {
+        noApiKeyLocal = false;
+      }
     });
 
     const cleanups: (() => void)[] = [];
@@ -180,11 +194,30 @@
 </script>
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
+  <!-- No API key banner -->
+  {#if noKey}
+    <div class="flex items-center gap-2 p-2 bg-tint border border-warning/20 rounded-lg">
+      <p class="flex-1 text-[10px] text-muted leading-relaxed">
+        Set up your API key to start generating.
+        <button
+          onclick={() => emit("navigate", "settings")}
+          class="text-secondary font-medium cursor-pointer hover:text-foreground"
+        >Go to Settings</button>
+      </p>
+    </div>
+  {/if}
+
   <!-- No profile nudge -->
   {#if !hasProfile && !getIsExtracting()}
     <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg">
       <p class="flex-1 text-[10px] text-muted leading-relaxed">
-        {#if canExtract()}
+        {#if isPopup}
+          No voice profile yet. Output will use default voice.
+          <button
+            onclick={() => showMainWindow()}
+            class="text-secondary font-medium cursor-pointer hover:text-foreground"
+          >Open Noren to set up</button>
+        {:else if canExtract()}
           No voice profile yet — output will be generic.
           <button
             onclick={() => emit("navigate", "extract")}
@@ -334,9 +367,9 @@
   <!-- Weave button -->
   <button
     onclick={handleGenerate}
-    disabled={!prompt.trim() || isGenerating}
+    disabled={!prompt.trim() || isGenerating || noKey}
     class="w-full py-2.5 px-4 text-sm font-semibold tracking-wide transition-colors cursor-pointer rounded-md
-      {!prompt.trim() || isGenerating
+      {!prompt.trim() || isGenerating || noKey
         ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
         : 'bg-primary text-white hover:bg-primary-hover'}
       {weaveComplete ? 'animate-loom-pulse' : ''}"
@@ -364,7 +397,7 @@
       <div class="flex-1 grid grid-cols-2 gap-2 min-h-0">
         <div class="flex flex-col min-h-0">
           <span class="text-[10px] font-medium text-primary mb-1 uppercase tracking-wide">With your voice</span>
-          <div class="flex-1 p-3 bg-surface border border-primary/30 rounded-lg overflow-y-auto">
+          <div class="flex-1 p-3 rounded-lg overflow-y-auto output-accent-line" style="background:var(--color-warm-surface);border:1px solid rgba(0,0,0,0.04)">
             <div class="animate-shimmer rounded-lg">
               <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.with_voice.text}</p>
             </div>
@@ -380,58 +413,79 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] text-muted">
-          {comparison.with_voice.input_tokens + comparison.with_voice.output_tokens + comparison.without_voice.input_tokens + comparison.without_voice.output_tokens} tokens total
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-[9px] text-muted mr-auto">
+          {comparison.with_voice.input_tokens + comparison.with_voice.output_tokens + comparison.without_voice.input_tokens + comparison.without_voice.output_tokens} tokens
         </span>
-        <div class="flex gap-2">
-          <button
-            onclick={handleCopy}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
-          >
-            {copied ? "Copied" : "Copy voiced"}
-          </button>
-          <button
-            onclick={handleInject}
-            class="px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer rounded-md font-medium"
-          >
-            Inject voiced
-          </button>
-        </div>
+        <button
+          onclick={handleCopy}
+          class="w-8 h-8 flex items-center justify-center border border-border hover:border-secondary transition-colors cursor-pointer rounded-md"
+          title={copied ? "Copied" : "Copy voiced"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted">
+            {#if copied}
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            {:else}
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            {/if}
+          </svg>
+        </button>
+        <button
+          onclick={handleInject}
+          class="flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-semibold text-white transition-colors cursor-pointer rounded-md"
+          style="background:var(--color-kon)"
+        >
+          Inject
+          <kbd class="font-mono text-[8px] font-normal opacity-40 border border-white/15 px-1 py-px rounded">Cmd+Return</kbd>
+        </button>
       </div>
     </div>
   {:else if output}
     <div class="flex-1 flex flex-col gap-2 min-h-0 animate-fabric-unfurl">
-      <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
-        <div class="animate-shimmer rounded-lg">
-          <p class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{output.text}</p>
+      <!-- Voice badge + format pills -->
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-[9px] font-medium uppercase tracking-wide" style="color:var(--color-muted)">{format}</span>
+        <span class="text-[9px]" style="color:var(--color-border)">/</span>
+        <span class="font-mono text-[9px] font-medium uppercase tracking-wide" style="color:var(--color-muted)">{level}</span>
+        <div class="ml-auto flex items-center gap-[5px]">
+          <div class="w-[5px] h-[5px] rounded-full bg-signal animate-voice-pulse"></div>
+          <span class="font-mono text-[8px] font-medium uppercase tracking-wide text-signal">Voice active</span>
         </div>
       </div>
 
-      <div class="flex flex-col gap-1">
-        <div class="flex items-center justify-between">
-          <span class="text-[10px] text-muted">
-            {output.input_tokens + output.output_tokens} tokens
-            {#if copied}&middot; copied{/if}
-          </span>
-          <div class="flex gap-2">
-            <button
-              onclick={handleCopy}
-              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
-            <button
-              onclick={handleInject}
-              class="px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer rounded-md font-medium"
-            >
-              Inject
-            </button>
-          </div>
+      <!-- Output card -->
+      <div class="flex-1 p-4 rounded-lg overflow-y-auto output-accent-line" style="background:var(--color-warm-surface);border:1px solid rgba(0,0,0,0.04)">
+        <div class="animate-shimmer rounded-lg">
+          <p class="text-sm text-foreground whitespace-pre-wrap" style="line-height:1.75">{output.text}</p>
         </div>
-        <p class="text-[10px] text-muted text-right">
-          Text is on your clipboard — Cmd+V to paste manually
-        </p>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-[9px] text-muted mr-auto">
+          {output.input_tokens + output.output_tokens} tokens
+        </span>
+        <button
+          onclick={handleCopy}
+          class="w-8 h-8 flex items-center justify-center border border-border hover:border-secondary transition-colors cursor-pointer rounded-md"
+          title={copied ? "Copied" : "Copy"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted">
+            {#if copied}
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            {:else}
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            {/if}
+          </svg>
+        </button>
+        <button
+          onclick={handleInject}
+          class="flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-semibold text-white transition-colors cursor-pointer rounded-md"
+          style="background:var(--color-kon)"
+        >
+          Inject
+          <kbd class="font-mono text-[8px] font-normal opacity-40 border border-white/15 px-1 py-px rounded">Cmd+Return</kbd>
+        </button>
       </div>
     </div>
   {/if}

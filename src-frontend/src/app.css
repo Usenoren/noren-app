@@ -40,6 +40,12 @@
   --color-shimmer-chat: rgba(59, 107, 138, 0.08);
   --color-shimmer-chat-peak: rgba(59, 107, 138, 0.14);
   --color-loom-pulse: rgba(59, 107, 138, 0.45);
+
+  /* v3 nav rail + output tokens */
+  --color-warm-surface: #FAFAF8;
+  --color-kon: #1E3148;
+  --color-hanada: #3B6B8A;
+  --color-kon-deep: #162636;
 }
 
 /* --- Base --- */
@@ -374,6 +380,36 @@ button {
   box-shadow: var(--shadow-card-hover);
 }
 
+/* Nav rail noise texture */
+.noise-texture { position: relative; }
+.noise-texture::after {
+  content: ''; position: absolute; inset: 0; opacity: 0.03; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+}
+
+/* Active nav indicator bar */
+.nav-active-indicator { position: relative; }
+.nav-active-indicator::before {
+  content: ''; position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; background: var(--color-hanada); border-radius: 0 2px 2px 0;
+}
+
+/* Output gradient accent line */
+.output-accent-line { position: relative; }
+.output-accent-line::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--color-hanada), var(--color-kon)); opacity: 0.5;
+  border-radius: 8px 8px 0 0; z-index: 1;
+}
+
+/* Voice badge pulse */
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(58,125,92,0.4); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(58,125,92,0); }
+}
+.animate-voice-pulse { animation: voice-pulse 2.5s ease-in-out infinite; }
+
 /* ============================================================
    DARK MODE — Automatic macOS theme matching
    Inverts the indigo depth: deep ink backgrounds, light text
@@ -411,6 +447,9 @@ button {
     --color-shimmer-chat: rgba(107, 155, 181, 0.06);
     --color-shimmer-chat-peak: rgba(107, 155, 181, 0.12);
     --color-loom-pulse: rgba(107, 155, 181, 0.45);
+
+    --color-warm-surface: #1A1816;
+    --color-kon-deep: #0F1A26;
   }
 
   /* Grain texture — softer on dark */

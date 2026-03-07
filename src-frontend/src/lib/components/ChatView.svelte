@@ -2,6 +2,7 @@
   import {
     chatSend,
     getProfileOverview,
+    getSettings,
     listFormats,
     saveChat,
     listChats,
@@ -11,6 +12,7 @@
     type ChatMessage,
     type ConversationSummary,
   } from "$lib/api/tauri";
+  import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
   import { friendlyError } from "$lib/utils/errors";
   import { marked } from "marked";
@@ -37,6 +39,10 @@
   // Attachments
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
 
+  // Empty state awareness
+  let hasProfile = $state(true);
+  let noApiKey = $state(false);
+
   // History state
   let conversationId: string | null = $state(null);
   let conversationCreatedAt: string | null = $state(null);
@@ -46,6 +52,7 @@
   // --- Init ---
   $effect(() => {
     getProfileOverview().then((overview) => {
+      hasProfile = overview.exists;
       let f = overview.formats;
       if (!f.includes("general")) {
         f = ["general", ...f];
@@ -62,6 +69,14 @@
           f = ["general", ...f];
         }
         formats = f;
+      }
+    });
+
+    getSettings().then((settings) => {
+      if (settings.inference_mode === "byok" && !settings.has_key && settings.provider.requiresKey) {
+        noApiKey = true;
+      } else {
+        noApiKey = false;
       }
     });
 
@@ -368,6 +383,37 @@
     {/if}
   </div>
 
+  <!-- No API key banner (F5) -->
+  {#if noApiKey}
+    <div class="flex items-center gap-2 mx-4 mt-3 p-2 bg-tint border border-warning/20 rounded-lg">
+      <p class="flex-1 text-[10px] text-muted leading-relaxed">
+        Set up your API key in Settings to start chatting.
+        <button
+          onclick={() => emit("navigate", "settings")}
+          class="text-secondary font-medium cursor-pointer hover:text-foreground"
+        >Go to Settings</button>
+      </p>
+    </div>
+  {/if}
+
+  <!-- No profile nudge (F4) -->
+  {#if !hasProfile && !noApiKey}
+    <div class="flex items-center gap-2 mx-4 mt-3 p-2 bg-tint border border-secondary/20 rounded-lg">
+      <p class="flex-1 text-[10px] text-muted leading-relaxed">
+        Chat is using default voice. Create a profile for voice-matched responses.
+        <button
+          onclick={() => emit("navigate", "profiles")}
+          class="text-secondary font-medium cursor-pointer hover:text-foreground"
+        >Go to Profiles</button>
+        <span class="text-border mx-0.5">|</span>
+        <button
+          onclick={() => emit("navigate", "extract")}
+          class="text-secondary font-medium cursor-pointer hover:text-foreground"
+        >Extract one</button>
+      </p>
+    </div>
+  {/if}
+
   <!-- Messages -->
   <div
     bind:this={messagesContainer}
@@ -471,7 +517,7 @@
           onclick={handleAttachFile}
           class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 text-muted hover:text-foreground border border-border hover:border-secondary"
           title="Attach a file (PDF, text, etc.)"
-          disabled={attachedFiles.length >= 3 || isLoading}
+          disabled={attachedFiles.length >= 3 || isLoading || noApiKey}
           aria-label="Attach file"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -484,14 +530,14 @@
           oninput={autoResize}
           class="flex-1 p-3 text-sm border border-border resize-none bg-surface text-foreground placeholder-muted rounded-xl focus:outline-none focus:border-secondary"
           rows={1}
-          placeholder="Message..."
-          disabled={isLoading}
+          placeholder={noApiKey ? "API key required..." : "Message..."}
+          disabled={isLoading || noApiKey}
         ></textarea>
         <button
           onclick={handleSend}
-          disabled={!input.trim() || isLoading}
+          disabled={!input.trim() || isLoading || noApiKey}
           class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0
-            {!input.trim() || isLoading
+            {!input.trim() || isLoading || noApiKey
               ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
               : 'bg-primary text-white hover:bg-primary-hover'}"
           aria-label="Send"

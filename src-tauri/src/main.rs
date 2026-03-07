@@ -63,6 +63,11 @@ fn inject_generated_text(
 }
 
 #[tauri::command]
+fn show_main_window(app: tauri::AppHandle) {
+    window::show_main_window(&app);
+}
+
+#[tauri::command]
 fn check_permissions() -> bool {
     accessibility::check_accessibility_trusted(false)
 }
@@ -127,6 +132,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_context_text,
             inject_generated_text,
+            show_main_window,
             check_permissions,
             request_permissions,
             commands::generate,

@@ -2,30 +2,28 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
   import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
-  import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
+  import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import GenerateView from "./GenerateView.svelte";
   import SettingsView from "./SettingsView.svelte";
   import ProfilesView from "./ProfilesView.svelte";
-  import ExtractView from "./ExtractView.svelte";
-  import OnboardingView from "./OnboardingView.svelte";
+  import NorenMark from "./NorenMark.svelte";
 
-  type View = "generate" | "profiles" | "extract" | "settings" | "onboarding";
+  type View = "generate" | "profiles" | "settings";
   let view: View = $state("generate");
   let hasPermissions = $state(true);
-  let needsOnboarding = $state(false);
+  let hasProfile = $state(true);
+  let noApiKey = $state(false);
   let loading = $state(true);
   let detectedApp = $state("");
 
-  const viewLabels: Record<View, string> = {
-    generate: "noren",
-    profiles: "Profiles",
-    extract: "Extract",
-    settings: "Settings",
-    onboarding: "Welcome",
-  };
-
   function closeWindow() {
     getCurrentWindow().hide();
+  }
+
+  function refreshApiKeyStatus() {
+    getSettings().then((settings) => {
+      noApiKey = settings.inference_mode === "byok" && !settings.has_key && settings.provider.requiresKey;
+    });
   }
 
   $effect(() => {
@@ -33,8 +31,9 @@
 
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
-      if (["generate", "profiles", "extract", "settings"].includes(target)) {
+      if (["generate", "profiles", "settings"].includes(target)) {
         view = target;
+        if (target === "generate") refreshApiKeyStatus();
       }
     }).then((fn) => cleanups.push(fn));
 
@@ -42,11 +41,12 @@
       detectedApp = event.payload.name;
     }).then((fn) => cleanups.push(fn));
 
-    // Re-check permissions each time the window is shown
+    // Re-check permissions and API key each time the window is shown
     listen("tauri://focus", () => {
       checkPermissions().then((ok) => {
         hasPermissions = ok;
       });
+      refreshApiKeyStatus();
       refreshSubscription();
     }).then((fn) => cleanups.push(fn))
 
@@ -54,16 +54,15 @@
       hasPermissions = ok;
     });
 
-    // Check if we need onboarding (no profile) or settings (no key in BYOK mode)
+    // Check profile status and API key availability
     Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
-      if (!profile.exists) {
-        needsOnboarding = true;
-        view = "onboarding";
-      } else if (
+      hasProfile = profile.exists;
+      if (
         settings.inference_mode === "byok" &&
         !settings.has_key &&
         settings.provider.requiresKey
       ) {
+        noApiKey = true;
         view = "settings";
       }
       loading = false;
@@ -83,11 +82,6 @@
 
     return () => cleanups.forEach((fn) => fn());
   });
-
-  function handleOnboardingComplete() {
-    needsOnboarding = false;
-    view = "generate";
-  }
 
   async function handleRequestPermissions() {
     // Open System Settings → Accessibility
@@ -112,68 +106,76 @@
   </div>
 {:else}
 <div class="flex flex-col h-screen overflow-hidden popup-shell">
-  <!-- Title bar -->
+  <!-- Chrome bar -->
   <div
     data-tauri-drag-region
-    class="flex items-center justify-between px-4 py-2 border-b border-border bg-surface shrink-0"
+    class="h-8 flex items-center px-3 gap-1.5 shrink-0 noise-texture"
+    style="background:var(--color-kon)"
   >
-    <div data-tauri-drag-region class="flex items-center gap-2">
-      {#if view !== "generate" && view !== "onboarding"}
-        <button
-          onclick={() => { view = "generate"; }}
-          class="text-muted hover:text-primary transition-colors text-sm cursor-pointer"
-          aria-label="Back"
-        >
-          &larr;
-        </button>
-      {/if}
-      <span data-tauri-drag-region class="text-xs font-medium text-foreground pointer-events-none tracking-wide {view === 'generate' || view === 'onboarding' ? 'font-heading' : ''}">
-        {viewLabels[view]}
-      </span>
-      {#if detectedApp && view === "generate"}
-        <span data-tauri-drag-region class="text-[10px] text-muted pointer-events-none">&rarr;</span>
-        <span data-tauri-drag-region class="text-[10px] text-secondary font-medium pointer-events-none">{detectedApp}</span>
-      {/if}
+    <!-- Window dots -->
+    <button
+      onclick={closeWindow}
+      class="w-[9px] h-[9px] rounded-full cursor-pointer shrink-0 z-[1]"
+      style="background:#FF5F57;opacity:0.8"
+      aria-label="Close"
+    ></button>
+    <div class="w-[9px] h-[9px] rounded-full shrink-0 z-[1]" style="background:#FEBD2E;opacity:0.8"></div>
+    <div class="w-[9px] h-[9px] rounded-full shrink-0 z-[1]" style="background:#27CA40;opacity:0.8"></div>
+
+    <!-- Noren mark -->
+    <div class="ml-1.5 z-[1]" style="color:rgba(255,255,255,0.25)">
+      <NorenMark width={12} height={14} />
     </div>
-    <div class="flex items-center gap-3">
-      {#if view === "generate"}
-        <button
-          onclick={() => { view = "extract"; }}
-          class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide relative"
-          aria-label="Extract"
-          title="Extract voice profile"
-        >
-          EXT
-          {#if !canExtract()}
-            <span class="absolute -top-1.5 -right-2.5 px-0.5 text-[7px] font-medium text-secondary">$</span>
-          {/if}
-        </button>
-        <button
-          onclick={() => { view = "profiles"; }}
-          class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"
-          aria-label="Profiles"
-          title="Voice profiles"
-        >
-          PRF
-        </button>
-        <button
-          onclick={() => { view = "settings"; }}
-          class="text-muted hover:text-primary transition-colors text-[10px] cursor-pointer uppercase tracking-wide"
-          aria-label="Settings"
-          title="Settings"
-        >
-          SET
-        </button>
-      {/if}
+
+    <!-- Spacer -->
+    <div data-tauri-drag-region class="flex-1"></div>
+
+    <!-- Icon nav buttons -->
+    <div class="flex gap-0.5 z-[1]">
       <button
-        onclick={closeWindow}
-        class="text-muted hover:text-error transition-colors text-lg leading-none cursor-pointer"
-        aria-label="Close"
+        onclick={() => { view = "generate"; refreshApiKeyStatus(); }}
+        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors"
+        style="background:{view === 'generate' ? 'rgba(255,255,255,0.08)' : 'transparent'}"
+        aria-label="Weave"
+        title="Weave"
       >
-        &times;
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'generate' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)'}">
+          <path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+        </svg>
+      </button>
+      <button
+        onclick={() => { view = "profiles"; }}
+        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors"
+        style="background:{view === 'profiles' ? 'rgba(255,255,255,0.08)' : 'transparent'}"
+        aria-label="Profiles"
+        title="Voice profiles"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'profiles' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)'}">
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+      </button>
+      <button
+        onclick={() => { view = "settings"; }}
+        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors"
+        style="background:{view === 'settings' ? 'rgba(255,255,255,0.08)' : 'transparent'}"
+        aria-label="Settings"
+        title="Settings"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'settings' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)'}">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
       </button>
     </div>
   </div>
+
+  <!-- Detected app context -->
+  {#if detectedApp && view === "generate"}
+    <div class="flex items-center gap-1.5 px-3 py-1.5 bg-tint border-b border-border shrink-0">
+      <span class="text-[9px] font-semibold text-foreground">{detectedApp}</span>
+      <div class="w-1 h-1 rounded-full bg-signal shrink-0"></div>
+      <span class="text-[9px] text-muted">connected</span>
+    </div>
+  {/if}
 
   <!-- Accessibility permission banner -->
   {#if !hasPermissions && view === "generate"}
@@ -194,14 +196,10 @@
 
   <!-- Main content -->
   <div class="flex-1 min-h-0">
-    {#if view === "onboarding"}
-      <OnboardingView onComplete={handleOnboardingComplete} />
-    {:else if view === "generate"}
-      <GenerateView />
+    {#if view === "generate"}
+      <GenerateView isPopup={true} {hasProfile} {noApiKey} />
     {:else if view === "profiles"}
       <ProfilesView />
-    {:else if view === "extract"}
-      <ExtractView />
     {:else}
       <SettingsView />
     {/if}

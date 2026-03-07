@@ -25,6 +25,7 @@
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
   import { canLivingProfile, canSync, canExport } from "$lib/stores/subscription.svelte";
+  import { setPatchCount } from "$lib/stores/patches.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import { marked } from "marked";
@@ -86,6 +87,7 @@
         if (livingStatus.enabled) {
           const p = await getProfilePatches();
           patches = p;
+          setPatchCount(p.length);
         }
       } catch { /* not logged in or not available */ }
       // Load sync status
@@ -179,6 +181,7 @@
       isRefreshing = true;
       const result = await refreshLivingProfile();
       patches = result.patches;
+      setPatchCount(patches.length);
       refreshMessage = `Analyzed ${result.entries_analyzed} edits, found ${result.signals_found} signals, generated ${result.patches.length} patches.`;
     } catch (e) {
       error = friendlyError(e);
@@ -193,6 +196,7 @@
     try {
       await approveProfilePatch(patchId);
       patches = patches.filter((p) => p.patch_id !== patchId);
+      setPatchCount(patches.length);
     } catch (e) {
       error = friendlyError(e);
     }
@@ -203,6 +207,7 @@
     try {
       await rejectProfilePatch(patchId);
       patches = patches.filter((p) => p.patch_id !== patchId);
+      setPatchCount(patches.length);
     } catch (e) {
       error = friendlyError(e);
     }
@@ -339,6 +344,25 @@
         </p>
       </div>
 
+      {#if canLivingProfile() && activeTab !== "living"}
+        <div class="flex items-center gap-1.5">
+          <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
+          <span class="text-[10px] text-secondary font-medium">Living Profile</span>
+        </div>
+      {/if}
+
+      {#if patches.length > 0 && activeTab !== "living"}
+        <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg shrink-0">
+          <p class="flex-1 text-[10px] text-muted leading-relaxed">
+            {patches.length} suggested refinement{patches.length !== 1 ? "s" : ""}.
+            <button
+              onclick={() => switchTab("living")}
+              class="text-secondary font-medium cursor-pointer hover:text-foreground"
+            >Review</button>
+          </p>
+        </div>
+      {/if}
+
       {#if overview.formats.length > 0}
         <div class="p-3 bg-surface border border-border rounded-lg">
           <span class="text-[10px] font-medium text-muted uppercase tracking-wide">Formats</span>
@@ -422,7 +446,81 @@
                 {livingStatus?.enabled ? "On" : "Off"}
               </button>
             </div>
+            {#if livingStatus?.enabled}
+              <p class="text-[10px] text-secondary mt-2">
+                {livingStatus.edit_count} edits tracked locally
+              </p>
+            {/if}
           </div>
+
+          {#if livingStatus?.enabled}
+            <button
+              onclick={handleUploadAndRefresh}
+              disabled={isUploading || isRefreshing}
+              class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+            >
+              {#if isUploading}
+                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Uploading edits...</span>
+              {:else if isRefreshing}
+                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Analyzing patterns...</span>
+              {:else}
+                Refresh profile from edits
+              {/if}
+            </button>
+
+            {#if refreshMessage}
+              <p class="text-[10px] text-muted">{refreshMessage}</p>
+            {/if}
+
+            {#if patches.length > 0}
+              <div>
+                <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">
+                  Suggested changes ({patches.length})
+                </span>
+                <div class="flex flex-col gap-2">
+                  {#each patches as patch}
+                    <div class="p-3 bg-surface border border-border rounded-lg">
+                      <p class="text-xs text-foreground">{patch.description}</p>
+                      {#if patch.original_text}
+                        <p class="text-[10px] text-muted mt-1 font-mono line-through">{patch.original_text}</p>
+                      {/if}
+                      {#if patch.new_text}
+                        <p class="text-[10px] text-secondary mt-1 font-mono">{patch.new_text}</p>
+                      {/if}
+                      <div class="flex items-center justify-between mt-2">
+                        <span class="text-[10px] text-muted">
+                          {patch.section} &middot; {Math.round(patch.confidence * 100)}% confidence
+                        </span>
+                        <div class="flex gap-1">
+                          <button
+                            onclick={() => handleRejectPatch(patch.patch_id)}
+                            class="px-2 py-0.5 text-[10px] border border-border text-muted hover:text-error hover:border-error cursor-pointer rounded transition-colors"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            onclick={() => handleApprovePatch(patch.patch_id)}
+                            class="px-2 py-0.5 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium"
+                          >
+                            Approve
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {:else if !isRefreshing && !isUploading}
+              <p class="text-[10px] text-muted text-center py-4">
+                No pending suggestions. Keep writing and refresh periodically.
+              </p>
+            {/if}
+          {:else}
+            <p class="text-[10px] text-muted leading-relaxed">
+              Enable edit tracking to let Noren learn from how you modify generated text.
+              Your edits are stored locally and only uploaded when you choose to refresh.
+            </p>
+          {/if}
         </div>
         {:else}
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
@@ -440,6 +538,10 @@
           </div>
         </div>
         {/if}
+      {/if}
+
+      {#if canLivingProfile() && activeTab !== "living"}
+        <p class="text-[10px] text-muted shrink-0">Your profile refines automatically as you write.</p>
       {/if}
 
       <div class="flex items-center justify-between shrink-0 mt-auto">
@@ -506,6 +608,25 @@
       </button>
     </div>
 
+    {#if canLivingProfile() && activeTab !== "living"}
+      <div class="flex items-center gap-1.5 shrink-0">
+        <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
+        <span class="text-[10px] text-secondary font-medium">Living Profile</span>
+      </div>
+    {/if}
+
+    {#if patches.length > 0 && activeTab !== "living"}
+      <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg shrink-0">
+        <p class="flex-1 text-[10px] text-muted leading-relaxed">
+          {patches.length} suggested refinement{patches.length !== 1 ? "s" : ""}.
+          <button
+            onclick={() => switchTab("living")}
+            class="text-secondary font-medium cursor-pointer hover:text-foreground"
+          >Review</button>
+        </p>
+      </div>
+    {/if}
+
     <!-- Content -->
     <div class="flex-1 flex flex-col min-h-0">
       {#if activeTab === "living"}
@@ -568,6 +689,9 @@
                   {#each patches as patch}
                     <div class="p-3 bg-surface border border-border rounded-lg">
                       <p class="text-xs text-foreground">{patch.description}</p>
+                      {#if patch.original_text}
+                        <p class="text-[10px] text-muted mt-1 font-mono line-through">{patch.original_text}</p>
+                      {/if}
                       {#if patch.new_text}
                         <p class="text-[10px] text-secondary mt-1 font-mono">{patch.new_text}</p>
                       {/if}
@@ -657,6 +781,10 @@
           </button>
         </div>
       </div>
+    {/if}
+
+    {#if canLivingProfile() && activeTab !== "living"}
+      <p class="text-[10px] text-muted shrink-0">Your profile refines automatically as you write.</p>
     {/if}
 
     <!-- Actions -->

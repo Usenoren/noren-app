@@ -478,3 +478,7 @@ export async function deleteChat(id: string): Promise<void> {
 export async function factoryReset(): Promise<void> {
   return invoke("factory_reset");
 }
+
+export async function showMainWindow(): Promise<void> {
+  return invoke("show_main_window");
+}
