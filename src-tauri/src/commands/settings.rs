@@ -77,8 +77,8 @@ pub fn set_provider(
         noren_engine::ProviderConfig {
             name: provider.name,
             provider_type,
-            base_url: provider.base_url.ok_or("Base URL required for custom provider")?,
-            model: provider.model.ok_or("Model required for custom provider")?,
+            base_url: provider.base_url.unwrap_or_default(),
+            model: provider.model.unwrap_or_default(),
             requires_key: provider.requires_key.unwrap_or(true),
         }
     };
@@ -593,6 +593,187 @@ pub async fn list_claude_models(
         })
         .unwrap_or_default();
 
+    Ok(models)
+}
+
+// --- Gemini model discovery ---
+
+#[derive(Serialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub name: String,
+}
+
+#[tauri::command]
+pub async fn list_gemini_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<ModelInfo>, String> {
+    let config = state.config.lock().unwrap().clone();
+    let provider = &config.provider;
+
+    let api_key = if provider.requires_key {
+        keychain::get_api_key(&provider.keychain_id())
+    } else {
+        None
+    };
+    let api_key = api_key.ok_or("No API key set")?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(format!(
+            "https://generativelanguage.googleapis.com/v1beta/models?key={}",
+            api_key
+        ))
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach Gemini API: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err("Failed to fetch Gemini models".to_string());
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let models = data["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    let name = m["name"].as_str()?;
+                    let methods = m["supportedGenerationMethods"].as_array()?;
+                    let supports_generate = methods.iter().any(|v| v.as_str() == Some("generateContent"));
+                    if !supports_generate {
+                        return None;
+                    }
+                    // Filter out non-Gemini models (e.g. Gemma) that don't support system instructions
+                    let id_str = name.strip_prefix("models/").unwrap_or(name);
+                    if !id_str.starts_with("gemini-") {
+                        return None;
+                    }
+                    let display = m["displayName"].as_str().unwrap_or(name);
+                    let id = name.strip_prefix("models/").unwrap_or(name);
+                    Some(ModelInfo {
+                        id: id.to_string(),
+                        name: display.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(models)
+}
+
+// --- OpenAI model discovery ---
+
+#[tauri::command]
+pub async fn list_openai_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<ModelInfo>, String> {
+    let config = state.config.lock().unwrap().clone();
+    let provider = &config.provider;
+
+    let api_key = if provider.requires_key {
+        keychain::get_api_key(&provider.keychain_id())
+    } else {
+        None
+    };
+    let api_key = api_key.ok_or("No API key set")?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get("https://api.openai.com/v1/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach OpenAI API: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err("Failed to fetch OpenAI models".to_string());
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let mut models: Vec<ModelInfo> = data["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    let id = m["id"].as_str()?;
+                    if !(id.starts_with("gpt-") || id.starts_with("chatgpt-") || (id.starts_with('o') && id.chars().nth(1).is_some_and(|c| c.is_ascii_digit()))) {
+                        return None;
+                    }
+                    if id.contains("instruct") || id.contains("audio") || id.contains("realtime") {
+                        return None;
+                    }
+                    Some(ModelInfo {
+                        id: id.to_string(),
+                        name: id.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    models.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(models)
+}
+
+// --- Custom model discovery ---
+
+#[tauri::command]
+pub async fn list_custom_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<ModelInfo>, String> {
+    let config = state.config.lock().unwrap().clone();
+    let provider = &config.provider;
+    let base_url = provider.base_url.trim_end_matches('/');
+
+    let api_key = if provider.requires_key {
+        keychain::get_api_key(&provider.keychain_id())
+    } else {
+        None
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.get(format!("{}/models", base_url));
+    if let Some(key) = api_key {
+        req = req.header("Authorization", format!("Bearer {}", key));
+    }
+
+    let resp = req.send().await.map_err(|e| format!("Cannot reach API: {}", e))?;
+    if !resp.status().is_success() {
+        return Err("Failed to fetch models".to_string());
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let mut models: Vec<ModelInfo> = data["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    let id = m["id"].as_str()?;
+                    let name = m["name"].as_str().unwrap_or(id);
+                    Some(ModelInfo {
+                        id: id.to_string(),
+                        name: name.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    models.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(models)
 }
 

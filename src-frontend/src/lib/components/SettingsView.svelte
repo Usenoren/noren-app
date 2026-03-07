@@ -9,6 +9,9 @@
     testConnection,
     listOllamaModels,
     listClaudeModels,
+    listGeminiModels,
+    listOpenAIModels,
+    listCustomModels,
     getThinkingSettings,
     setThinkingSettings,
     updateHotkey,
@@ -52,11 +55,25 @@
   let ollamaModels = $state<string[]>([]);
   let ollamaLoading = $state(false);
 
+  // OpenAI model discovery
+  let openaiModels = $state<{ id: string; label: string }[]>([]);
+  let openaiModelsLoading = $state(false);
+
+  // Gemini model discovery
+  let geminiModels = $state<{ id: string; label: string }[]>([]);
+  let geminiModelsLoading = $state(false);
+
+  // Custom model discovery
+  let customModels = $state<{ id: string; label: string }[]>([]);
+  let customModelsLoading = $state(false);
+
   let requiresKey = $derived(settings?.provider.requiresKey ?? true);
   let isCustom = $derived(selectedPreset === "custom");
   let isOllama = $derived(selectedPreset === "ollama");
   let isClaudeToken = $derived(selectedPreset === "claude-token");
   let isAnthropicType = $derived(selectedPreset === "claude-token" || selectedPreset === "anthropic");
+  let isGemini = $derived(selectedPreset === "gemini");
+  let isOpenAI = $derived(selectedPreset === "openai");
   let isNorenPro = $derived(settings?.inference_mode === "noren_pro");
 
   // Dynamic Claude model list
@@ -104,6 +121,15 @@
       }
       if ((settings.provider.name === "claude-token" || settings.provider.name === "anthropic") && settings.has_key) {
         fetchClaudeModels();
+      }
+      if (settings.provider.name === "gemini" && settings.has_key) {
+        fetchGeminiModels();
+      }
+      if (settings.provider.name === "openai" && settings.has_key) {
+        fetchOpenAIModels();
+      }
+      if (settings.provider.name === "custom" && settings.provider.baseUrl) {
+        fetchCustomModels();
       }
     } catch (e) {
       error = friendlyError(e);
@@ -179,6 +205,54 @@
     }
   }
 
+  async function fetchGeminiModels() {
+    geminiModelsLoading = true;
+    try {
+      const models = await listGeminiModels();
+      geminiModels = models.map(m => ({ id: m.id, label: m.name }));
+      if (geminiModels.length > 0 && !geminiModels.find(m => m.id === modelInput)) {
+        modelInput = geminiModels[0].id;
+        await updateModel(modelInput);
+      }
+    } catch {
+      geminiModels = [];
+    } finally {
+      geminiModelsLoading = false;
+    }
+  }
+
+  async function fetchOpenAIModels() {
+    openaiModelsLoading = true;
+    try {
+      const models = await listOpenAIModels();
+      openaiModels = models.map(m => ({ id: m.id, label: m.name }));
+      if (openaiModels.length > 0 && !openaiModels.find(m => m.id === modelInput)) {
+        modelInput = openaiModels[0].id;
+        await updateModel(modelInput);
+      }
+    } catch {
+      openaiModels = [];
+    } finally {
+      openaiModelsLoading = false;
+    }
+  }
+
+  async function fetchCustomModels() {
+    customModelsLoading = true;
+    try {
+      const models = await listCustomModels();
+      customModels = models.map(m => ({ id: m.id, label: m.name }));
+      if (customModels.length > 0 && !customModels.find(m => m.id === modelInput)) {
+        modelInput = customModels[0].id;
+        await updateModel(modelInput);
+      }
+    } catch {
+      customModels = [];
+    } finally {
+      customModelsLoading = false;
+    }
+  }
+
   async function handleThinkingToggle() {
     extendedThinking = !extendedThinking;
     await setThinkingSettings(extendedThinking, thinkingBudget);
@@ -215,6 +289,9 @@
     if (presetId === "custom") {
       baseUrlInput = "";
       modelInput = "";
+      customModels = [];
+      await setProvider({ name: "custom", requiresKey: true });
+      await loadSettings();
       return;
     }
 
@@ -228,22 +305,29 @@
       if (presetId === "claude-token" || presetId === "anthropic") {
         await fetchClaudeModels();
       }
+      if (presetId === "gemini") {
+        await fetchGeminiModels();
+      }
+      if (presetId === "openai") {
+        await fetchOpenAIModels();
+      }
     } catch (e) {
       error = friendlyError(e);
     }
   }
 
   async function handleSaveCustom() {
-    if (!baseUrlInput.trim() || !modelInput.trim()) return;
+    if (!baseUrlInput.trim()) return;
     error = "";
     try {
       await setProvider({
         name: "custom",
         baseUrl: baseUrlInput.trim(),
-        model: modelInput.trim(),
+        model: modelInput.trim() || "",
         requiresKey: true,
       });
       await loadSettings();
+      await fetchCustomModels();
     } catch (e) {
       error = friendlyError(e);
     }
@@ -427,6 +511,78 @@
             class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
           >
             {#each claudeModels as m}
+              <option value={m.id}>{m.label}</option>
+            {/each}
+          </select>
+        {:else if isOpenAI && openaiModelsLoading}
+          <div class="flex items-center gap-2 text-xs text-muted">
+            <LoadingSpinner /> Fetching models...
+          </div>
+        {:else if isOpenAI && openaiModels.length > 0}
+          <select
+            bind:value={modelInput}
+            onchange={handleModelSave}
+            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          >
+            {#each openaiModels as m}
+              <option value={m.id}>{m.label}</option>
+            {/each}
+          </select>
+        {:else if isOpenAI}
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={modelInput}
+              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              placeholder="gpt-4o"
+            />
+            <button
+              onclick={handleModelSave}
+              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            >
+              Save
+            </button>
+          </div>
+        {:else if isGemini && geminiModelsLoading}
+          <div class="flex items-center gap-2 text-xs text-muted">
+            <LoadingSpinner /> Fetching models...
+          </div>
+        {:else if isGemini && geminiModels.length > 0}
+          <select
+            bind:value={modelInput}
+            onchange={handleModelSave}
+            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          >
+            {#each geminiModels as m}
+              <option value={m.id}>{m.label}</option>
+            {/each}
+          </select>
+        {:else if isGemini}
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={modelInput}
+              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              placeholder="gemini-2.0-flash"
+            />
+            <button
+              onclick={handleModelSave}
+              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            >
+              Save
+            </button>
+          </div>
+        {:else if isCustom && customModelsLoading}
+          <div class="flex items-center gap-2 text-xs text-muted">
+            <LoadingSpinner /> Fetching models...
+          </div>
+        {:else if isCustom && customModels.length > 0}
+          <select
+            bind:value={modelInput}
+            onchange={handleModelSave}
+            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          >
+            {#each customModels as m}
               <option value={m.id}>{m.label}</option>
             {/each}
           </select>

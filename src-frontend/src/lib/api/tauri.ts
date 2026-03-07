@@ -137,6 +137,18 @@ export async function listClaudeModels(): Promise<{ id: string; name: string }[]
   return invoke("list_claude_models");
 }
 
+export async function listGeminiModels(): Promise<{ id: string; name: string }[]> {
+  return invoke("list_gemini_models");
+}
+
+export async function listOpenAIModels(): Promise<{ id: string; name: string }[]> {
+  return invoke("list_openai_models");
+}
+
+export async function listCustomModels(): Promise<{ id: string; name: string }[]> {
+  return invoke("list_custom_models");
+}
+
 export async function getThinkingSettings(): Promise<{ enabled: boolean; budget: number }> {
   return invoke("get_thinking_settings");
 }
