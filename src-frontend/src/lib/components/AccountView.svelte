@@ -36,6 +36,7 @@
   let otpCode = $state("");
   let otpLoading = $state(false);
   let otpMessage = $state("");
+  let resendCooldown = $state(0);
 
   $effect(() => {
     loadAccount();
@@ -81,6 +82,7 @@
         pendingVerification = true;
         otpMessage = "Check your email for a verification code.";
         proPassword = "";
+        startResendCooldown();
       } else {
         await norenProLogin(proEmail.trim(), proPassword.trim());
         proEmail = "";
@@ -116,12 +118,22 @@
     }
   }
 
+  function startResendCooldown() {
+    resendCooldown = 60;
+    const interval = setInterval(() => {
+      resendCooldown--;
+      if (resendCooldown <= 0) clearInterval(interval);
+    }, 1000);
+  }
+
   async function handleResendOtp() {
+    if (resendCooldown > 0) return;
     error = "";
     otpMessage = "";
     try {
       const msg = await resendOtp();
       otpMessage = msg;
+      startResendCooldown();
     } catch (e) {
       error = friendlyError(e);
     }
@@ -340,9 +352,10 @@
       <div class="flex items-center justify-between">
         <button
           onclick={handleResendOtp}
-          class="text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer underline"
+          disabled={resendCooldown > 0}
+          class="text-[10px] transition-colors cursor-pointer {resendCooldown > 0 ? 'text-muted/50' : 'text-muted hover:text-foreground underline'}"
         >
-          Resend code
+          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
         </button>
         <button
           onclick={() => { pendingVerification = false; otpCode = ""; error = ""; otpMessage = ""; }}
