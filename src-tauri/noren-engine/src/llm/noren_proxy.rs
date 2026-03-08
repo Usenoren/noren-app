@@ -21,6 +21,10 @@ struct GenerateRequest {
     format: String,
     temperature: Option<f64>,
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chat_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chat_title: Option<String>,
 }
 
 /// Server-composed request — no messages, no profile content.
@@ -195,6 +199,8 @@ impl LlmClient for NorenProxyClient {
             format: self.format.clone(),
             temperature: options.temperature,
             max_tokens: options.max_tokens,
+            chat_id: options.chat_id.clone(),
+            chat_title: options.chat_title.clone(),
         };
 
         let resp = self

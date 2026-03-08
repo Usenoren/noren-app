@@ -162,6 +162,7 @@ pub async fn test_connection(
         temperature: Some(0.0),
         max_tokens: Some(5),
         thinking: None,
+        ..Default::default()
     };
 
     client

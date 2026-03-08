@@ -200,6 +200,8 @@ fn main() {
             commands::list_chats,
             commands::load_chat,
             commands::delete_chat,
+            commands::sync_delete_chat,
+            commands::sync_chats_from_server,
             commands::factory_reset,
         ])
         .setup(|app| {

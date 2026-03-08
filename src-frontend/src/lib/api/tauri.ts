@@ -467,6 +467,8 @@ export async function chatSend(params: {
   messages: ChatMessage[];
   format: string;
   attachments?: string[];
+  chatId?: string;
+  chatTitle?: string;
 }): Promise<GenerateResult> {
   return invoke("chat_send", params);
 }
@@ -485,6 +487,14 @@ export async function loadChat(id: string): Promise<Conversation> {
 
 export async function deleteChat(id: string): Promise<void> {
   return invoke("delete_chat", { id });
+}
+
+export async function syncDeleteChat(id: string): Promise<void> {
+  return invoke("sync_delete_chat", { id });
+}
+
+export async function syncChatsFromServer(): Promise<number> {
+  return invoke("sync_chats_from_server");
 }
 
 export async function factoryReset(): Promise<void> {

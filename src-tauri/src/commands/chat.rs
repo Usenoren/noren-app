@@ -74,6 +74,8 @@ pub async fn chat_send(
     messages: Vec<ChatMessage>,
     format: String,
     attachments: Option<Vec<String>>,
+    chat_id: Option<String>,
+    chat_title: Option<String>,
 ) -> Result<GenerateResult, String> {
     let config = state.config.lock().unwrap().clone();
 
@@ -136,6 +138,8 @@ pub async fn chat_send(
         temperature: Some(0.7),
         max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
         thinking,
+        chat_id,
+        chat_title,
     };
 
     // Create LLM client (same dual-path as generate)
@@ -249,5 +253,154 @@ pub fn delete_chat(id: String) -> Result<(), String> {
         std::fs::remove_file(&path)
             .map_err(|e| format!("Failed to delete chat: {}", e))?;
     }
+    Ok(())
+}
+
+/// Pull chats from server and merge into local storage (Pro users only).
+/// Returns the number of chats synced.
+#[tauri::command]
+pub async fn sync_chats_from_server(state: State<'_, AppState>) -> Result<u32, String> {
+    let config = state.config.lock().unwrap().clone();
+
+    if config.inference_mode != noren_engine::InferenceMode::NorenPro {
+        return Ok(0);
+    }
+
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai")
+        .trim_end_matches('/')
+        .to_string();
+
+    let auth_token = match crate::keychain::get_api_key("noren-pro-token") {
+        Some(t) => t,
+        None => return Ok(0),
+    };
+
+    let client = reqwest::Client::new();
+
+    // 1. Get manifest
+    let manifest_url = format!("{}/v1/sync/chats/manifest", server_url);
+    let resp = client
+        .get(&manifest_url)
+        .header("Authorization", format!("Bearer {}", auth_token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Ok(0);
+    }
+
+    let manifest: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let chats = manifest["chats"].as_array().ok_or("Invalid manifest")?;
+
+    let dir = chats_dir();
+    let mut synced: u32 = 0;
+
+    for entry in chats {
+        let chat_id = entry["chat_id"].as_str().unwrap_or_default();
+        if chat_id.is_empty() || validate_chat_id(chat_id).is_err() {
+            continue;
+        }
+
+        let is_deleted = entry["is_deleted"].as_bool().unwrap_or(false);
+        let remote_updated = entry["updated_at"].as_str().unwrap_or_default();
+        let local_path = dir.join(format!("{}.json", chat_id));
+
+        if is_deleted {
+            let _ = std::fs::remove_file(&local_path);
+            continue;
+        }
+
+        // Skip if local is up to date
+        if local_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&local_path) {
+                if let Ok(conv) = serde_json::from_str::<Conversation>(&content) {
+                    if conv.updated_at >= remote_updated.to_string() {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Download from server
+        let dl_url = format!("{}/v1/sync/chats/{}", server_url, chat_id);
+        let dl_resp = client
+            .get(&dl_url)
+            .header("Authorization", format!("Bearer {}", auth_token))
+            .send()
+            .await;
+
+        if let Ok(resp) = dl_resp {
+            if resp.status().is_success() {
+                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    let title = data["title"].as_str().unwrap_or("Untitled").to_string();
+                    let updated_at = data["updated_at"].as_str().unwrap_or_default().to_string();
+                    let messages_val = &data["messages"];
+
+                    let mut msgs = Vec::new();
+                    if let Some(arr) = messages_val.as_array() {
+                        for m in arr {
+                            msgs.push(ChatMessageEntry {
+                                role: m["role"].as_str().unwrap_or("user").to_string(),
+                                content: m["content"].as_str().unwrap_or_default().to_string(),
+                            });
+                        }
+                    }
+
+                    let conv = Conversation {
+                        id: chat_id.to_string(),
+                        title,
+                        format: "general".to_string(),
+                        created_at: updated_at.clone(),
+                        updated_at,
+                        total_tokens: 0,
+                        messages: msgs,
+                    };
+
+                    if let Ok(json) = serde_json::to_string_pretty(&conv) {
+                        let _ = std::fs::write(&local_path, json);
+                        synced += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(synced)
+}
+
+/// Delete a chat on the server (Pro users only). Fire-and-forget.
+#[tauri::command]
+pub async fn sync_delete_chat(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    validate_chat_id(&id)?;
+    let config = state.config.lock().unwrap().clone();
+
+    if config.inference_mode != noren_engine::InferenceMode::NorenPro {
+        return Ok(()); // BYOK — nothing to sync
+    }
+
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai")
+        .trim_end_matches('/')
+        .to_string();
+
+    let auth_token = match crate::keychain::get_api_key("noren-pro-token") {
+        Some(t) => t,
+        None => return Ok(()), // Not logged in
+    };
+
+    let url = format!("{}/v1/sync/chats/{}", server_url, id);
+    let client = reqwest::Client::new();
+    let _ = client
+        .delete(&url)
+        .header("Authorization", format!("Bearer {}", auth_token))
+        .send()
+        .await;
+
     Ok(())
 }

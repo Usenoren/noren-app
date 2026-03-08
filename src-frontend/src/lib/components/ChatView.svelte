@@ -8,6 +8,8 @@
     listChats,
     loadChat,
     deleteChat,
+    syncDeleteChat,
+    syncChatsFromServer,
     readFileAsText,
     type ChatMessage,
     type ConversationSummary,
@@ -80,7 +82,18 @@
       }
     });
 
+    // Pull remote chats then refresh list
+    syncChatsFromServer().then(() => refreshHistory()).catch(() => {});
     refreshHistory();
+  });
+
+  // Sync chats when window regains focus
+  $effect(() => {
+    const onFocus = () => {
+      syncChatsFromServer().then(() => refreshHistory()).catch(() => {});
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   });
 
   // --- Helpers ---
@@ -224,12 +237,24 @@
     isLoading = true;
     scrollToBottom();
 
+    // Ensure conversation ID exists before sending (needed for server-side chat sync)
+    if (!conversationId) {
+      conversationId = generateId();
+      conversationCreatedAt = nowISO();
+    }
+
     try {
       const attachmentContents = attachedFiles.length > 0
         ? attachedFiles.map((f) => f.content)
         : undefined;
 
-      const result = await chatSend({ messages, format, attachments: attachmentContents });
+      const result = await chatSend({
+        messages,
+        format,
+        attachments: attachmentContents,
+        chatId: conversationId,
+        chatTitle: generateTitle(messages[0].content),
+      });
       attachedFiles = [];
       const assistantMessage: ChatMessage = { role: "assistant", content: result.text };
       messages = [...messages, assistantMessage];
@@ -274,6 +299,7 @@
     e.stopPropagation();
     try {
       await deleteChat(id);
+      syncDeleteChat(id).catch(() => {}); // fire-and-forget server sync
       if (conversationId === id) {
         handleNewChat();
       }

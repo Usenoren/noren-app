@@ -53,6 +53,7 @@ async fn generate_pro(
         temperature: Some(0.7),
         max_tokens: Some(4096),
         thinking: None,
+        ..Default::default()
     };
 
     let response = client
@@ -157,6 +158,7 @@ async fn generate_byok(
         temperature: Some(0.7),
         max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
         thinking,
+        ..Default::default()
     };
 
     let response = client
@@ -228,6 +230,7 @@ pub async fn generate_comparison(
         temperature: Some(0.7),
         max_tokens: Some(4096),
         thinking: None,
+        ..Default::default()
     };
 
     // For "without voice", always use legacy messages path (even for Pro)

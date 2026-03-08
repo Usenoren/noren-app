@@ -23,6 +23,8 @@ pub struct LlmOptions {
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
     pub thinking: Option<ThinkingConfig>,
+    pub chat_id: Option<String>,
+    pub chat_title: Option<String>,
 }
 
 #[derive(Debug, Clone)]
