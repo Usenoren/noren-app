@@ -117,6 +117,14 @@ export async function norenProLogout(): Promise<void> {
   return invoke("noren_pro_logout");
 }
 
+export async function verifyEmail(code: string): Promise<string> {
+  return invoke("verify_email", { code });
+}
+
+export async function resendOtp(): Promise<string> {
+  return invoke("resend_otp");
+}
+
 export async function getNorenProUsage(): Promise<NorenProStatus> {
   return invoke("get_noren_pro_usage");
 }

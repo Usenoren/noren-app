@@ -156,6 +156,8 @@ fn main() {
             commands::noren_pro_login,
             commands::noren_pro_signup,
             commands::noren_pro_logout,
+            commands::verify_email,
+            commands::resend_otp,
             commands::google_oauth_init,
             commands::google_oauth_poll,
             commands::get_noren_pro_usage,

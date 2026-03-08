@@ -310,6 +310,60 @@ pub fn noren_pro_logout() -> Result<(), String> {
     Ok(())
 }
 
+// --- Email OTP verification ---
+
+#[tauri::command]
+pub async fn verify_email(
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/verify-email", server_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::json!({ "code": code }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Verification failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(data["message"].as_str().unwrap_or("Email verified").to_string())
+}
+
+#[tauri::command]
+pub async fn resend_otp(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/resend-otp", server_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Failed to resend: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(data["message"].as_str().unwrap_or("Code sent").to_string())
+}
+
 // --- Google OAuth ---
 
 #[derive(Serialize)]
