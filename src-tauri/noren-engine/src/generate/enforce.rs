@@ -16,6 +16,7 @@ pub fn compose_system_prompt(
     format: &str,
     enforcement_level: &EnforcementLevel,
     user_request: &str,
+    mode: &str,
 ) -> Result<String, EngineError> {
     // Try to extract system prompt template between ```\n and \n```
     let re = Regex::new(r"### System Prompt\s*\n\s*```\n([\s\S]*?)\n```").unwrap();
@@ -32,6 +33,7 @@ pub fn compose_system_prompt(
         );
         variables.insert("CORE_IDENTITY".to_string(), core_identity.to_string());
         variables.insert("USER_REQUEST".to_string(), user_request.to_string());
+        variables.insert("MODE".to_string(), mode.to_string());
 
         if let Some(layer) = context_layer {
             variables.insert("CONTEXT_LAYER".to_string(), layer.to_string());
@@ -103,6 +105,7 @@ Some footer text.
             "twitter",
             &EnforcementLevel::Guided,
             "Write a tweet about focus",
+            "generate",
         )
         .unwrap();
 
@@ -124,6 +127,7 @@ Some footer text.
             "email",
             &EnforcementLevel::Strict,
             "Write a cold email",
+            "generate",
         )
         .unwrap();
 
@@ -143,6 +147,7 @@ Some footer text.
             "longform",
             &EnforcementLevel::Light,
             "Write an essay",
+            "generate",
         )
         .unwrap();
 
@@ -159,6 +164,7 @@ Some footer text.
             "general",
             &EnforcementLevel::Guided,
             "Write a tweet about focus",
+            "generate",
         )
         .unwrap();
 
@@ -176,6 +182,7 @@ Some footer text.
             "twitter",
             &EnforcementLevel::Guided,
             "Write a tweet",
+            "generate",
         )
         .unwrap();
 

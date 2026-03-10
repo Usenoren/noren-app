@@ -108,6 +108,7 @@ async fn generate_byok(
         format,
         &enforcement_level,
         prompt,
+        "generate",
     )
     .map_err(|e| e.to_string())?;
 
