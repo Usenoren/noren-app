@@ -221,6 +221,9 @@ pub struct Config {
     /// Developer debug mode — enables dev-only features like viewing server profiles
     #[serde(rename = "debugMode", default)]
     pub debug_mode: bool,
+    /// Last seen announcement timestamp (ISO 8601) — tracks read state locally
+    #[serde(rename = "lastSeenAnnouncementTs", skip_serializing_if = "Option::is_none")]
+    pub last_seen_announcement_ts: Option<String>,
 }
 
 fn default_thinking_budget() -> u32 {
@@ -240,6 +243,7 @@ impl Default for Config {
             extended_thinking: false,
             thinking_budget: default_thinking_budget(),
             debug_mode: false,
+            last_seen_announcement_ts: None,
         }
     }
 }

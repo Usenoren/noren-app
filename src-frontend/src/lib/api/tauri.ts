@@ -512,3 +512,27 @@ export async function factoryReset(): Promise<void> {
 export async function showMainWindow(): Promise<void> {
   return invoke("show_main_window");
 }
+
+// ── Announcements ──────────────────────────────────────────────
+
+export interface Announcement {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  cta_url: string | null;
+  cta_label: string | null;
+  published_at: string;
+}
+
+export async function fetchAnnouncements(since?: string): Promise<Announcement[]> {
+  return invoke("fetch_announcements", { since: since ?? null });
+}
+
+export async function getAnnouncementSeen(): Promise<string | null> {
+  return invoke("get_announcement_seen");
+}
+
+export async function saveAnnouncementSeen(ts: string): Promise<void> {
+  return invoke("save_announcement_seen", { ts });
+}

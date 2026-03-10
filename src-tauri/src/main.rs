@@ -205,6 +205,9 @@ fn main() {
             commands::sync_delete_chat,
             commands::sync_chats_from_server,
             commands::factory_reset,
+            commands::fetch_announcements,
+            commands::get_announcement_seen,
+            commands::save_announcement_seen,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

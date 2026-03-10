@@ -70,7 +70,7 @@ fn pending_path() -> PathBuf {
     noren_dir().join("extraction_pending.json")
 }
 
-fn server_url_from_config(state: &State<'_, AppState>) -> String {
+pub(crate) fn server_url_from_config(state: &State<'_, AppState>) -> String {
     let config = state.config.lock().unwrap();
     config
         .server_url

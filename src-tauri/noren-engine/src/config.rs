@@ -41,6 +41,7 @@ pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
         extended_thinking: file_config.extended_thinking.unwrap_or(false),
         thinking_budget: file_config.thinking_budget.unwrap_or(10000),
         debug_mode: file_config.debug_mode.unwrap_or(false),
+        last_seen_announcement_ts: file_config.last_seen_announcement_ts,
     }
 }
 
@@ -57,6 +58,7 @@ struct PartialConfig {
     extended_thinking: Option<bool>,
     thinking_budget: Option<u32>,
     debug_mode: Option<bool>,
+    last_seen_announcement_ts: Option<String>,
 }
 
 fn config_dir() -> PathBuf {
@@ -160,6 +162,10 @@ fn load_file_config() -> PartialConfig {
         debug_mode: json
             .get("debugMode")
             .and_then(|v| v.as_bool()),
+        last_seen_announcement_ts: json
+            .get("lastSeenAnnouncementTs")
+            .and_then(|v| v.as_str())
+            .map(String::from),
     }
 }
 

@@ -25,6 +25,7 @@
   import AccountView from "./AccountView.svelte";
   import OnboardingView from "./OnboardingView.svelte";
   import NorenMark from "./NorenMark.svelte";
+  import AnnouncementBell from "./AnnouncementBell.svelte";
 
   type View = "generate" | "chat" | "profiles" | "extract" | "account" | "settings" | "onboarding";
   let view: View = $state("generate");
@@ -178,9 +179,12 @@
           {/each}
         </div>
 
-        <!-- Bottom branding -->
-        <div class="mt-auto pb-0.5 z-[1]" style="color:rgba(255,255,255,0.15)">
-          <NorenMark width={16} height={19} />
+        <!-- Bottom: announcements + branding -->
+        <div class="mt-auto flex flex-col items-center gap-1.5 pb-0.5 z-[1]">
+          <AnnouncementBell />
+          <div style="color:rgba(255,255,255,0.15)">
+            <NorenMark width={16} height={19} />
+          </div>
         </div>
       </nav>
 

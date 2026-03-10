@@ -1,3 +1,4 @@
+pub mod announcements;
 pub mod attachments;
 pub mod billing;
 pub mod chat;
@@ -8,6 +9,7 @@ pub mod profiles;
 pub mod settings;
 pub mod sync;
 
+pub use announcements::*;
 pub use attachments::*;
 pub use billing::*;
 pub use chat::*;
