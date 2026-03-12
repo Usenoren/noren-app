@@ -239,9 +239,15 @@ pub async fn noren_pro_login(
     let token = data["access_token"]
         .as_str()
         .ok_or("No access token in response")?;
+    let refresh = data["refresh_token"]
+        .as_str()
+        .unwrap_or("");
 
-    // Store token and email in keychain
+    // Store tokens and email in keychain
     keychain::store_api_key("noren-pro-token", token)?;
+    if !refresh.is_empty() {
+        keychain::store_api_key("noren-pro-refresh", refresh)?;
+    }
     keychain::store_api_key("noren-pro-email", &email)?;
 
     Ok(NorenProStatus {
@@ -288,9 +294,15 @@ pub async fn noren_pro_signup(
     let token = data["access_token"]
         .as_str()
         .ok_or("No access token in response")?;
+    let refresh = data["refresh_token"]
+        .as_str()
+        .unwrap_or("");
 
-    // Store token and email in keychain
+    // Store tokens and email in keychain
     keychain::store_api_key("noren-pro-token", token)?;
+    if !refresh.is_empty() {
+        keychain::store_api_key("noren-pro-refresh", refresh)?;
+    }
     keychain::store_api_key("noren-pro-email", &email)?;
 
     Ok(NorenProStatus {
@@ -306,6 +318,7 @@ pub async fn noren_pro_signup(
 #[tauri::command]
 pub fn noren_pro_logout() -> Result<(), String> {
     let _ = keychain::delete_api_key("noren-pro-token");
+    let _ = keychain::delete_api_key("noren-pro-refresh");
     let _ = keychain::delete_api_key("noren-pro-email");
     Ok(())
 }
@@ -457,11 +470,17 @@ pub async fn google_oauth_poll(
         let access_token = data["access_token"]
             .as_str()
             .ok_or("No access_token in poll response")?;
+        let refresh_token = data["refresh_token"]
+            .as_str()
+            .unwrap_or("");
         let email = data["email"]
             .as_str()
             .ok_or("No email in poll response")?;
 
         keychain::store_api_key("noren-pro-token", access_token)?;
+        if !refresh_token.is_empty() {
+            keychain::store_api_key("noren-pro-refresh", refresh_token)?;
+        }
         keychain::store_api_key("noren-pro-email", email)?;
     }
 
@@ -484,11 +503,18 @@ pub async fn get_noren_pro_usage(
         .ok_or("Not logged in")?;
     let email = keychain::get_api_key("noren-pro-email");
 
-    let proxy = noren_engine::NorenProxyClient::new(
+    let refresh_token = keychain::get_api_key("noren-pro-refresh");
+    let mut proxy = noren_engine::NorenProxyClient::new(
         server_url.to_string(),
         auth_token,
         "general".to_string(),
     );
+    if let Some(rt) = refresh_token {
+        proxy = proxy.with_token_refresh(rt, |new_access, new_refresh| {
+            let _ = keychain::store_api_key("noren-pro-token", &new_access);
+            let _ = keychain::store_api_key("noren-pro-refresh", &new_refresh);
+        });
+    }
 
     let (used, limit, requests) = proxy.get_usage().await.map_err(|e| e.to_string())?;
 
@@ -876,6 +902,7 @@ pub fn factory_reset(state: State<'_, AppState>) -> Result<(), String> {
     // Clear all Noren keychain entries
     let keychain_accounts = [
         "noren-pro-token",
+        "noren-pro-refresh",
         "noren-pro-email",
         "anthropic",
         "openai",

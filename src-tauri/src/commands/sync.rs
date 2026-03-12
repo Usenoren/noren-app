@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::{keychain, AppState};
+use crate::AppState;
 
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
@@ -27,9 +27,6 @@ pub async fn sync_profile_up(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
     // Read local profile files
     let plaintext = read_profile_files(&config.profile_dir)?;
     if plaintext.is_empty() {
@@ -44,24 +41,32 @@ pub async fn sync_profile_up(
     let checksum = sha256_hex(&plaintext);
 
     // Get current remote version to determine next version
-    let client = reqwest::Client::new();
-    let version = get_remote_version(&client, server_url, &auth_token)
-        .await
-        .unwrap_or(0) + 1;
+    let version_resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .get(format!("{}/v1/sync/status", server_url))
+            .bearer_auth(token)
+    })
+    .await?;
+    let version = if version_resp.status().is_success() {
+        let data: serde_json::Value = version_resp.json().await.map_err(|e| e.to_string())?;
+        data["remote_version"].as_u64().unwrap_or(0) + 1
+    } else {
+        1
+    };
 
     // Upload
-    let resp: reqwest::Response = client
-        .put(format!("{}/v1/sync/profile", server_url))
-        .bearer_auth(&auth_token)
-        .json(&serde_json::json!({
-            "encrypted_data": encrypted_data,
-            "nonce": nonce,
-            "version": version,
-            "checksum": checksum,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Upload failed: {}", e))?;
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .put(format!("{}/v1/sync/profile", server_url))
+            .bearer_auth(token)
+            .json(&serde_json::json!({
+                "encrypted_data": encrypted_data,
+                "nonce": nonce,
+                "version": version,
+                "checksum": checksum,
+            }))
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -80,16 +85,12 @@ pub async fn sync_profile_down(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .get(format!("{}/v1/sync/profile", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Download failed: {}", e))?;
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .get(format!("{}/v1/sync/profile", server_url))
+            .bearer_auth(token)
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -137,16 +138,12 @@ pub async fn get_sync_status(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .get(format!("{}/v1/sync/status", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Failed: {}", e))?;
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .get(format!("{}/v1/sync/status", server_url))
+            .bearer_auth(token)
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -281,26 +278,3 @@ fn write_profile_files(profile_dir: &std::path::Path, data: &[u8]) -> Result<(),
     Ok(())
 }
 
-async fn get_remote_version(
-    client: &reqwest::Client,
-    server_url: &str,
-    auth_token: &str,
-) -> Result<u64, String> {
-    let resp: reqwest::Response = client
-        .get(format!("{}/v1/sync/status", server_url))
-        .bearer_auth(auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err("Failed to get remote version".to_string());
-    }
-
-    let data: serde_json::Value = resp
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e: reqwest::Error| e.to_string())?;
-
-    Ok(data["remote_version"].as_u64().unwrap_or(0))
-}

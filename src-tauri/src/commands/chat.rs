@@ -152,11 +152,19 @@ pub async fn chat_send(
                 .to_string();
             let auth_token = crate::keychain::get_api_key("noren-pro-token")
                 .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
-            Box::new(noren_engine::NorenProxyClient::new(
+            let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+            let mut proxy = noren_engine::NorenProxyClient::new(
                 server_url,
                 auth_token,
                 format,
-            ))
+            );
+            if let Some(rt) = refresh_token {
+                proxy = proxy.with_token_refresh(rt, |new_access, new_refresh| {
+                    let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+                    let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+                });
+            }
+            Box::new(proxy)
         } else {
             let api_key = if config.provider.requires_key {
                 crate::keychain::get_api_key(&config.provider.keychain_id())
@@ -273,25 +281,21 @@ pub async fn sync_chats_from_server(state: State<'_, AppState>) -> Result<u32, S
         .trim_end_matches('/')
         .to_string();
 
-    let auth_token = match crate::keychain::get_api_key("noren-pro-token") {
-        Some(t) => t,
-        None => return Ok(0),
-    };
-
-    let client = reqwest::Client::new();
+    if crate::keychain::get_api_key("noren-pro-token").is_none() {
+        return Ok(0);
+    }
 
     // 1. Get manifest
     let manifest_url = format!("{}/v1/sync/chats/manifest", server_url);
-    let resp = client
-        .get(&manifest_url)
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client.get(&manifest_url).bearer_auth(token)
+    })
+    .await;
 
-    if !resp.status().is_success() {
-        return Ok(0);
-    }
+    let resp = match resp {
+        Ok(r) if r.status().is_success() => r,
+        _ => return Ok(0),
+    };
 
     let manifest: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     let chats = manifest["chats"].as_array().ok_or("Invalid manifest")?;
@@ -327,11 +331,10 @@ pub async fn sync_chats_from_server(state: State<'_, AppState>) -> Result<u32, S
 
         // Download from server
         let dl_url = format!("{}/v1/sync/chats/{}", server_url, chat_id);
-        let dl_resp = client
-            .get(&dl_url)
-            .header("Authorization", format!("Bearer {}", auth_token))
-            .send()
-            .await;
+        let dl_resp = crate::auth_client::authed_request(&server_url, |client, token| {
+            client.get(&dl_url).bearer_auth(token)
+        })
+        .await;
 
         if let Ok(resp) = dl_resp {
             if resp.status().is_success() {
@@ -389,18 +392,15 @@ pub async fn sync_delete_chat(state: State<'_, AppState>, id: String) -> Result<
         .trim_end_matches('/')
         .to_string();
 
-    let auth_token = match crate::keychain::get_api_key("noren-pro-token") {
-        Some(t) => t,
-        None => return Ok(()), // Not logged in
-    };
+    if crate::keychain::get_api_key("noren-pro-token").is_none() {
+        return Ok(()); // Not logged in
+    }
 
     let url = format!("{}/v1/sync/chats/{}", server_url, id);
-    let client = reqwest::Client::new();
-    let _ = client
-        .delete(&url)
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .send()
-        .await;
+    let _ = crate::auth_client::authed_request(&server_url, |client, token| {
+        client.delete(&url).bearer_auth(token)
+    })
+    .await;
 
     Ok(())
 }

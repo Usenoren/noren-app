@@ -69,6 +69,17 @@ pub fn load_profile(
     Ok((core_identity, contexts))
 }
 
+/// Load calibration data from a profile directory.
+/// Returns None if calibration.json doesn't exist or is unparseable.
+pub fn load_calibration(profile_dir: &Path) -> Option<crate::types::CalibrationData> {
+    let calibration_path = profile_dir.join("calibration.json");
+    if !calibration_path.exists() {
+        return None;
+    }
+    let data = std::fs::read_to_string(&calibration_path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
 /// List available context formats in a profile directory
 pub fn list_formats(profile_dir: &Path) -> Vec<String> {
     let contexts_dir = profile_dir.join("contexts");

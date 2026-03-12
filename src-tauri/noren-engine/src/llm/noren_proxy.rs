@@ -34,6 +34,12 @@ struct ServerComposedRequest {
     prompt: String,
     format: String,
     level: String,
+    /// Pipeline selection: "internalized" (default) or "light"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
+    /// Generation mode: "generate" (default) or "adapt"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     context: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,6 +74,8 @@ pub struct NorenProxyClient {
     auth_token: String,
     format: String,
     http: reqwest::Client,
+    refresh_token: Option<String>,
+    on_tokens_refreshed: Option<Box<dyn Fn(String, String) + Send + Sync>>,
 }
 
 impl NorenProxyClient {
@@ -77,7 +85,50 @@ impl NorenProxyClient {
             auth_token,
             format,
             http: reqwest::Client::new(),
+            refresh_token: None,
+            on_tokens_refreshed: None,
         }
+    }
+
+    /// Enable automatic token refresh on 401 responses.
+    /// `refresh_token`: the current refresh token.
+    /// `on_refreshed`: callback invoked with (new_access, new_refresh) after a successful refresh.
+    pub fn with_token_refresh(
+        mut self,
+        refresh_token: String,
+        on_refreshed: impl Fn(String, String) + Send + Sync + 'static,
+    ) -> Self {
+        self.refresh_token = Some(refresh_token);
+        self.on_tokens_refreshed = Some(Box::new(on_refreshed));
+        self
+    }
+
+    /// Attempt to refresh the access token using the stored refresh token.
+    /// Returns the new access token on success.
+    async fn try_refresh(&self) -> Option<String> {
+        let refresh = self.refresh_token.as_deref()?;
+
+        let resp = self
+            .http
+            .post(format!("{}/v1/auth/refresh", self.server_url))
+            .json(&serde_json::json!({ "refresh_token": refresh }))
+            .send()
+            .await
+            .ok()?;
+
+        if !resp.status().is_success() {
+            return None;
+        }
+
+        let data: serde_json::Value = resp.json().await.ok()?;
+        let new_access = data["access_token"].as_str()?.to_string();
+        let new_refresh = data["refresh_token"].as_str()?.to_string();
+
+        if let Some(ref cb) = self.on_tokens_refreshed {
+            cb(new_access.clone(), new_refresh);
+        }
+
+        Some(new_access)
     }
 
     /// Generate text with server-side prompt composition.
@@ -90,6 +141,8 @@ impl NorenProxyClient {
         prompt: &str,
         format: &str,
         level: &str,
+        pipeline: Option<&str>,
+        generation_mode: Option<&str>,
         context: Option<&str>,
         attachments: Option<&[String]>,
         options: &LlmOptions,
@@ -100,6 +153,8 @@ impl NorenProxyClient {
             prompt: prompt.to_string(),
             format: format.to_string(),
             level: level.to_string(),
+            mode: pipeline.map(|s| s.to_string()),
+            generation_mode: generation_mode.map(|s| s.to_string()),
             context: context.map(|s| s.to_string()),
             attachments: attachments.map(|a| a.to_vec()),
             temperature: options.temperature,
@@ -114,6 +169,35 @@ impl NorenProxyClient {
             .send()
             .await
             .map_err(|e| EngineError::Network(e.to_string()))?;
+
+        // Handle 401 with token refresh retry
+        if resp.status().as_u16() == 401 {
+            if let Some(new_token) = self.try_refresh().await {
+                let retry = self
+                    .http
+                    .post(&url)
+                    .header("Authorization", format!("Bearer {}", new_token))
+                    .json(&req)
+                    .send()
+                    .await
+                    .map_err(|e| EngineError::Network(e.to_string()))?;
+
+                if retry.status().is_success() {
+                    let gen: GenerateResponse = retry
+                        .json::<GenerateResponse>()
+                        .await
+                        .map_err(|e: reqwest::Error| EngineError::Network(e.to_string()))?;
+                    return Ok(LlmResponse {
+                        content: gen.content,
+                        input_tokens: gen.input_tokens,
+                        output_tokens: gen.output_tokens,
+                    });
+                }
+            }
+            return Err(EngineError::Network(
+                "Session expired. Please sign in again.".to_string(),
+            ));
+        }
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -150,6 +234,30 @@ impl NorenProxyClient {
             .send()
             .await
             .map_err(|e| EngineError::Network(e.to_string()))?;
+
+        // Handle 401 with token refresh retry
+        if resp.status().as_u16() == 401 {
+            if let Some(new_token) = self.try_refresh().await {
+                let retry = self
+                    .http
+                    .get(&url)
+                    .header("Authorization", format!("Bearer {}", new_token))
+                    .send()
+                    .await
+                    .map_err(|e| EngineError::Network(e.to_string()))?;
+
+                if retry.status().is_success() {
+                    let usage: UsageResponse = retry
+                        .json::<UsageResponse>()
+                        .await
+                        .map_err(|e: reqwest::Error| EngineError::Network(e.to_string()))?;
+                    return Ok((usage.tokens_used, usage.tokens_limit, usage.requests_this_month));
+                }
+            }
+            return Err(EngineError::Network(
+                "Session expired. Please sign in again.".to_string(),
+            ));
+        }
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -212,11 +320,39 @@ impl LlmClient for NorenProxyClient {
             .await
             .map_err(|e| EngineError::Network(e.to_string()))?;
 
+        // Handle 401 with token refresh retry
+        if resp.status().as_u16() == 401 {
+            if let Some(new_token) = self.try_refresh().await {
+                let retry = self
+                    .http
+                    .post(&url)
+                    .header("Authorization", format!("Bearer {}", new_token))
+                    .json(&req)
+                    .send()
+                    .await
+                    .map_err(|e| EngineError::Network(e.to_string()))?;
+
+                if retry.status().is_success() {
+                    let gen: GenerateResponse = retry
+                        .json::<GenerateResponse>()
+                        .await
+                        .map_err(|e: reqwest::Error| EngineError::Network(e.to_string()))?;
+                    return Ok(LlmResponse {
+                        content: gen.content,
+                        input_tokens: gen.input_tokens,
+                        output_tokens: gen.output_tokens,
+                    });
+                }
+            }
+            return Err(EngineError::Network(
+                "Session expired. Please sign in again.".to_string(),
+            ));
+        }
+
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body: String = resp.text().await.unwrap_or_default();
 
-            // Try to parse structured error
             if let Ok(err) = serde_json::from_str::<ErrorDetail>(&body) {
                 return Err(EngineError::Network(err.detail));
             }

@@ -1,7 +1,39 @@
+use std::collections::HashMap;
+
 use serde::Serialize;
 use tauri::State;
 
 use crate::AppState;
+
+const FORMAT_FAMILIES: &[&[&str]] = &[
+    &["blog", "article", "newsletter", "essay"],
+    &["tweet", "thread", "twitter"],
+    &["email", "slack"],
+    &["linkedin", "memo"],
+];
+
+/// Resolve a format to a context key using family fallback.
+/// If the exact format exists in contexts, return its value directly.
+/// Otherwise, find its family and return the first sibling that has a context.
+fn resolve_context_format<'a>(
+    format: &str,
+    contexts: &'a HashMap<String, String>,
+) -> Option<&'a String> {
+    if let Some(ctx) = contexts.get(format) {
+        return Some(ctx);
+    }
+
+    let family = FORMAT_FAMILIES.iter().find(|f| f.contains(&format));
+    if let Some(family) = family {
+        for sibling in *family {
+            if let Some(ctx) = contexts.get(*sibling) {
+                return Some(ctx);
+            }
+        }
+    }
+
+    None
+}
 
 #[derive(Serialize)]
 pub struct GenerateResult {
@@ -16,27 +48,36 @@ pub async fn generate(
     prompt: String,
     format: String,
     level: String,
+    mode: Option<String>,
+    pipeline: Option<String>,
     context: Option<String>,
     attachments: Option<Vec<String>>,
 ) -> Result<GenerateResult, String> {
     let config = state.config.lock().unwrap().clone();
+    let mode = mode.as_deref().unwrap_or("generate");
+    let pipeline = match pipeline.as_deref() {
+        Some("light") => noren_engine::GenerationPipeline::LightEnforcement,
+        _ => noren_engine::GenerationPipeline::Internalized,
+    };
 
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
         // --- Pro path: server loads profile + composes prompt ---
-        generate_pro(&config, &prompt, &format, &level, context.as_deref(), attachments.as_deref()).await
+        generate_pro(&config, &prompt, &format, &level, mode, &pipeline, context.as_deref(), attachments.as_deref()).await
     } else {
         // --- BYOK path: client loads profile + composes prompt locally ---
-        generate_byok(&config, state.encryption_key, &prompt, &format, &level, context.as_deref(), attachments.as_deref()).await
+        generate_byok(&config, state.encryption_key, &prompt, &format, &level, mode, &pipeline, context.as_deref(), attachments.as_deref()).await
     }
 }
 
 /// Pro path — server handles profile + prompt composition + inference.
-/// Client sends only { prompt, format, level }.
+/// Client sends { prompt, format, level, mode, generation_mode }.
 async fn generate_pro(
     config: &noren_engine::Config,
     prompt: &str,
     format: &str,
     level: &str,
+    mode: &str,
+    pipeline: &noren_engine::GenerationPipeline,
     context: Option<&str>,
     attachments: Option<&[String]>,
 ) -> Result<GenerateResult, String> {
@@ -48,16 +89,42 @@ async fn generate_pro(
     let auth_token = crate::keychain::get_api_key("noren-pro-token")
         .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
 
-    let client = noren_engine::NorenProxyClient::new(server_url, auth_token, format.to_string());
+    let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+    let mut client = noren_engine::NorenProxyClient::new(server_url, auth_token, format.to_string());
+    if let Some(rt) = refresh_token {
+        client = client.with_token_refresh(rt, |new_access, new_refresh| {
+            let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+            let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+        });
+    }
+
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(4096),
+        max_tokens: None,
         thinking: None,
         ..Default::default()
     };
 
+    let pipeline_str = match pipeline {
+        noren_engine::GenerationPipeline::LightEnforcement => "light",
+        noren_engine::GenerationPipeline::Internalized => "internalized",
+    };
+    let generation_mode = match mode {
+        "adapt" => Some("adapt"),
+        _ => Some("generate"),
+    };
+
     let response = client
-        .generate_server_composed(prompt, format, level, context, attachments, &options)
+        .generate_server_composed(
+            prompt,
+            format,
+            level,
+            Some(pipeline_str),
+            generation_mode,
+            context,
+            attachments,
+            &options,
+        )
         .await
         .map_err(|e| e.to_string())?;
 
@@ -75,6 +142,8 @@ async fn generate_byok(
     prompt: &str,
     format: &str,
     level: &str,
+    mode: &str,
+    pipeline: &noren_engine::GenerationPipeline,
     context: Option<&str>,
     attachments: Option<&[String]>,
 ) -> Result<GenerateResult, String> {
@@ -82,33 +151,51 @@ async fn generate_byok(
     let (core_identity, contexts) = noren_engine::load_profile(&config.profile_dir)
         .unwrap_or_else(|_| (String::new(), std::collections::HashMap::new()));
 
-    let context_layer = contexts.get(format);
+    let context_layer = resolve_context_format(format, &contexts);
 
-    // Get enforcement prompt (cache → dev file → built-in fallback)
+    // Load calibration data if available
+    let calibration = noren_engine::load_calibration(&config.profile_dir);
+
+    // Get the appropriate template based on pipeline
     let cache_dir = noren_engine::prompt_cache::default_cache_dir();
-    let enforcement_prompt = noren_engine::prompt_cache::get_enforcement_prompt(
-        &cache_dir,
-        &encryption_key,
-        config.server_url.as_deref(),
-        None,
-    )
-    .await
+    let template_prompt = match pipeline {
+        noren_engine::GenerationPipeline::Internalized => {
+            noren_engine::prompt_cache::get_internalized_prompt(
+                &cache_dir,
+                &encryption_key,
+                config.server_url.as_deref(),
+                None,
+            )
+            .await
+        }
+        noren_engine::GenerationPipeline::LightEnforcement => {
+            noren_engine::prompt_cache::get_enforcement_prompt(
+                &cache_dir,
+                &encryption_key,
+                config.server_url.as_deref(),
+                None,
+            )
+            .await
+        }
+    }
     .map_err(|e| e.to_string())?;
 
+    // Frontend sends "strict"/"guided"/"light"; map to engine's faithful/balanced/loose
     let enforcement_level = match level {
-        "strict" => noren_engine::EnforcementLevel::Strict,
-        "light" => noren_engine::EnforcementLevel::Light,
-        _ => noren_engine::EnforcementLevel::Guided,
+        "strict" => noren_engine::EnforcementLevel::Faithful,
+        "light" => noren_engine::EnforcementLevel::Loose,
+        _ => noren_engine::EnforcementLevel::Balanced,
     };
 
     let system_prompt = noren_engine::compose_system_prompt(
-        &enforcement_prompt,
+        &template_prompt,
         &core_identity,
         context_layer.map(String::as_str),
         format,
         &enforcement_level,
         prompt,
-        "generate",
+        mode,
+        calibration.as_ref(),
     )
     .map_err(|e| e.to_string())?;
 
@@ -137,9 +224,21 @@ async fn generate_byok(
         noren_engine::create_llm_client(config, api_key).map_err(|e| e.to_string())?
     };
 
-    let thinking = if config.extended_thinking {
+    // Auto-enable thinking for internalized on Anthropic, matching CLI behavior
+    let use_thinking = match pipeline {
+        noren_engine::GenerationPipeline::Internalized
+            if config.provider.provider_type == noren_engine::ProviderType::Anthropic =>
+        {
+            true
+        }
+        _ => config.extended_thinking,
+    };
+
+    let thinking_budget = config.thinking_budget; // default 10000
+
+    let thinking = if use_thinking {
         Some(noren_engine::ThinkingConfig {
-            budget_tokens: config.thinking_budget,
+            budget_tokens: thinking_budget,
         })
     } else {
         None
@@ -157,7 +256,7 @@ async fn generate_byok(
     ];
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
+        max_tokens: Some(if use_thinking { thinking_budget + 8192 } else { 8192 }),
         thinking,
         ..Default::default()
     };
@@ -188,12 +287,14 @@ pub async fn generate_comparison(
     context: Option<String>,
     attachments: Option<Vec<String>>,
 ) -> Result<ComparisonResult, String> {
-    // Generate WITH voice (guided enforcement)
+    // Generate WITH voice (balanced enforcement, default pipeline)
     let with_voice = generate(
         state.clone(),
         prompt.clone(),
         format.clone(),
-        "guided".to_string(),
+        "balanced".to_string(),
+        None,
+        None,
         context.clone(),
         attachments.clone(),
     )
@@ -229,7 +330,7 @@ pub async fn generate_comparison(
     ];
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(4096),
+        max_tokens: Some(8192),
         thinking: None,
         ..Default::default()
     };
@@ -244,11 +345,19 @@ pub async fn generate_comparison(
                 .to_string();
             let auth_token = crate::keychain::get_api_key("noren-pro-token")
                 .ok_or("Not logged in to Noren Pro.")?;
-            Box::new(noren_engine::NorenProxyClient::new(
+            let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+            let mut proxy = noren_engine::NorenProxyClient::new(
                 server_url,
                 auth_token,
                 format.clone(),
-            ))
+            );
+            if let Some(rt) = refresh_token {
+                proxy = proxy.with_token_refresh(rt, |new_access, new_refresh| {
+                    let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+                    let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+                });
+            }
+            Box::new(proxy)
         } else {
             let api_key = if config.provider.requires_key {
                 crate::keychain::get_api_key(&config.provider.keychain_id())

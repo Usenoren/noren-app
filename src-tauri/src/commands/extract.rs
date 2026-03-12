@@ -6,7 +6,7 @@ use tauri::Emitter;
 
 use crate::AppState;
 
-const DEFAULT_SERVER_URL: &str = "http://localhost:8000";
+const DEFAULT_SERVER_URL: &str = "https://api.usenoren.ai";
 
 #[tauri::command]
 pub async fn run_extraction(
@@ -26,13 +26,20 @@ pub async fn run_extraction(
     // Get or create auth token
     let auth_token = get_or_create_auth_token(&server_url).await?;
 
-    // Create server client with progress callback
+    // Create server client with progress callback and token refresh
     let app_handle = app.clone();
-    let client = ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
+    let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+    let mut client = ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
         move |progress: ExtractionProgress| {
             let _ = app_handle.emit("extraction-progress", &progress);
         },
     ));
+    if let Some(rt) = refresh_token {
+        client = client.with_token_refresh(rt, |new_access, new_refresh| {
+            let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+            let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+        });
+    }
 
     // Run extraction
     let result = client
@@ -121,6 +128,7 @@ pub async fn start_extraction(
     };
 
     let auth_token = get_or_create_auth_token(&server_url).await?;
+    let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
 
     let app_handle = Arc::new(app.clone());
     let app_for_progress = app_handle.clone();
@@ -128,12 +136,18 @@ pub async fn start_extraction(
 
     // Spawn extraction in background
     tokio::spawn(async move {
-        let client =
+        let mut client =
             ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
                 move |progress: ExtractionProgress| {
                     let _ = app_for_progress.emit("extraction-progress", &progress);
                 },
             ));
+        if let Some(rt) = refresh_token {
+            client = client.with_token_refresh(rt, |new_access, new_refresh| {
+                let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+                let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+            });
+        }
 
         match client.extract(&samples, &format).await {
             Ok(result) => handle_extraction_result(result, &app_for_done, &profile_dir),
@@ -166,18 +180,25 @@ pub async fn start_extraction_multi(
     };
 
     let auth_token = get_or_create_auth_token(&server_url).await?;
+    let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
 
     let app_handle = Arc::new(app.clone());
     let app_for_progress = app_handle.clone();
     let app_for_done = app_handle.clone();
 
     tokio::spawn(async move {
-        let client =
+        let mut client =
             ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
                 move |progress: ExtractionProgress| {
                     let _ = app_for_progress.emit("extraction-progress", &progress);
                 },
             ));
+        if let Some(rt) = refresh_token {
+            client = client.with_token_refresh(rt, |new_access, new_refresh| {
+                let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+                let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+            });
+        }
 
         match client.extract_multi(&format_groups).await {
             Ok(result) => handle_extraction_result(result, &app_for_done, &profile_dir),

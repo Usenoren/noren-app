@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accessibility;
+mod auth_client;
 mod clipboard;
 mod commands;
 mod hotkey;

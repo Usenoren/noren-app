@@ -17,6 +17,6 @@ pub use generate::enforce::compose_system_prompt;
 pub use llm::noren_proxy::NorenProxyClient;
 pub use llm::router::create_llm_client;
 pub use llm::LlmClient;
-pub use storage::profiles::{list_formats, load_profile, save_profile};
+pub use storage::profiles::{list_formats, load_calibration, load_profile, save_profile};
 pub use template::fill_template;
 pub use types::*;

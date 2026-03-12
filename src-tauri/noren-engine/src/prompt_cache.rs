@@ -49,25 +49,54 @@ pub async fn get_enforcement_prompt(
     server_url: Option<&str>,
     auth_token: Option<&str>,
 ) -> Result<String, EngineError> {
+    get_prompt("enforcement", BUILTIN_ENFORCEMENT_PROMPT, cache_dir, encryption_key, server_url, auth_token).await
+}
+
+/// Get the internalized prompt. Same resolution order as enforcement.
+pub async fn get_internalized_prompt(
+    cache_dir: &Path,
+    encryption_key: &[u8; 32],
+    server_url: Option<&str>,
+    auth_token: Option<&str>,
+) -> Result<String, EngineError> {
+    get_prompt("internalized", BUILTIN_INTERNALIZED_PROMPT, cache_dir, encryption_key, server_url, auth_token).await
+}
+
+/// Generic prompt loader. Tries in order:
+/// 1. Dev mode override (NOREN_DEV_PROMPT_PATH env var, only for "enforcement")
+/// 2. Local encrypted cache ({name}.enc)
+/// 3. Fetch from server (/v1/prompts/{name})
+/// 4. Built-in fallback
+async fn get_prompt(
+    name: &str,
+    builtin_fallback: &str,
+    cache_dir: &Path,
+    encryption_key: &[u8; 32],
+    server_url: Option<&str>,
+    auth_token: Option<&str>,
+) -> Result<String, EngineError> {
     // 1. Dev mode: read from local filesystem (env var or well-known path)
-    if let Ok(path) = std::env::var("NOREN_DEV_PROMPT_PATH") {
-        return std::fs::read_to_string(&path).map_err(|e| {
-            EngineError::PromptCache(format!("Failed to read dev prompt at {}: {}", path, e))
-        });
-    }
-    let dev_path = default_dev_prompt_path();
-    if dev_path.exists() {
-        return std::fs::read_to_string(&dev_path).map_err(|e| {
-            EngineError::PromptCache(format!(
-                "Failed to read dev prompt at {}: {}",
-                dev_path.display(),
-                e
-            ))
-        });
+    // Only applies to "enforcement" for backward compatibility
+    if name == "enforcement" {
+        if let Ok(path) = std::env::var("NOREN_DEV_PROMPT_PATH") {
+            return std::fs::read_to_string(&path).map_err(|e| {
+                EngineError::PromptCache(format!("Failed to read dev prompt at {}: {}", path, e))
+            });
+        }
+        let dev_path = default_dev_prompt_path();
+        if dev_path.exists() {
+            return std::fs::read_to_string(&dev_path).map_err(|e| {
+                EngineError::PromptCache(format!(
+                    "Failed to read dev prompt at {}: {}",
+                    dev_path.display(),
+                    e
+                ))
+            });
+        }
     }
 
     // 2. Try loading from encrypted cache
-    if let Some(content) = load_cached_prompt(cache_dir, encryption_key)? {
+    if let Some(content) = load_cached_prompt_named(name, cache_dir, encryption_key)? {
         return Ok(content);
     }
 
@@ -75,30 +104,36 @@ pub async fn get_enforcement_prompt(
     let server_url = match server_url {
         Some(url) => url,
         None => {
-            // No server available — use built-in fallback prompt
-            return Ok(BUILTIN_ENFORCEMENT_PROMPT.to_string());
+            return Ok(builtin_fallback.to_string());
         }
     };
 
     let auth_token = match auth_token {
         Some(token) => token,
         None => {
-            // No auth token — use built-in fallback prompt
-            return Ok(BUILTIN_ENFORCEMENT_PROMPT.to_string());
+            return Ok(builtin_fallback.to_string());
         }
     };
 
-    let response = fetch_enforcement_prompt(server_url, auth_token).await?;
-    cache_prompt(&response.content, &response.version, response.ttl_hours, cache_dir, encryption_key)?;
-    Ok(response.content)
+    match fetch_prompt(server_url, auth_token, name).await {
+        Ok(response) => {
+            cache_prompt_named(name, &response.content, &response.version, response.ttl_hours, cache_dir, encryption_key)?;
+            Ok(response.content)
+        }
+        Err(_) => {
+            // Server fetch failed, use built-in fallback
+            Ok(builtin_fallback.to_string())
+        }
+    }
 }
 
-/// Fetch the enforcement prompt from the server
-pub async fn fetch_enforcement_prompt(
+/// Fetch a named prompt from the server
+pub async fn fetch_prompt(
     server_url: &str,
     auth_token: &str,
+    name: &str,
 ) -> Result<PromptResponse, EngineError> {
-    let url = format!("{}/v1/prompts/enforcement", server_url.trim_end_matches('/'));
+    let url = format!("{}/v1/prompts/{}", server_url.trim_end_matches('/'), name);
     let client = reqwest::Client::new();
     let resp = client
         .get(&url)
@@ -120,8 +155,17 @@ pub async fn fetch_enforcement_prompt(
         .map_err(|e| EngineError::PromptCache(format!("Failed to parse prompt response: {}", e)))
 }
 
-/// Encrypt and cache a prompt to disk
-pub fn cache_prompt(
+/// Fetch the enforcement prompt from the server (backward-compatible alias)
+pub async fn fetch_enforcement_prompt(
+    server_url: &str,
+    auth_token: &str,
+) -> Result<PromptResponse, EngineError> {
+    fetch_prompt(server_url, auth_token, "enforcement").await
+}
+
+/// Encrypt and cache a named prompt to disk
+pub fn cache_prompt_named(
+    name: &str,
     content: &str,
     version: &str,
     ttl_hours: u64,
@@ -156,19 +200,31 @@ pub fn cache_prompt(
     };
 
     let json = serde_json::to_vec(&envelope)?;
-    let cache_path = cache_dir.join("enforcement.enc");
+    let cache_path = cache_dir.join(format!("{}.enc", name));
     std::fs::write(&cache_path, json)
         .map_err(|e| EngineError::PromptCache(format!("Failed to write cache: {}", e)))?;
 
     Ok(())
 }
 
-/// Load and decrypt a cached prompt. Returns None if cache is missing or expired.
-pub fn load_cached_prompt(
+/// Encrypt and cache the enforcement prompt (backward-compatible alias)
+pub fn cache_prompt(
+    content: &str,
+    version: &str,
+    ttl_hours: u64,
+    cache_dir: &Path,
+    encryption_key: &[u8; 32],
+) -> Result<(), EngineError> {
+    cache_prompt_named("enforcement", content, version, ttl_hours, cache_dir, encryption_key)
+}
+
+/// Load and decrypt a named cached prompt. Returns None if cache is missing or expired.
+pub fn load_cached_prompt_named(
+    name: &str,
     cache_dir: &Path,
     encryption_key: &[u8; 32],
 ) -> Result<Option<String>, EngineError> {
-    let cache_path = cache_dir.join("enforcement.enc");
+    let cache_path = cache_dir.join(format!("{}.enc", name));
 
     if !cache_path.exists() {
         return Ok(None);
@@ -209,6 +265,14 @@ pub fn load_cached_prompt(
         .map_err(|e| EngineError::PromptCache(format!("Invalid UTF-8 in cached prompt: {}", e)))
 }
 
+/// Load and decrypt the enforcement cached prompt (backward-compatible alias)
+pub fn load_cached_prompt(
+    cache_dir: &Path,
+    encryption_key: &[u8; 32],
+) -> Result<Option<String>, EngineError> {
+    load_cached_prompt_named("enforcement", cache_dir, encryption_key)
+}
+
 /// Generate a fresh 256-bit encryption key
 pub fn generate_encryption_key() -> [u8; 32] {
     let mut key = [0u8; 32];
@@ -243,6 +307,65 @@ You are a writing assistant. Write {{FORMAT}} content in the voice described bel
 {{USER_REQUEST}}
 
 Write only the final text. No commentary.
+```
+"#;
+
+/// Built-in internalized prompt for free/BYOK users.
+/// Profile-first architecture: the voice profile is the dominant context,
+/// scaffolding is minimal. The model inhabits the voice instead of following
+/// rules about the voice.
+pub const BUILTIN_INTERNALIZED_PROMPT: &str = r#"### System Prompt
+
+```
+You are going to write as a specific person. Read their voice profile
+below. Do not treat it as a list of rules to follow. Absorb it as a
+description of how this person thinks, argues, and expresses themselves.
+Then write as them.
+
+## WHO YOU ARE
+
+{{CORE_IDENTITY}}
+
+{{#if CALIBRATION}}
+### Voice Calibration
+
+When the profile doesn't clearly specify a stylistic choice, use these
+user-stated preferences as tie-breakers:
+
+{{CALIBRATION}}
+{{/if}}
+
+{{#if CONTEXT_LAYER}}
+## HOW YOU WRITE {{FORMAT}}
+
+{{CONTEXT_LAYER}}
+{{/if}}
+
+## HARD CONSTRAINTS
+
+These are non-negotiable. Everything else in the profile is guidance,
+but these are absolute:
+
+- Never use the anti-pattern words listed in the profile. Not once.
+- Never copy the example quotes from the profile into your output.
+  They show what the voice sounds like. Generate new text that
+  sounds the same way.
+- Output the text only. No preamble, no commentary.
+
+{{#if MODE == "generate"}}
+## WHAT TO WRITE
+
+The user's writing request follows in their message.
+{{/if}}
+
+{{#if MODE == "adapt"}}
+## WHAT TO RESTYLE
+
+The user's message contains their own content to restyle in the voice
+above. Reshape how they said it, not what they said. Preserve their
+ideas, arguments, and structure. Replace any anti-pattern words even
+if the user wrote them.
+{{/if}}
 ```
 "#;
 

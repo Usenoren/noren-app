@@ -28,13 +28,13 @@ pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileO
 
     // Pro path: check server for profile
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-        if let Some(auth_token) = crate::keychain::get_api_key("noren-pro-token") {
+        if crate::keychain::get_api_key("noren-pro-token").is_some() {
             let server_url = config
                 .server_url
                 .as_deref()
                 .unwrap_or("https://api.usenoren.ai");
 
-            match fetch_server_profile_metadata(server_url, &auth_token).await {
+            match fetch_server_profile_metadata(server_url).await {
                 Ok(meta) if meta.has_profile => {
                     return Ok(ProfileOverview {
                         exists: true,
@@ -135,9 +135,6 @@ pub async fn migrate_profile_to_server(
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
 
-    let auth_token = crate::keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in to Noren Pro.")?;
-
     let server_url = config
         .server_url
         .as_deref()
@@ -151,18 +148,19 @@ pub async fn migrate_profile_to_server(
     let quality_report = std::fs::read_to_string(qc_path).ok();
 
     // Upload to server
-    let client = reqwest::Client::new();
-    let resp = client
-        .put(format!("{}/v1/profile/voice", server_url.trim_end_matches('/')))
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .json(&serde_json::json!({
-            "core_identity": core_identity,
-            "contexts": contexts,
-            "quality_report": quality_report,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to upload profile: {}", e))?;
+    let upload_url = format!("{}/v1/profile/voice", server_url.trim_end_matches('/'));
+    let payload = serde_json::json!({
+        "core_identity": core_identity,
+        "contexts": contexts,
+        "quality_report": quality_report,
+    });
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .put(&upload_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -182,21 +180,18 @@ pub async fn export_profile(
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
 
-    let auth_token = crate::keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in to Noren Pro.")?;
-
     let server_url = config
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
 
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/profile/voice/export", server_url.trim_end_matches('/')))
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to export profile: {}", e))?;
+    let export_url = format!("{}/v1/profile/voice/export", server_url.trim_end_matches('/'));
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&export_url)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -230,15 +225,14 @@ pub async fn export_profile(
 /// Fetch profile metadata from the Noren server.
 async fn fetch_server_profile_metadata(
     server_url: &str,
-    auth_token: &str,
 ) -> Result<ServerProfileMetadata, String> {
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(format!("{}/v1/profile/voice/metadata", server_url.trim_end_matches('/')))
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let url = format!("{}/v1/profile/voice/metadata", server_url.trim_end_matches('/'));
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await?;
 
     if !resp.status().is_success() {
         return Err("Failed to fetch profile metadata".to_string());

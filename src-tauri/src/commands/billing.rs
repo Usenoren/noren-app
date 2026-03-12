@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::State;
 
-use crate::{keychain, AppState};
+use crate::AppState;
 
 // --- Structs ---
 
@@ -136,16 +136,13 @@ pub async fn get_subscription_status(
     state: State<'_, AppState>,
 ) -> Result<SubscriptionStatus, String> {
     let server_url = server_url_from_config(&state);
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
 
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .get(format!("{}/v1/billing/status", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client
+            .get(format!("{}/v1/billing/status", server_url))
+            .bearer_auth(token)
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -187,17 +184,15 @@ pub async fn create_checkout(
     tier: String,
 ) -> Result<CheckoutResult, String> {
     let server_url = server_url_from_config(&state);
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in. Sign in first.")?;
 
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/billing/checkout", server_url))
-        .bearer_auth(&auth_token)
-        .json(&serde_json::json!({ "target": tier }))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let tier_clone = tier.clone();
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client
+            .post(format!("{}/v1/billing/checkout", server_url))
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "target": tier_clone }))
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -226,16 +221,13 @@ pub async fn open_billing_portal(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let server_url = server_url_from_config(&state);
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
 
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/billing/portal", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client
+            .post(format!("{}/v1/billing/portal", server_url))
+            .bearer_auth(token)
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();

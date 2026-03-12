@@ -34,13 +34,13 @@ pub struct FormatGroup {
 #[async_trait]
 pub trait ExtractionClient: Send + Sync {
     async fn extract(
-        &self,
+        &mut self,
         samples: &str,
         format: &str,
     ) -> Result<ExtractionResult, EngineError>;
 
     async fn extract_multi(
-        &self,
+        &mut self,
         format_groups: &[FormatGroup],
     ) -> Result<ExtractionResult, EngineError>;
 }
@@ -51,6 +51,8 @@ pub struct ServerExtractionClient {
     auth_token: String,
     http: reqwest::Client,
     on_progress: Option<ProgressCallback>,
+    refresh_token: Option<String>,
+    on_tokens_refreshed: Option<Box<dyn Fn(String, String) + Send + Sync>>,
 }
 
 #[derive(Deserialize)]
@@ -100,12 +102,81 @@ impl ServerExtractionClient {
             auth_token,
             http: reqwest::Client::new(),
             on_progress: None,
+            refresh_token: None,
+            on_tokens_refreshed: None,
         }
     }
 
     pub fn with_progress(mut self, callback: ProgressCallback) -> Self {
         self.on_progress = Some(callback);
         self
+    }
+
+    /// Enable automatic token refresh on 401 responses.
+    pub fn with_token_refresh(
+        mut self,
+        refresh_token: String,
+        on_refreshed: impl Fn(String, String) + Send + Sync + 'static,
+    ) -> Self {
+        self.refresh_token = Some(refresh_token);
+        self.on_tokens_refreshed = Some(Box::new(on_refreshed));
+        self
+    }
+
+    /// Attempt to refresh the access token. Returns new token on success.
+    async fn try_refresh(&mut self) -> Option<String> {
+        let refresh = self.refresh_token.as_deref()?;
+
+        let resp = self
+            .http
+            .post(format!("{}/v1/auth/refresh", self.server_url))
+            .json(&serde_json::json!({ "refresh_token": refresh }))
+            .send()
+            .await
+            .ok()?;
+
+        if !resp.status().is_success() {
+            return None;
+        }
+
+        let data: serde_json::Value = resp.json().await.ok()?;
+        let new_access = data["access_token"].as_str()?.to_string();
+        let new_refresh = data["refresh_token"].as_str()?.to_string();
+
+        if let Some(ref cb) = self.on_tokens_refreshed {
+            cb(new_access.clone(), new_refresh.clone());
+        }
+
+        // Update stored tokens for subsequent requests in this session
+        self.auth_token = new_access.clone();
+        self.refresh_token = Some(new_refresh);
+
+        Some(new_access)
+    }
+
+    /// Send an authenticated GET request, retrying once on 401 with token refresh.
+    async fn authed_get(&mut self, url: &str) -> Result<reqwest::Response, EngineError> {
+        let resp = self
+            .http
+            .get(url)
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?;
+
+        if resp.status().as_u16() == 401 {
+            if let Some(new_token) = self.try_refresh().await {
+                let retry = self
+                    .http
+                    .get(url)
+                    .bearer_auth(&new_token)
+                    .send()
+                    .await?;
+                return Ok(retry);
+            }
+            return Err(EngineError::Llm("Session expired. Please sign in again.".to_string()));
+        }
+
+        Ok(resp)
     }
 
     /// Register a new account and get auth token
@@ -168,7 +239,7 @@ impl ServerExtractionClient {
 #[async_trait]
 impl ExtractionClient for ServerExtractionClient {
     async fn extract(
-        &self,
+        &mut self,
         samples: &str,
         format: &str,
     ) -> Result<ExtractionResult, EngineError> {
@@ -180,7 +251,7 @@ impl ExtractionClient for ServerExtractionClient {
     }
 
     async fn extract_multi(
-        &self,
+        &mut self,
         format_groups: &[FormatGroup],
     ) -> Result<ExtractionResult, EngineError> {
         let groups: Vec<_> = format_groups
@@ -197,17 +268,34 @@ impl ExtractionClient for ServerExtractionClient {
 impl ServerExtractionClient {
     /// Shared extraction job logic: start, poll, get result.
     async fn run_extraction_job(
-        &self,
+        &mut self,
         payload: serde_json::Value,
     ) -> Result<ExtractionResult, EngineError> {
         // Step 1: Start the extraction job
+        let start_url = format!("{}/v1/extract", self.server_url);
         let resp = self
             .http
-            .post(format!("{}/v1/extract", self.server_url))
+            .post(&start_url)
             .bearer_auth(&self.auth_token)
             .json(&payload)
             .send()
             .await?;
+
+        // Handle 401 on start
+        let resp = if resp.status().as_u16() == 401 {
+            if let Some(new_token) = self.try_refresh().await {
+                self.http
+                    .post(&start_url)
+                    .bearer_auth(&new_token)
+                    .json(&payload)
+                    .send()
+                    .await?
+            } else {
+                return Err(EngineError::Llm("Session expired. Please sign in again.".to_string()));
+            }
+        } else {
+            resp
+        };
 
         if !resp.status().is_success() {
             let text = resp.text().await.unwrap_or_default();
@@ -223,16 +311,12 @@ impl ServerExtractionClient {
             error: None,
         });
 
-        // Step 2: Poll for completion
+        // Step 2: Poll for completion (uses authed_get for automatic token refresh)
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-            let resp = self
-                .http
-                .get(format!("{}/v1/extract/{}", self.server_url, job_id))
-                .bearer_auth(&self.auth_token)
-                .send()
-                .await?;
+            let poll_url = format!("{}/v1/extract/{}", self.server_url, job_id);
+            let resp = self.authed_get(&poll_url).await?;
 
             if !resp.status().is_success() {
                 let text = resp.text().await.unwrap_or_default();
@@ -260,12 +344,8 @@ impl ServerExtractionClient {
         }
 
         // Step 3: Get the result
-        let resp = self
-            .http
-            .get(format!("{}/v1/extract/{}/result", self.server_url, job_id))
-            .bearer_auth(&self.auth_token)
-            .send()
-            .await?;
+        let result_url = format!("{}/v1/extract/{}/result", self.server_url, job_id);
+        let resp = self.authed_get(&result_url).await?;
 
         if !resp.status().is_success() {
             let text = resp.text().await.unwrap_or_default();

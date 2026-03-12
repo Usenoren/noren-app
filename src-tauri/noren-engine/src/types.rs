@@ -159,18 +159,33 @@ impl ProviderConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum EnforcementLevel {
-    Strict,
-    Guided,
-    Light,
+    Faithful,
+    Balanced,
+    Loose,
 }
 
 impl std::fmt::Display for EnforcementLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            EnforcementLevel::Strict => write!(f, "strict"),
-            EnforcementLevel::Guided => write!(f, "guided"),
-            EnforcementLevel::Light => write!(f, "light"),
+            EnforcementLevel::Faithful => write!(f, "faithful"),
+            EnforcementLevel::Balanced => write!(f, "balanced"),
+            EnforcementLevel::Loose => write!(f, "loose"),
         }
+    }
+}
+
+// --- Generation pipeline ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum GenerationPipeline {
+    Internalized,
+    LightEnforcement,
+}
+
+impl Default for GenerationPipeline {
+    fn default() -> Self {
+        Self::Internalized
     }
 }
 
@@ -299,6 +314,31 @@ fn dirs_home() -> PathBuf {
     std::env::var("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/tmp"))
+}
+
+// --- Calibration ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalibrationData {
+    pub source: String,
+    pub domain: String,
+    #[serde(rename = "writingFormat")]
+    pub writing_format: String,
+    #[serde(rename = "sentencePairs")]
+    pub sentence_pairs: Vec<CalibrationPair>,
+    #[serde(rename = "completedAt")]
+    pub completed_at: String,
+    pub version: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalibrationPair {
+    pub dimension: String,
+    pub selected: String,
+    #[serde(rename = "optionA")]
+    pub option_a: String,
+    #[serde(rename = "optionB")]
+    pub option_b: String,
 }
 
 /// Profile content returned to the frontend
