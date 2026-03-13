@@ -111,7 +111,7 @@ impl LlmClient for AnthropicClient {
                     thinking_type: "enabled".to_string(),
                     budget_tokens: tc.budget_tokens,
                 }),
-                tc.budget_tokens + options.max_tokens.unwrap_or(4096),
+                tc.budget_tokens + options.max_tokens.unwrap_or(8192),
             )
         } else {
             (None, options.max_tokens.unwrap_or(8192))

@@ -44,6 +44,12 @@ pub fn compose_system_prompt(
     // Try to extract system prompt template between ```\n and \n```
     let re = Regex::new(r"### System Prompt\s*\n\s*```\n([\s\S]*?)\n```").unwrap();
 
+    // Sanitize user request to prevent template injection (matches CLI internalize.ts)
+    let sanitized_request = Regex::new(r"(?i)</user_content>")
+        .unwrap()
+        .replace_all(user_request, "")
+        .to_string();
+
     if let Some(template_match) = re.captures(template_prompt) {
         // Server/rich template — use template system
         let system_template = &template_match[1];
@@ -55,7 +61,7 @@ pub fn compose_system_prompt(
             enforcement_level.to_string(),
         );
         variables.insert("CORE_IDENTITY".to_string(), core_identity.to_string());
-        variables.insert("USER_REQUEST".to_string(), user_request.to_string());
+        variables.insert("USER_REQUEST".to_string(), sanitized_request.clone());
         variables.insert("MODE".to_string(), mode.to_string());
 
         if let Some(layer) = context_layer {
@@ -91,7 +97,7 @@ pub fn compose_system_prompt(
         if let Some(layer) = context_layer {
             prompt.push_str(&format!("\n\n{}", layer));
         }
-        prompt.push_str(&format!("\n\n{}\n\nWrite only the final text. No commentary.", user_request));
+        prompt.push_str(&format!("\n\n{}\n\nWrite only the final text. No commentary.", sanitized_request));
         Ok(prompt)
     }
 }

@@ -256,7 +256,7 @@ async fn generate_byok(
     ];
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(if use_thinking { thinking_budget + 8192 } else { 8192 }),
+        max_tokens: Some(8192),
         thinking,
         ..Default::default()
     };
