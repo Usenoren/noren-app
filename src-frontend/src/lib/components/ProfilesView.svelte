@@ -63,6 +63,9 @@
   let isExporting = $state(false);
   let isDevMode = $state(false);
 
+  // Empty state
+  let showManualCreate = $state(false);
+
   let displayContent = $derived(
     activeTab === "core"
       ? profile?.core_identity ?? ""
@@ -278,62 +281,112 @@
       <LoadingSpinner />
     </div>
   {:else if !overview.exists}
-    <!-- No profile — manual creation -->
-    <div class="flex flex-col gap-3 h-full">
-      <div>
-        <p class="text-sm font-medium text-foreground">Create your voice profile</p>
-        <p class="text-[10px] text-muted leading-relaxed mt-1">
-          Describe how you write — tone, word choices, sentence length, and any quirks.
-        </p>
-      </div>
+    {#if !showManualCreate}
+      <!-- Empty state: no profile -->
+      <div class="flex-1 flex flex-col items-center justify-center gap-6 py-8 animate-fade-in-up">
+        <!-- Empty loom frame illustration -->
+        <svg class="w-[100px] h-[90px] opacity-55" viewBox="0 0 100 90" fill="none">
+          <!-- Loom frame -->
+          <rect x="15" y="10" width="70" height="70" rx="3" stroke="var(--color-border)" stroke-width="1.5" fill="none"/>
+          <!-- Top beam -->
+          <line x1="15" y1="18" x2="85" y2="18" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.4"/>
+          <!-- Bottom beam -->
+          <line x1="15" y1="72" x2="85" y2="72" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.4"/>
+          <!-- Faint warp threads (waiting) -->
+          <line x1="30" y1="18" x2="30" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.2" stroke-dasharray="3 4"/>
+          <line x1="42" y1="18" x2="42" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.15" stroke-dasharray="3 4"/>
+          <line x1="54" y1="18" x2="54" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.2" stroke-dasharray="3 4"/>
+          <line x1="66" y1="18" x2="66" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.15" stroke-dasharray="3 4"/>
+          <!-- Accent thread hint -->
+          <path d="M28 40 C35 38, 45 42, 52 39 C59 36, 67 41, 72 39" stroke="var(--color-accent)" stroke-width="1" stroke-linecap="round" opacity="0.25"/>
+        </svg>
 
-      <div class="flex-1 flex flex-col min-h-0">
-        <textarea
-          bind:value={editContent}
-          class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary"
-          placeholder={"Example:\n\nI write casually and directly. Short sentences. I use contractions, avoid jargon, and get to the point fast. I'm opinionated but not aggressive — more like a friend giving honest advice. I occasionally use humor and rhetorical questions."}
-        ></textarea>
-      </div>
+        <div class="text-center max-w-[280px]">
+          <p class="text-sm font-medium text-foreground">Your voice profile will live here</p>
+          <p class="text-[10px] text-muted leading-relaxed mt-1.5">
+            AI extraction analyzes your real writing to capture sentence patterns, vocabulary, tone, and format-specific style. The recommended way to start.
+          </p>
+        </div>
 
-      <!-- AI extraction nudge -->
-      <div class="p-2 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-1.5">
-        <p class="text-[10px] text-muted leading-relaxed">
-          <span class="text-secondary font-medium">AI Extraction</span> analyzes your real writing — sentence patterns, vocabulary, rhetorical style, and format-specific contexts.
-        </p>
-        <div class="flex gap-2 items-center">
+        <div class="flex flex-col items-center gap-2">
           <button
-            onclick={() => handleUpgrade("extraction")}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            onclick={() => emit("navigate", "extract")}
+            class="px-5 py-2 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded-md"
           >
-            One-time $29
+            Extract your voice
           </button>
-          <span class="text-[10px] text-muted">or</span>
           <button
-            onclick={() => handleUpgrade("pro")}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            onclick={() => { showManualCreate = true; }}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground"
           >
-            Included with Pro
+            Or describe it manually
           </button>
         </div>
       </div>
-
-      <button
-        onclick={handleCreateProfile}
-        disabled={!editContent.trim() || isSaving}
-        class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
-          {!editContent.trim() || isSaving
-            ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-primary text-white hover:bg-primary-hover'}"
-      >
-        {isSaving ? "Saving..." : "Save Profile"}
-      </button>
-
-      {#if error}
-        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
-          {error}
+    {:else}
+      <!-- Manual creation form -->
+      <div class="flex flex-col gap-3 h-full animate-fade-in-up">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-foreground">Describe your voice</p>
+            <p class="text-[10px] text-muted leading-relaxed mt-1">
+              Tone, word choices, sentence length, quirks.
+            </p>
+          </div>
+          <button
+            onclick={() => { showManualCreate = false; editContent = ""; }}
+            class="text-[10px] text-muted cursor-pointer hover:text-foreground"
+          >Back</button>
         </div>
-      {/if}
-    </div>
+
+        <div class="flex-1 flex flex-col min-h-0">
+          <textarea
+            bind:value={editContent}
+            class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary"
+            placeholder={"Example:\n\nI write casually and directly. Short sentences. I use contractions, avoid jargon, and get to the point fast. I'm opinionated but not aggressive — more like a friend giving honest advice. I occasionally use humor and rhetorical questions."}
+          ></textarea>
+        </div>
+
+        <!-- AI extraction nudge -->
+        <div class="p-2 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-1.5">
+          <p class="text-[10px] text-muted leading-relaxed">
+            <span class="text-secondary font-medium">AI Extraction</span> captures more detail from your real writing.
+          </p>
+          <div class="flex gap-2 items-center">
+            <button
+              onclick={() => handleUpgrade("extraction")}
+              class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            >
+              One-time $29
+            </button>
+            <span class="text-[10px] text-muted">or</span>
+            <button
+              onclick={() => handleUpgrade("pro")}
+              class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+            >
+              Included with Pro
+            </button>
+          </div>
+        </div>
+
+        <button
+          onclick={handleCreateProfile}
+          disabled={!editContent.trim() || isSaving}
+          class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
+            {!editContent.trim() || isSaving
+              ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
+              : 'bg-primary text-white hover:bg-primary-hover'}"
+        >
+          {isSaving ? "Saving..." : "Save Profile"}
+        </button>
+
+        {#if error}
+          <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
+            {error}
+          </div>
+        {/if}
+      </div>
+    {/if}
   {:else if overview.is_server}
     <!-- Server profile — metadata only -->
     <div class="flex flex-col gap-3 h-full">

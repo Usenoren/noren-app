@@ -22,6 +22,7 @@
   let output = $state<GenerateResult | null>(null);
   let comparison = $state<ComparisonResult | null>(null);
   let compareMode = $state(false);
+  let mode: "generate" | "adapt" = $state("generate");
   let isGenerating = $state(false);
   let error = $state("");
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
@@ -30,6 +31,7 @@
   let noApiKeyLocal = $state(false);
   let noKey = $derived(isPopup ? noApiKey : noApiKeyLocal);
   let showCompareLock = $state(false);
+  let dismissedEmpty = $state(false);
 
   const levels = ["strict", "guided", "light"] as const;
 
@@ -115,6 +117,7 @@
           prompt: prompt.trim(),
           format,
           level,
+          mode: mode !== "generate" ? mode : undefined,
           context: contextText || undefined,
           attachments: attachmentContents,
         });
@@ -194,6 +197,79 @@
 </script>
 
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
+  <!-- Empty state: no profile, no output yet -->
+  {#if !hasProfile && !getIsExtracting() && !output && !comparison && !dismissedEmpty && !isPopup}
+    <div class="flex-1 flex flex-col items-center justify-center gap-6 py-8 animate-fade-in-up">
+      <!-- Scattered threads illustration -->
+      <svg class="w-[120px] h-[80px] opacity-60" viewBox="0 0 120 80" fill="none">
+        <!-- Loose, unconnected threads — waiting to be woven -->
+        <path d="M15 20 C25 18, 35 24, 45 20" stroke="var(--color-secondary)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+        <path d="M30 35 C40 30, 55 38, 65 32" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+        <path d="M55 15 C65 12, 78 20, 88 16" stroke="var(--color-secondary)" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
+        <path d="M20 50 C30 46, 42 54, 55 48" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.45"/>
+        <path d="M60 45 C72 42, 82 50, 95 44" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
+        <path d="M40 62 C50 58, 62 65, 75 60" stroke="var(--color-secondary)" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+        <path d="M75 25 C85 22, 95 28, 105 24" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+      </svg>
+
+      <div class="text-center max-w-[280px]">
+        <p class="text-sm font-medium text-foreground">No voice profile yet</p>
+        <p class="text-[10px] text-muted leading-relaxed mt-1.5">
+          Noren generates text in your voice. Extract your style from real writing samples, or describe it yourself.
+        </p>
+      </div>
+
+      <div class="flex flex-col items-center gap-2">
+        {#if canExtract()}
+          <button
+            onclick={() => emit("navigate", "extract")}
+            class="px-5 py-2 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded-md"
+          >
+            Extract your voice
+          </button>
+          <button
+            onclick={() => emit("navigate", "profiles")}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground"
+          >
+            Or describe it manually
+          </button>
+        {:else}
+          <button
+            onclick={() => emit("navigate", "profiles")}
+            class="px-5 py-2 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded-md"
+          >
+            Create a voice profile
+          </button>
+          <button
+            onclick={() => emit("navigate", "settings")}
+            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground"
+          >
+            Or upgrade to Pro for AI extraction
+          </button>
+        {/if}
+      </div>
+
+      <button
+        onclick={() => { dismissedEmpty = true; }}
+        class="text-[10px] text-muted cursor-pointer hover:text-foreground mt-2"
+      >
+        Continue without a profile
+      </button>
+
+      {#if noKey}
+        <div class="flex items-center gap-2 p-2 bg-tint border border-warning/20 rounded-lg mt-2 max-w-[280px]">
+          <p class="flex-1 text-[10px] text-muted leading-relaxed">
+            API key also needed.
+            <button
+              onclick={() => emit("navigate", "settings")}
+              class="text-secondary font-medium cursor-pointer hover:text-foreground"
+            >Go to Settings</button>
+          </p>
+        </div>
+      {/if}
+    </div>
+  {:else}
+
   <!-- No API key banner -->
   {#if noKey}
     <div class="flex items-center gap-2 p-2 bg-tint border border-warning/20 rounded-lg">
@@ -207,7 +283,7 @@
     </div>
   {/if}
 
-  <!-- No profile nudge -->
+  <!-- No profile inline nudge (after dismissing empty state or in popup) -->
   {#if !hasProfile && !getIsExtracting()}
     <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg">
       <p class="flex-1 text-[10px] text-muted leading-relaxed">
@@ -218,21 +294,21 @@
             class="text-secondary font-medium cursor-pointer hover:text-foreground"
           >Open Noren to set up</button>
         {:else if canExtract()}
-          No voice profile yet — output will be generic.
+          Output will be generic.
           <button
             onclick={() => emit("navigate", "extract")}
             class="text-secondary font-medium cursor-pointer hover:text-foreground"
-          >Extract one</button> from your writing or
+          >Extract a profile</button> or
           <button
             onclick={() => emit("navigate", "profiles")}
             class="text-secondary font-medium cursor-pointer hover:text-foreground"
           >create one manually</button>.
         {:else}
-          No voice profile yet — output will be generic.
+          Output will be generic.
           <button
             onclick={() => emit("navigate", "profiles")}
             class="text-secondary font-medium cursor-pointer hover:text-foreground"
-          >Create one</button> or
+          >Create a profile</button> or
           <button
             onclick={() => emit("navigate", "settings")}
             class="text-secondary font-medium cursor-pointer hover:text-foreground"
@@ -259,6 +335,17 @@
       disabled={attachedFiles.length >= 3}
     >
       Attach{#if attachedFiles.length > 0} ({attachedFiles.length}/3){/if}
+    </button>
+
+    <button
+      onclick={() => { mode = mode === "generate" ? "adapt" : "generate"; }}
+      class="px-2 py-1 text-[10px] transition-colors cursor-pointer rounded-md
+        {mode === 'adapt'
+          ? 'bg-secondary text-white font-medium'
+          : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+      title={mode === "adapt" ? "Adapt mode: restyle existing content" : "Switch to adapt mode"}
+    >
+      Adapt
     </button>
 
     <div class="flex items-center gap-1.5 ml-auto">
@@ -355,7 +442,7 @@
         onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) handleGenerate(); }}
         class="w-full p-3 text-sm resize-none bg-transparent text-foreground placeholder-muted border-none focus:outline-none"
         rows={2}
-        placeholder="What do you want to write?"
+        placeholder={mode === "adapt" ? "Paste content to restyle in your voice..." : "What do you want to write?"}
         disabled={isGenerating}
       ></textarea>
       <div class="absolute bottom-2 right-2 text-[10px] text-muted pointer-events-none">
@@ -488,5 +575,7 @@
         </button>
       </div>
     </div>
+  {/if}
+
   {/if}
 </div>
