@@ -403,6 +403,25 @@ button {
   border-radius: 8px 8px 0 0; z-index: 1;
 }
 
+/* Empty state: warp threads appear one by one */
+@keyframes warp-appear {
+  from { stroke-dashoffset: 54; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Empty state: accent thread weaves across */
+@keyframes weft-weave {
+  0%   { stroke-dashoffset: 80; opacity: 0; }
+  30%  { opacity: 0.4; }
+  100% { stroke-dashoffset: 0; opacity: 0.4; }
+}
+
+/* Empty state: gentle float for noren panels */
+@keyframes panel-sway {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(1.5px); }
+}
+
 /* Voice badge pulse */
 @keyframes voice-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(58,125,92,0.4); }

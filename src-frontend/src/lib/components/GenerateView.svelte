@@ -199,74 +199,101 @@
 <div class="flex flex-col gap-3 h-full p-4 overflow-y-auto animate-fade-in-up">
   <!-- Empty state: no profile, no output yet -->
   {#if !hasProfile && !getIsExtracting() && !output && !comparison && !dismissedEmpty && !isPopup}
-    <div class="flex-1 flex flex-col items-center justify-center gap-6 py-8 animate-fade-in-up">
-      <!-- Scattered threads illustration -->
-      <svg class="w-[120px] h-[80px] opacity-60" viewBox="0 0 120 80" fill="none">
-        <!-- Loose, unconnected threads — waiting to be woven -->
-        <path d="M15 20 C25 18, 35 24, 45 20" stroke="var(--color-secondary)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
-        <path d="M30 35 C40 30, 55 38, 65 32" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
-        <path d="M55 15 C65 12, 78 20, 88 16" stroke="var(--color-secondary)" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
-        <path d="M20 50 C30 46, 42 54, 55 48" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.45"/>
-        <path d="M60 45 C72 42, 82 50, 95 44" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
-        <path d="M40 62 C50 58, 62 65, 75 60" stroke="var(--color-secondary)" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
-        <path d="M75 25 C85 22, 95 28, 105 24" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
-      </svg>
+    <div class="flex-1 flex flex-col items-center justify-center -m-4 overflow-hidden">
+      <!-- Warm radial glow -->
+      <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 55% 45% at 50% 40%, var(--color-primary-muted), transparent 70%)"></div>
 
-      <div class="text-center max-w-[280px]">
-        <p class="text-sm font-medium text-foreground">No voice profile yet</p>
-        <p class="text-[10px] text-muted leading-relaxed mt-1.5">
-          Noren generates text in your voice. Extract your style from real writing samples, or describe it yourself.
-        </p>
-      </div>
+      <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
+        <!-- Warp threads + accent weft -->
+        <svg class="w-[120px] h-[68px]" viewBox="0 0 120 68" fill="none">
+          <!-- Beam -->
+          <line x1="18" y1="10" x2="102" y2="10" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.2"/>
 
-      <div class="flex flex-col items-center gap-2">
-        {#if canExtract()}
-          <button
-            onclick={() => emit("navigate", "extract")}
-            class="px-5 py-2 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded-md"
-          >
-            Extract your voice
-          </button>
-          <button
-            onclick={() => emit("navigate", "profiles")}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground"
-          >
-            Or describe it manually
-          </button>
-        {:else}
-          <button
-            onclick={() => emit("navigate", "profiles")}
-            class="px-5 py-2 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded-md"
-          >
-            Create a voice profile
-          </button>
-          <button
-            onclick={() => emit("navigate", "settings")}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground"
-          >
-            Or upgrade to Pro for AI extraction
-          </button>
-        {/if}
-      </div>
+          <!-- Warp threads — staggered entrance -->
+          {#each [
+            { x: 36, delay: 0.15 },
+            { x: 52, delay: 0.28 },
+            { x: 68, delay: 0.41 },
+            { x: 84, delay: 0.54 },
+          ] as thread, i}
+            <line
+              x1={thread.x} y1="10" x2={thread.x} y2="64"
+              stroke="var(--color-secondary)" stroke-width="1" stroke-linecap="round"
+              stroke-dasharray="54" stroke-dashoffset="54"
+              opacity={0.2 + (i % 2) * 0.15}
+              style="animation: warp-appear 0.7s {thread.delay}s ease-out forwards"
+            />
+          {/each}
 
-      <button
-        onclick={() => { dismissedEmpty = true; }}
-        class="text-[10px] text-muted cursor-pointer hover:text-foreground mt-2"
-      >
-        Continue without a profile
-      </button>
+          <!-- Accent weft — draws after warps settle -->
+          <path
+            d="M26 36 C40 31, 50 40, 60 35 C70 30, 80 38, 94 33"
+            stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round"
+            stroke-dasharray="80" stroke-dashoffset="80"
+            style="animation: weft-weave 1s 0.9s ease-out forwards"
+          />
+        </svg>
 
-      {#if noKey}
-        <div class="flex items-center gap-2 p-2 bg-tint border border-warning/20 rounded-lg mt-2 max-w-[280px]">
-          <p class="flex-1 text-[10px] text-muted leading-relaxed">
-            API key also needed.
-            <button
-              onclick={() => emit("navigate", "settings")}
-              class="text-secondary font-medium cursor-pointer hover:text-foreground"
-            >Go to Settings</button>
+        <div class="text-center max-w-[240px]">
+          <h2 class="font-heading text-[21px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
+            Waiting for your voice
+          </h2>
+          <p class="text-[11px] text-muted leading-[1.7] mt-3">
+            Your voice profile tells Noren how you write. Extract it from samples or describe it yourself.
           </p>
         </div>
-      {/if}
+
+        <div class="flex flex-col items-center gap-3">
+          {#if canExtract()}
+            <button
+              onclick={() => emit("navigate", "extract")}
+              class="px-6 py-2.5 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-all duration-200 cursor-pointer rounded-md hover:-translate-y-px"
+              style="box-shadow: 0 2px 8px var(--color-primary-muted)"
+            >
+              Extract your voice
+            </button>
+            <button
+              onclick={() => emit("navigate", "profiles")}
+              class="text-[11px] text-secondary font-medium cursor-pointer hover:text-foreground transition-colors"
+            >
+              Or describe it manually
+            </button>
+          {:else}
+            <button
+              onclick={() => emit("navigate", "profiles")}
+              class="px-6 py-2.5 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-all duration-200 cursor-pointer rounded-md hover:-translate-y-px"
+              style="box-shadow: 0 2px 8px var(--color-primary-muted)"
+            >
+              Create a voice profile
+            </button>
+            <button
+              onclick={() => emit("navigate", "settings")}
+              class="text-[11px] text-secondary font-medium cursor-pointer hover:text-foreground transition-colors"
+            >
+              Or upgrade to Pro for AI extraction
+            </button>
+          {/if}
+        </div>
+
+        <button
+          onclick={() => { dismissedEmpty = true; }}
+          class="text-[10px] text-muted cursor-pointer hover:text-foreground transition-colors mt-2"
+        >
+          Continue without a profile
+        </button>
+
+        {#if noKey}
+          <div class="flex items-center gap-2 p-2.5 bg-tint border border-warning/20 rounded-lg max-w-[240px]">
+            <p class="flex-1 text-[10px] text-muted leading-relaxed">
+              API key also needed.
+              <button
+                onclick={() => emit("navigate", "settings")}
+                class="text-secondary font-medium cursor-pointer hover:text-foreground"
+              >Go to Settings</button>
+            </p>
+          </div>
+        {/if}
+      </div>
     </div>
   {:else}
 

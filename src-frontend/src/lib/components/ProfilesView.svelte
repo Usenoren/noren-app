@@ -283,44 +283,56 @@
   {:else if !overview.exists}
     {#if !showManualCreate}
       <!-- Empty state: no profile -->
-      <div class="flex-1 flex flex-col items-center justify-center gap-6 py-8 animate-fade-in-up">
-        <!-- Empty loom frame illustration -->
-        <svg class="w-[100px] h-[90px] opacity-55" viewBox="0 0 100 90" fill="none">
-          <!-- Loom frame -->
-          <rect x="15" y="10" width="70" height="70" rx="3" stroke="var(--color-border)" stroke-width="1.5" fill="none"/>
-          <!-- Top beam -->
-          <line x1="15" y1="18" x2="85" y2="18" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.4"/>
-          <!-- Bottom beam -->
-          <line x1="15" y1="72" x2="85" y2="72" stroke="var(--color-primary)" stroke-width="1.5" opacity="0.4"/>
-          <!-- Faint warp threads (waiting) -->
-          <line x1="30" y1="18" x2="30" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.2" stroke-dasharray="3 4"/>
-          <line x1="42" y1="18" x2="42" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.15" stroke-dasharray="3 4"/>
-          <line x1="54" y1="18" x2="54" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.2" stroke-dasharray="3 4"/>
-          <line x1="66" y1="18" x2="66" y2="72" stroke="var(--color-secondary)" stroke-width="0.75" opacity="0.15" stroke-dasharray="3 4"/>
-          <!-- Accent thread hint -->
-          <path d="M28 40 C35 38, 45 42, 52 39 C59 36, 67 41, 72 39" stroke="var(--color-accent)" stroke-width="1" stroke-linecap="round" opacity="0.25"/>
-        </svg>
+      <div class="flex-1 flex flex-col items-center justify-center -m-4 overflow-hidden">
+        <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
+          <!-- Noren curtain — rod with hanging panels -->
+          <svg class="w-[130px] h-[88px]" viewBox="0 0 130 88" fill="none">
+            <!-- Rod -->
+            <line x1="10" y1="8" x2="120" y2="8" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" opacity="0.25"/>
+            <!-- End caps -->
+            <circle cx="10" cy="8" r="2.5" fill="var(--color-primary)" opacity="0.18"/>
+            <circle cx="120" cy="8" r="2.5" fill="var(--color-primary)" opacity="0.18"/>
 
-        <div class="text-center max-w-[280px]">
-          <p class="text-sm font-medium text-foreground">Your voice profile will live here</p>
-          <p class="text-[10px] text-muted leading-relaxed mt-1.5">
-            AI extraction analyzes your real writing to capture sentence patterns, vocabulary, tone, and format-specific style. The recommended way to start.
-          </p>
-        </div>
+            <!-- Panel 1 -->
+            <g style="animation: panel-sway 5s ease-in-out infinite; transform-origin: 30px 8px">
+              <rect x="18" y="8" width="24" height="56" rx="1.5" stroke="var(--color-border)" stroke-width="0.75" fill="var(--color-tint)" opacity="0.2"/>
+            </g>
 
-        <div class="flex flex-col items-center gap-2">
-          <button
-            onclick={() => emit("navigate", "extract")}
-            class="px-5 py-2 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer rounded-md"
-          >
-            Extract your voice
-          </button>
-          <button
-            onclick={() => { showManualCreate = true; }}
-            class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground"
-          >
-            Or describe it manually
-          </button>
+            <!-- Panel 2 -->
+            <g style="animation: panel-sway 5s 0.8s ease-in-out infinite; transform-origin: 65px 8px">
+              <rect x="53" y="8" width="24" height="62" rx="1.5" stroke="var(--color-border)" stroke-width="0.75" fill="var(--color-tint)" opacity="0.2"/>
+            </g>
+
+            <!-- Panel 3 -->
+            <g style="animation: panel-sway 5s 1.6s ease-in-out infinite; transform-origin: 100px 8px">
+              <rect x="88" y="8" width="24" height="52" rx="1.5" stroke="var(--color-border)" stroke-width="0.75" fill="var(--color-tint)" opacity="0.2"/>
+            </g>
+          </svg>
+
+          <div class="text-center max-w-[260px]">
+            <h2 class="font-heading text-[21px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
+              The loom is ready
+            </h2>
+            <p class="text-[11px] text-muted leading-[1.7] mt-3">
+              AI extraction reads your real writing and captures sentence patterns, vocabulary, tone, and format-specific style. The best way to start.
+            </p>
+          </div>
+
+          <div class="flex flex-col items-center gap-3">
+            <button
+              onclick={() => emit("navigate", "extract")}
+              class="px-6 py-2.5 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-all duration-200 cursor-pointer rounded-md hover:-translate-y-px"
+              style="box-shadow: 0 2px 8px var(--color-primary-muted)"
+            >
+              Extract your voice
+            </button>
+            <button
+              onclick={() => { showManualCreate = true; }}
+              class="text-[11px] text-secondary font-medium cursor-pointer hover:text-foreground transition-colors"
+            >
+              Or describe it manually
+            </button>
+          </div>
         </div>
       </div>
     {:else}
