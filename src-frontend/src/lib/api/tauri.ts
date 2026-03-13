@@ -37,6 +37,7 @@ export async function generate(params: {
   prompt: string;
   format: string;
   level: string;
+  mode?: "generate" | "adapt";
   context?: string;
   attachments?: string[];
 }): Promise<GenerateResult> {
@@ -123,6 +124,10 @@ export async function verifyEmail(code: string): Promise<string> {
 
 export async function resendOtp(): Promise<string> {
   return invoke("resend_otp");
+}
+
+export async function resendSetupEmail(email: string): Promise<string> {
+  return invoke("resend_setup_email", { email });
 }
 
 export async function getNorenProUsage(): Promise<NorenProStatus> {

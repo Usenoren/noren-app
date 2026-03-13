@@ -13,6 +13,7 @@
     googleOAuthPoll,
     verifyEmail,
     resendOtp,
+    resendSetupEmail,
     type SettingsInfo,
     type NorenProStatus,
     type SubscriptionStatus,
@@ -37,6 +38,9 @@
   let otpLoading = $state(false);
   let otpMessage = $state("");
   let resendCooldown = $state(0);
+  let showResendSetup = $state(false);
+  let resendSetupLoading = $state(false);
+  let resendSetupMessage = $state("");
 
   $effect(() => {
     loadAccount();
@@ -136,6 +140,20 @@
       startResendCooldown();
     } catch (e) {
       error = friendlyError(e);
+    }
+  }
+
+  async function handleResendSetup() {
+    if (!proEmail.trim()) return;
+    resendSetupLoading = true;
+    resendSetupMessage = "";
+    try {
+      const msg = await resendSetupEmail(proEmail.trim());
+      resendSetupMessage = msg;
+    } catch {
+      resendSetupMessage = "If that email is in our system, we've sent setup instructions.";
+    } finally {
+      resendSetupLoading = false;
     }
   }
 
@@ -472,6 +490,40 @@
         </button>
       </div>
     </div>
+
+    <!-- Resend setup email -->
+    {#if showResendSetup}
+      <div class="p-3 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-2">
+        <p class="text-[10px] text-muted leading-relaxed">
+          Signed up on the website? Enter your email to resend the setup link.
+        </p>
+        <div class="flex gap-1.5">
+          <input
+            type="email"
+            bind:value={proEmail}
+            class="flex-1 px-2.5 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+            placeholder="Email"
+          />
+          <button
+            onclick={handleResendSetup}
+            disabled={resendSetupLoading || !proEmail.trim()}
+            class="px-3 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
+          >
+            {resendSetupLoading ? "Sending..." : "Resend"}
+          </button>
+        </div>
+        {#if resendSetupMessage}
+          <p class="text-[10px] text-secondary">{resendSetupMessage}</p>
+        {/if}
+      </div>
+    {:else}
+      <button
+        onclick={() => { showResendSetup = true; }}
+        class="text-[10px] text-muted hover:text-foreground cursor-pointer"
+      >
+        Signed up on the website? Resend setup email
+      </button>
+    {/if}
 
     <!-- Error -->
     {#if error}

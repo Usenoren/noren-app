@@ -572,6 +572,13 @@
             Write my own profile
           </button>
           <button
+            onclick={() => { proIntent = false; step = "auth"; }}
+            class="cursor-pointer bg-transparent border-none text-muted hover:text-foreground transition-colors"
+            style="font-size:10.5px; padding:4px"
+          >
+            Already have an account? Sign in
+          </button>
+          <button
             onclick={onComplete}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
             style="font-size:10px; padding:4px"

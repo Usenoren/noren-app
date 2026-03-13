@@ -377,6 +377,27 @@ pub async fn resend_otp(
     Ok(data["message"].as_str().unwrap_or("Code sent").to_string())
 }
 
+#[tauri::command]
+pub async fn resend_setup_email(
+    state: State<'_, AppState>,
+    email: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/resend-setup", server_url))
+        .json(&serde_json::json!({ "email": email }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    // Always return success message (anti-enumeration)
+    let data: serde_json::Value = resp.json().await.unwrap_or_default();
+    Ok(data["message"].as_str().unwrap_or("If that email is in our system, we've sent setup instructions.").to_string())
+}
+
 // --- Google OAuth ---
 
 #[derive(Serialize)]
