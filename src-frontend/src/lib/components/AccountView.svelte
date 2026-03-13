@@ -228,8 +228,7 @@
     couponMessage = "";
     error = "";
     try {
-      const result = await redeemCoupon(code);
-      couponMessage = result.message;
+      await redeemCoupon(code);
       showCouponInput = false;
       couponCode = "";
       await refreshSubscription();

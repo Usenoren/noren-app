@@ -42,6 +42,7 @@
   let couponCode = $state("");
   let couponLoading = $state(false);
   let couponMessage = $state("");
+  let pendingCoupon = $state("");
 
   // Pro intent: auto-trigger upgrade after auth
   let proIntent = $state(false);
@@ -271,13 +272,29 @@
   async function handleApplyCoupon() {
     const code = couponCode.trim();
     if (!code) return;
+
+    // Coupon requires auth. If not logged in, stash code and redirect to auth.
+    const settings = await getSettings();
+    isLoggedIn = settings.noren_pro_logged_in;
+    if (!isLoggedIn) {
+      pendingCoupon = code;
+      step = "auth";
+      return;
+    }
+
+    await applyCouponCode(code);
+  }
+
+  async function applyCouponCode(code: string) {
     couponLoading = true;
+    showCouponInput = true;
     couponMessage = "";
     error = "";
     try {
       await redeemCoupon(code);
       showCouponInput = false;
       couponCode = "";
+      pendingCoupon = "";
       await refreshSubscription();
       if (canExtract()) {
         proceedAfterPayment();
@@ -289,10 +306,14 @@
         const status = parseInt(match[1]);
         const detail = match[2];
         if (status === 404) {
-          // Not a trial coupon, try as Stripe promo code
+          // Not a trial coupon, try as Stripe promo code via checkout
           couponMessage = "";
+          couponLoading = false;
+          step = "awaiting-payment";
           await handleUpgrade("pro", code);
+          return;
         } else {
+          // 400 (expired/limit), 409 (already redeemed)
           couponMessage = detail;
         }
       } else {
@@ -309,6 +330,7 @@
     await refreshSubscription();
     if (canExtract()) {
       proIntent = false;
+      pendingCoupon = "";
       if (pendingPath === "guided") {
         step = "guided";
         currentQuestion = 0;
@@ -316,6 +338,16 @@
       } else {
         step = "input-method";
       }
+    } else if (pendingCoupon) {
+      // User entered a coupon on the paywall before auth. Apply it now.
+      const code = pendingCoupon;
+      pendingCoupon = "";
+      proIntent = false;
+      couponCode = code;
+      couponLoading = true;
+      showCouponInput = true;
+      step = "paywall";
+      await applyCouponCode(code);
     } else if (proIntent) {
       proIntent = false;
       // Kick off Pro checkout and show the waiting screen
