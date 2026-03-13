@@ -7,9 +7,9 @@
     setLivingProfileEnabled,
     uploadEditLog,
     refreshLivingProfile,
-    getProfilePatches,
-    approveProfilePatch,
-    rejectProfilePatch,
+    getProfileMetadataInfo,
+    rollbackProfile,
+    getRefreshHistory,
     syncProfileUp,
     syncProfileDown,
     getSyncStatus,
@@ -19,13 +19,17 @@
     type ProfileOverview,
     type ProfileContent,
     type LivingProfileStatus,
-    type ProfilePatch,
+    type RefreshResponse,
+    type ProfileMetadataInfo,
+    type ExternalSample,
+    type RefreshHistoryEntry,
+    type SectionDiff,
     type SyncStatus,
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
   import { canLivingProfile, canSync, canExport } from "$lib/stores/subscription.svelte";
-  import { setPatchCount } from "$lib/stores/patches.svelte";
+  import { setRefreshAvailable } from "$lib/stores/patches.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import { marked } from "marked";
@@ -49,10 +53,18 @@
 
   // Living profile state
   let livingStatus = $state<LivingProfileStatus | null>(null);
-  let patches = $state<ProfilePatch[]>([]);
   let isUploading = $state(false);
   let isRefreshing = $state(false);
   let refreshMessage = $state("");
+  let latestObservations = $state<string[]>([]);
+  let profileMeta = $state<ProfileMetadataInfo | null>(null);
+  let isRollingBack = $state(false);
+  let showRollbackConfirm = $state(false);
+
+  // Evolution timeline
+  let refreshHistory = $state<RefreshHistoryEntry[]>([]);
+  let expandedEntryId = $state<string | null>(null);
+  let expandedDiffSection = $state<string | null>(null);
 
   // Sync state
   let syncStatus = $state<SyncStatus | null>(null);
@@ -112,6 +124,34 @@
     persistWritingSamples();
   }
 
+  async function loadRefreshHistory() {
+    try {
+      refreshHistory = await getRefreshHistory(20, 0);
+      if (refreshHistory.length > 0) {
+        expandedEntryId = refreshHistory[0].id;
+      }
+    } catch {}
+  }
+
+  function toggleEntry(id: string) {
+    expandedEntryId = expandedEntryId === id ? null : id;
+    expandedDiffSection = null;
+  }
+
+  function toggleDiffSection(section: string) {
+    expandedDiffSection = expandedDiffSection === section ? null : section;
+  }
+
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function formatSectionName(section: string): string {
+    if (section === "core_identity") return "Core";
+    if (section.startsWith("contexts/")) return section.replace("contexts/", "");
+    return section;
+  }
+
   let displayContent = $derived(
     activeTab === "core"
       ? profile?.core_identity ?? ""
@@ -131,14 +171,18 @@
       if (overview.exists && !overview.is_server) {
         profile = await readProfileContent();
       }
-      // Load living profile status
+      // Load living profile status + metadata + history
       try {
         livingStatus = await getLivingProfileStatus();
         if (livingStatus.enabled) {
-          const p = await getProfilePatches();
-          patches = p;
-          setPatchCount(p.length);
+          await loadRefreshHistory();
         }
+      } catch { /* not logged in or not available */ }
+      try {
+        profileMeta = await getProfileMetadataInfo();
+        // Update nav dot: refresh is available when cooldown has passed
+        const nextRefresh = profileMeta?.next_refresh_available;
+        setRefreshAvailable(!nextRefresh || new Date(nextRefresh).getTime() <= Date.now());
       } catch { /* not logged in or not available */ }
       // Load sync status
       try {
@@ -217,22 +261,43 @@
     }
   }
 
+  function daysUntilRefresh(): number | null {
+    if (!profileMeta?.next_refresh_available) return null;
+    const diff = new Date(profileMeta.next_refresh_available).getTime() - Date.now();
+    if (diff <= 0) return null;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }
+
   async function handleUploadAndRefresh() {
     error = "";
     refreshMessage = "";
+    showRollbackConfirm = false;
     isUploading = true;
     try {
-      const count = await uploadEditLog();
+      const samples: ExternalSample[] | undefined = writingSamples.length > 0 ? writingSamples : undefined;
+      const count = await uploadEditLog(samples);
       isUploading = false;
-      if (count === 0) {
+      if (count === 0 && !samples?.length) {
         refreshMessage = "No edits to upload yet. Keep writing!";
         return;
       }
+      // Clear local samples after successful upload
+      if (samples?.length) {
+        clearAllSamples();
+      }
       isRefreshing = true;
-      const result = await refreshLivingProfile();
-      patches = result.patches;
-      setPatchCount(patches.length);
-      refreshMessage = `Analyzed ${result.entries_analyzed} edits, found ${result.signals_found} signals, generated ${result.patches.length} patches.`;
+      const result: RefreshResponse = await refreshLivingProfile();
+      refreshMessage = result.message;
+      if (result.observations.length > 0) {
+        latestObservations = result.observations;
+      }
+      await loadRefreshHistory();
+      // Reload metadata (rate limit, rollback state)
+      try {
+        profileMeta = await getProfileMetadataInfo();
+        const nextRefresh = profileMeta?.next_refresh_available;
+        setRefreshAvailable(!nextRefresh || new Date(nextRefresh).getTime() <= Date.now());
+      } catch {}
     } catch (e) {
       error = friendlyError(e);
     } finally {
@@ -241,25 +306,19 @@
     }
   }
 
-  async function handleApprovePatch(patchId: string) {
+  async function handleRollback() {
     error = "";
+    isRollingBack = true;
     try {
-      await approveProfilePatch(patchId);
-      patches = patches.filter((p) => p.patch_id !== patchId);
-      setPatchCount(patches.length);
+      await rollbackProfile();
+      refreshMessage = "Profile restored to pre-refresh version.";
+      showRollbackConfirm = false;
+      await loadRefreshHistory();
+      await loadProfile();
     } catch (e) {
       error = friendlyError(e);
-    }
-  }
-
-  async function handleRejectPatch(patchId: string) {
-    error = "";
-    try {
-      await rejectProfilePatch(patchId);
-      patches = patches.filter((p) => p.patch_id !== patchId);
-      setPatchCount(patches.length);
-    } catch (e) {
-      error = friendlyError(e);
+    } finally {
+      isRollingBack = false;
     }
   }
 
@@ -463,18 +522,6 @@
         </div>
       {/if}
 
-      {#if patches.length > 0 && activeTab !== "living"}
-        <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg shrink-0">
-          <p class="flex-1 text-[10px] text-muted leading-relaxed">
-            {patches.length} suggested refinement{patches.length !== 1 ? "s" : ""}.
-            <button
-              onclick={() => switchTab("living")}
-              class="text-secondary font-medium cursor-pointer hover:text-foreground"
-            >Review</button>
-          </p>
-        </div>
-      {/if}
-
       {#if overview.formats.length > 0}
         <div class="p-3 bg-surface border border-border rounded-lg">
           <span class="text-[10px] font-medium text-muted uppercase tracking-wide">Formats</span>
@@ -541,217 +588,13 @@
 
       {#if activeTab === "living"}
         {#if canLivingProfile()}
-        <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
-          <div class="p-3 bg-surface border border-border rounded-lg">
-            <div class="flex items-center justify-between">
-              <div>
-                <span class="text-xs font-medium text-foreground">Edit tracking</span>
-                <p class="text-[10px] text-muted mt-0.5">Track edits to improve your profile over time.</p>
-              </div>
-              <button
-                onclick={handleToggleLiving}
-                class="px-3 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md transition-colors
-                  {livingStatus?.enabled
-                    ? 'bg-secondary text-white font-medium'
-                    : 'bg-surface text-muted border border-border hover:border-secondary'}"
-              >
-                {livingStatus?.enabled ? "On" : "Off"}
-              </button>
-            </div>
-            {#if livingStatus?.enabled}
-              <p class="text-[10px] text-secondary mt-2">
-                {livingStatus.edit_count} edits tracked locally
-              </p>
-            {/if}
-          </div>
-
-          {#if livingStatus?.enabled}
-            <button
-              onclick={handleUploadAndRefresh}
-              disabled={isUploading || isRefreshing}
-              class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
-            >
-              {#if isUploading}
-                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Uploading edits...</span>
-              {:else if isRefreshing}
-                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Analyzing patterns...</span>
-              {:else}
-                Refresh profile from edits
-              {/if}
-            </button>
-
-            {#if refreshMessage}
-              <p class="text-[10px] text-muted">{refreshMessage}</p>
-            {/if}
-
-            {#if patches.length > 0}
-              <div>
-                <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">
-                  Suggested changes ({patches.length})
-                </span>
-                <div class="flex flex-col gap-2">
-                  {#each patches as patch}
-                    <div class="p-3 bg-surface border border-border rounded-lg">
-                      <p class="text-xs text-foreground">{patch.description}</p>
-                      {#if patch.original_text}
-                        <p class="text-[10px] text-muted mt-1 font-mono line-through">{patch.original_text}</p>
-                      {/if}
-                      {#if patch.new_text}
-                        <p class="text-[10px] text-secondary mt-1 font-mono">{patch.new_text}</p>
-                      {/if}
-                      <div class="flex items-center justify-between mt-2">
-                        <span class="text-[10px] text-muted">
-                          {patch.section} &middot; {Math.round(patch.confidence * 100)}% confidence
-                        </span>
-                        <div class="flex gap-1">
-                          <button
-                            onclick={() => handleRejectPatch(patch.patch_id)}
-                            class="px-2 py-0.5 text-[10px] border border-border text-muted hover:text-error hover:border-error cursor-pointer rounded transition-colors"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onclick={() => handleApprovePatch(patch.patch_id)}
-                            class="px-2 py-0.5 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium"
-                          >
-                            Approve
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {:else if !isRefreshing && !isUploading}
-              <p class="text-[10px] text-muted text-center py-4">
-                No pending suggestions. Keep writing and refresh periodically.
-              </p>
-            {/if}
-          {:else}
-            <p class="text-[10px] text-muted leading-relaxed">
-              Enable edit tracking to let Noren learn from how you modify generated text.
-              Your edits are stored locally and only uploaded when you choose to refresh.
-            </p>
-          {/if}
-
-          <!-- Voice specimen collector (independent of edit tracking) -->
-          <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--color-border)">
-            <button
-              onclick={() => { writingDrawerOpen = !writingDrawerOpen; }}
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors hover:bg-tint/40"
-              style="background: var(--color-surface)"
-            >
-              <svg class="w-[14px] h-[14px] shrink-0" viewBox="0 0 16 16" fill="none" style="color: var(--color-secondary)">
-                <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M9.5 3.5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-              </svg>
-              <span class="flex-1 text-left">
-                <span class="text-xs font-medium text-foreground">Recent writing</span>
-                {#if writingSamples.length > 0}
-                  <span class="ml-1.5 text-[9px] font-medium" style="color: var(--color-secondary)">{writingSamples.length}</span>
-                {/if}
-              </span>
-              <svg
-                class="w-[10px] h-[10px] transition-transform duration-200"
-                class:rotate-180={writingDrawerOpen}
-                viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"
-              >
-                <path d="M2.5 3.75l2.5 2.5 2.5-2.5"/>
-              </svg>
-            </button>
-
-            {#if writingDrawerOpen}
-              <div class="flex flex-col gap-3 px-3 pb-3" style="border-top: 1px dashed var(--color-border)">
-                <p class="text-[10px] leading-relaxed pt-3" style="color: var(--color-muted)">
-                  Paste writing you have published elsewhere. Blog posts, tweets, emails. These feed into your next profile refresh.
-                </p>
-
-                <div class="flex gap-1">
-                  {#each Object.keys(FORMAT_ACCENTS) as fmt}
-                    <button
-                      onclick={() => { sampleFormat = fmt; }}
-                      class="px-2 py-[3px] text-[10px] cursor-pointer rounded-sm transition-all duration-150"
-                      style={sampleFormat === fmt
-                        ? `background: ${FORMAT_ACCENTS[fmt]}; color: white; font-weight: 500`
-                        : `background: transparent; color: var(--color-muted); border: 1px solid var(--color-border)`}
-                    >
-                      {fmt}
-                    </button>
-                  {/each}
-                </div>
-
-                <div class="relative">
-                  <textarea
-                    bind:value={sampleDraft}
-                    class="w-full p-2.5 text-xs leading-[1.7] resize-none placeholder-muted focus:outline-none rounded"
-                    style="
-                      border: 1.5px dashed {sampleDraft.trim() ? 'var(--color-secondary)' : 'var(--color-border)'};
-                      background: var(--color-warm-surface);
-                      color: var(--color-foreground);
-                      min-height: 88px;
-                      transition: border-color 0.2s;
-                    "
-                    placeholder="Paste a piece of your writing..."
-                  ></textarea>
-                  {#if sampleDraft.trim()}
-                    <span class="absolute bottom-2 right-2.5 text-[9px] tabular-nums" style="color: var(--color-muted)">
-                      {sampleDraft.trim().split(/\s+/).length} words
-                    </span>
-                  {/if}
-                </div>
-
-                <div class="flex justify-end">
-                  <button
-                    onclick={commitSample}
-                    disabled={!sampleDraft.trim()}
-                    class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] cursor-pointer rounded transition-all duration-150"
-                    style={!sampleDraft.trim()
-                      ? 'background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-border); opacity: 0.45; cursor: not-allowed'
-                      : 'background: var(--color-secondary); color: white'}
-                  >
-                    Collect
-                  </button>
-                </div>
-
-                {#if writingSamples.length > 0}
-                  <div class="flex flex-col gap-1" style="border-top: 1px solid var(--color-border); padding-top: 0.5rem">
-                    {#each writingSamples as sample, i}
-                      <div class="flex items-center gap-2 py-1 group rounded-sm px-1 transition-colors hover:bg-tint/30">
-                        <div
-                          class="w-[3px] h-[18px] rounded-full shrink-0"
-                          style="background: {FORMAT_ACCENTS[sample.format] || FORMAT_ACCENTS.general}"
-                        ></div>
-                        <span class="text-[9px] font-medium uppercase tracking-wide shrink-0 w-[40px]" style="color: var(--color-muted)">{sample.format}</span>
-                        <span class="flex-1 text-[10px] truncate" style="color: var(--color-foreground)">{sample.text.slice(0, 70)}{sample.text.length > 70 ? '...' : ''}</span>
-                        <button
-                          onclick={() => discardSample(i)}
-                          class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5 rounded hover:bg-error/10"
-                          title="Remove"
-                        >
-                          <svg class="w-[10px] h-[10px]" viewBox="0 0 10 10" fill="none" stroke="var(--color-error)" stroke-width="1.3" stroke-linecap="round">
-                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5"/>
-                          </svg>
-                        </button>
-                      </div>
-                    {/each}
-                    <button
-                      onclick={clearAllSamples}
-                      class="self-start text-[9px] mt-1 cursor-pointer text-muted hover:text-error transition-colors"
-                    >
-                      Clear all samples
-                    </button>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        </div>
+        {@render livingTabContent()}
         {:else}
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
           <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
             <p class="text-xs font-medium text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
-              Your profile evolves as you write. Noren tracks your edits and suggests refinements automatically.
+              Your profile evolves as you write. Noren tracks your edits and refines automatically.
             </p>
             <button
               onclick={() => handleUpgrade("pro")}
@@ -839,240 +682,18 @@
       </div>
     {/if}
 
-    {#if patches.length > 0 && activeTab !== "living"}
-      <div class="flex items-center gap-2 p-2 bg-tint border border-secondary/20 rounded-lg shrink-0">
-        <p class="flex-1 text-[10px] text-muted leading-relaxed">
-          {patches.length} suggested refinement{patches.length !== 1 ? "s" : ""}.
-          <button
-            onclick={() => switchTab("living")}
-            class="text-secondary font-medium cursor-pointer hover:text-foreground"
-          >Review</button>
-        </p>
-      </div>
-    {/if}
-
     <!-- Content -->
     <div class="flex-1 flex flex-col min-h-0">
       {#if activeTab === "living"}
         {#if canLivingProfile()}
-        <!-- Living Profile panel -->
-        <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
-          <!-- Opt-in toggle -->
-          <div class="p-3 bg-surface border border-border rounded-lg">
-            <div class="flex items-center justify-between">
-              <div>
-                <span class="text-xs font-medium text-foreground">Edit tracking</span>
-                <p class="text-[10px] text-muted mt-0.5">
-                  Track edits you make to generated text so your profile can improve over time.
-                </p>
-              </div>
-              <button
-                onclick={handleToggleLiving}
-                class="px-3 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md transition-colors
-                  {livingStatus?.enabled
-                    ? 'bg-secondary text-white font-medium'
-                    : 'bg-surface text-muted border border-border hover:border-secondary'}"
-              >
-                {livingStatus?.enabled ? "On" : "Off"}
-              </button>
-            </div>
-            {#if livingStatus?.enabled}
-              <p class="text-[10px] text-secondary mt-2">
-                {livingStatus.edit_count} edits tracked locally
-              </p>
-            {/if}
-          </div>
-
-          {#if livingStatus?.enabled}
-            <!-- Upload & Refresh -->
-            <button
-              onclick={handleUploadAndRefresh}
-              disabled={isUploading || isRefreshing}
-              class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
-            >
-              {#if isUploading}
-                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Uploading edits...</span>
-              {:else if isRefreshing}
-                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Analyzing patterns...</span>
-              {:else}
-                Refresh profile from edits
-              {/if}
-            </button>
-
-            {#if refreshMessage}
-              <p class="text-[10px] text-muted">{refreshMessage}</p>
-            {/if}
-
-            <!-- Pending patches -->
-            {#if patches.length > 0}
-              <div>
-                <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">
-                  Suggested changes ({patches.length})
-                </span>
-                <div class="flex flex-col gap-2">
-                  {#each patches as patch}
-                    <div class="p-3 bg-surface border border-border rounded-lg">
-                      <p class="text-xs text-foreground">{patch.description}</p>
-                      {#if patch.original_text}
-                        <p class="text-[10px] text-muted mt-1 font-mono line-through">{patch.original_text}</p>
-                      {/if}
-                      {#if patch.new_text}
-                        <p class="text-[10px] text-secondary mt-1 font-mono">{patch.new_text}</p>
-                      {/if}
-                      <div class="flex items-center justify-between mt-2">
-                        <span class="text-[10px] text-muted">
-                          {patch.section} &middot; {Math.round(patch.confidence * 100)}% confidence
-                        </span>
-                        <div class="flex gap-1">
-                          <button
-                            onclick={() => handleRejectPatch(patch.patch_id)}
-                            class="px-2 py-0.5 text-[10px] border border-border text-muted hover:text-error hover:border-error cursor-pointer rounded transition-colors"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onclick={() => handleApprovePatch(patch.patch_id)}
-                            class="px-2 py-0.5 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium"
-                          >
-                            Approve
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {:else if !isRefreshing && !isUploading}
-              <p class="text-[10px] text-muted text-center py-4">
-                No pending suggestions. Keep writing and refresh periodically.
-              </p>
-            {/if}
-          {:else}
-            <p class="text-[10px] text-muted leading-relaxed">
-              Enable edit tracking to let Noren learn from how you modify generated text.
-              Your edits are stored locally and only uploaded when you choose to refresh.
-            </p>
-          {/if}
-
-          <!-- Voice specimen collector (independent of edit tracking) -->
-          <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--color-border)">
-            <button
-              onclick={() => { writingDrawerOpen = !writingDrawerOpen; }}
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors hover:bg-tint/40"
-              style="background: var(--color-surface)"
-            >
-              <svg class="w-[14px] h-[14px] shrink-0" viewBox="0 0 16 16" fill="none" style="color: var(--color-secondary)">
-                <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M9.5 3.5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-              </svg>
-              <span class="flex-1 text-left">
-                <span class="text-xs font-medium text-foreground">Recent writing</span>
-                {#if writingSamples.length > 0}
-                  <span class="ml-1.5 text-[9px] font-medium" style="color: var(--color-secondary)">{writingSamples.length}</span>
-                {/if}
-              </span>
-              <svg
-                class="w-[10px] h-[10px] transition-transform duration-200"
-                class:rotate-180={writingDrawerOpen}
-                viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"
-              >
-                <path d="M2.5 3.75l2.5 2.5 2.5-2.5"/>
-              </svg>
-            </button>
-
-            {#if writingDrawerOpen}
-              <div class="flex flex-col gap-3 px-3 pb-3" style="border-top: 1px dashed var(--color-border)">
-                <p class="text-[10px] leading-relaxed pt-3" style="color: var(--color-muted)">
-                  Paste writing you have published elsewhere. Blog posts, tweets, emails. These feed into your next profile refresh.
-                </p>
-
-                <div class="flex gap-1">
-                  {#each Object.keys(FORMAT_ACCENTS) as fmt}
-                    <button
-                      onclick={() => { sampleFormat = fmt; }}
-                      class="px-2 py-[3px] text-[10px] cursor-pointer rounded-sm transition-all duration-150"
-                      style={sampleFormat === fmt
-                        ? `background: ${FORMAT_ACCENTS[fmt]}; color: white; font-weight: 500`
-                        : `background: transparent; color: var(--color-muted); border: 1px solid var(--color-border)`}
-                    >
-                      {fmt}
-                    </button>
-                  {/each}
-                </div>
-
-                <div class="relative">
-                  <textarea
-                    bind:value={sampleDraft}
-                    class="w-full p-2.5 text-xs leading-[1.7] resize-none placeholder-muted focus:outline-none rounded"
-                    style="
-                      border: 1.5px dashed {sampleDraft.trim() ? 'var(--color-secondary)' : 'var(--color-border)'};
-                      background: var(--color-warm-surface);
-                      color: var(--color-foreground);
-                      min-height: 88px;
-                      transition: border-color 0.2s;
-                    "
-                    placeholder="Paste a piece of your writing..."
-                  ></textarea>
-                  {#if sampleDraft.trim()}
-                    <span class="absolute bottom-2 right-2.5 text-[9px] tabular-nums" style="color: var(--color-muted)">
-                      {sampleDraft.trim().split(/\s+/).length} words
-                    </span>
-                  {/if}
-                </div>
-
-                <div class="flex justify-end">
-                  <button
-                    onclick={commitSample}
-                    disabled={!sampleDraft.trim()}
-                    class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] cursor-pointer rounded transition-all duration-150"
-                    style={!sampleDraft.trim()
-                      ? 'background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-border); opacity: 0.45; cursor: not-allowed'
-                      : 'background: var(--color-secondary); color: white'}
-                  >
-                    Collect
-                  </button>
-                </div>
-
-                {#if writingSamples.length > 0}
-                  <div class="flex flex-col gap-1" style="border-top: 1px solid var(--color-border); padding-top: 0.5rem">
-                    {#each writingSamples as sample, i}
-                      <div class="flex items-center gap-2 py-1 group rounded-sm px-1 transition-colors hover:bg-tint/30">
-                        <div
-                          class="w-[3px] h-[18px] rounded-full shrink-0"
-                          style="background: {FORMAT_ACCENTS[sample.format] || FORMAT_ACCENTS.general}"
-                        ></div>
-                        <span class="text-[9px] font-medium uppercase tracking-wide shrink-0 w-[40px]" style="color: var(--color-muted)">{sample.format}</span>
-                        <span class="flex-1 text-[10px] truncate" style="color: var(--color-foreground)">{sample.text.slice(0, 70)}{sample.text.length > 70 ? '...' : ''}</span>
-                        <button
-                          onclick={() => discardSample(i)}
-                          class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5 rounded hover:bg-error/10"
-                          title="Remove"
-                        >
-                          <svg class="w-[10px] h-[10px]" viewBox="0 0 10 10" fill="none" stroke="var(--color-error)" stroke-width="1.3" stroke-linecap="round">
-                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5"/>
-                          </svg>
-                        </button>
-                      </div>
-                    {/each}
-                    <button
-                      onclick={clearAllSamples}
-                      class="self-start text-[9px] mt-1 cursor-pointer text-muted hover:text-error transition-colors"
-                    >
-                      Clear all samples
-                    </button>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        </div>
+        {@render livingTabContent()}
         {:else}
         <!-- Living Profile locked -->
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
           <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
             <p class="text-xs font-medium text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
-              Your profile evolves as you write. Noren tracks your edits and suggests refinements automatically.
+              Your profile evolves as you write. Noren tracks your edits and refines automatically.
             </p>
             <button
               onclick={() => handleUpgrade("pro")}
@@ -1200,4 +821,325 @@
       </div>
     {/if}
   {/if}
+
+  {#snippet livingTabContent()}
+    <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
+      <!-- Edit tracking toggle -->
+      <div class="p-3 bg-surface border border-border rounded-lg">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-xs font-medium text-foreground">Edit tracking</span>
+            <p class="text-[10px] text-muted mt-0.5">Track edits to improve your profile over time.</p>
+          </div>
+          <button
+            onclick={handleToggleLiving}
+            class="px-3 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md transition-colors
+              {livingStatus?.enabled
+                ? 'bg-secondary text-white font-medium'
+                : 'bg-surface text-muted border border-border hover:border-secondary'}"
+          >
+            {livingStatus?.enabled ? "On" : "Off"}
+          </button>
+        </div>
+        {#if livingStatus?.enabled}
+          <p class="text-[10px] text-secondary mt-2">
+            {livingStatus.edit_count} edits tracked locally
+          </p>
+        {/if}
+      </div>
+
+      {#if livingStatus?.enabled}
+        <!-- Upload & Refresh -->
+        {@const rateDays = daysUntilRefresh()}
+        <button
+          onclick={handleUploadAndRefresh}
+          disabled={isUploading || isRefreshing || rateDays !== null}
+          class="w-full py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-md
+            {rateDays !== null
+              ? 'bg-surface text-muted border border-border'
+              : 'bg-secondary text-white hover:bg-secondary/90'}"
+        >
+          {#if isUploading}
+            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Uploading edits...</span>
+          {:else if isRefreshing}
+            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Analyzing patterns...</span>
+          {:else if rateDays !== null}
+            Available in {rateDays} day{rateDays !== 1 ? "s" : ""}
+          {:else}
+            Refresh profile{#if livingStatus.edit_count > 0 || writingSamples.length > 0}
+              <span class="ml-1 opacity-70">({livingStatus.edit_count} edit{livingStatus.edit_count !== 1 ? "s" : ""}{#if writingSamples.length > 0}, {writingSamples.length} sample{writingSamples.length !== 1 ? "s" : ""}{/if})</span>
+            {/if}
+          {/if}
+        </button>
+
+        {#if refreshMessage}
+          <p class="text-[10px] text-muted">{refreshMessage}</p>
+        {/if}
+
+        <!-- Inline observations after a fresh refresh -->
+        {#if latestObservations.length > 0}
+          <div class="pl-2.5" style="border-left: 2px solid var(--color-secondary)">
+            {#each latestObservations as obs}
+              <p class="text-[10px] text-foreground leading-relaxed">{obs}</p>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Rollback confirmation -->
+        {#if showRollbackConfirm}
+          <div class="p-2.5 bg-surface border border-border rounded-lg">
+            <p class="text-[10px] text-muted leading-relaxed">Any manual edits made after the last refresh will be lost.</p>
+            <div class="flex gap-2 mt-2">
+              <button
+                onclick={() => { showRollbackConfirm = false; }}
+                class="px-2 py-0.5 text-[10px] border border-border text-muted hover:text-foreground cursor-pointer rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onclick={handleRollback}
+                disabled={isRollingBack}
+                class="px-2 py-0.5 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium disabled:opacity-50"
+              >
+                {#if isRollingBack}
+                  <span class="inline-flex items-center gap-1"><LoadingSpinner /> Restoring...</span>
+                {:else}
+                  Confirm rollback
+                {/if}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Evolution Timeline -->
+        {#if refreshHistory.length > 0}
+          <div class="relative pl-4 mt-1">
+            <!-- Timeline spine -->
+            <div class="absolute left-[5px] top-[6px] bottom-0 w-px" style="background: var(--color-border)"></div>
+
+            <div class="flex flex-col gap-0">
+              {#each refreshHistory as entry, i}
+                {@const isExpanded = expandedEntryId === entry.id}
+                {@const isLatestActive = i === 0 && !entry.rolled_back}
+                <div
+                  class="relative transition-opacity duration-200"
+                  style={entry.rolled_back ? "opacity: 0.5" : ""}
+                >
+                  <!-- Node circle -->
+                  <div
+                    class="absolute -left-4 top-[5px] w-[10px] h-[10px] rounded-full border-2 transition-colors"
+                    style="background: {isLatestActive ? 'var(--color-secondary)' : 'var(--color-surface)'}; border-color: {isLatestActive ? 'var(--color-secondary)' : 'var(--color-border)'}"
+                  ></div>
+
+                  <!-- Entry card -->
+                  <button
+                    onclick={() => toggleEntry(entry.id)}
+                    class="w-full text-left py-2 cursor-pointer"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-foreground">{formatDate(entry.created_at)}</span>
+                      {#if entry.rolled_back}
+                        <span class="px-1.5 py-px text-[8px] uppercase tracking-wide font-medium rounded" style="color: var(--color-error); opacity: 0.7; border: 1px solid var(--color-error); border-opacity: 0.2">Rolled back</span>
+                      {/if}
+                      {#if !isExpanded}
+                        <svg class="w-[8px] h-[8px] ml-auto shrink-0" viewBox="0 0 8 8" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"><path d="M2 3l2 2 2-2"/></svg>
+                      {/if}
+                    </div>
+                    <p class="text-[10px] text-muted mt-0.5">
+                      {entry.edits_analyzed} edit{entry.edits_analyzed !== 1 ? "s" : ""}, {entry.samples_analyzed} sample{entry.samples_analyzed !== 1 ? "s" : ""}, {entry.generations_analyzed} generation{entry.generations_analyzed !== 1 ? "s" : ""}
+                    </p>
+                  </button>
+
+                  {#if isExpanded}
+                    <div class="pb-3 flex flex-col gap-2.5">
+                      <!-- Observations -->
+                      {#if entry.observations.length > 0}
+                        <div>
+                          <span class="text-[9px] uppercase tracking-wide text-muted font-medium">What we noticed</span>
+                          <div class="mt-1 pl-2.5" style="border-left: 2px solid var(--color-secondary)">
+                            {#each entry.observations as obs}
+                              <p class="text-[10px] text-foreground leading-relaxed py-0.5">{obs}</p>
+                            {/each}
+                          </div>
+                        </div>
+                      {/if}
+
+                      <!-- Diff sections -->
+                      {#if entry.diffs.length > 0}
+                        <div>
+                          <span class="text-[9px] uppercase tracking-wide text-muted font-medium">Changes</span>
+                          <div class="mt-1 flex flex-col gap-1">
+                            {#each entry.diffs as diff}
+                              {@const isDiffOpen = expandedDiffSection === diff.section}
+                              <div>
+                                <button
+                                  onclick={() => toggleDiffSection(diff.section)}
+                                  class="flex items-center gap-1.5 text-[10px] text-foreground cursor-pointer hover:text-secondary transition-colors py-0.5 w-full text-left"
+                                >
+                                  <svg
+                                    class="w-[7px] h-[7px] shrink-0 transition-transform duration-150"
+                                    class:rotate-90={isDiffOpen}
+                                    viewBox="0 0 7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                  ><path d="M2.5 1l2.5 2.5-2.5 2.5"/></svg>
+                                  {formatSectionName(diff.section)}
+                                </button>
+                                {#if isDiffOpen}
+                                  <div class="ml-3 mt-1 flex flex-col gap-1.5">
+                                    <div class="relative overflow-hidden rounded" style="max-height: 80px">
+                                      <pre class="text-[10px] font-mono text-muted p-2 leading-relaxed whitespace-pre-wrap" style="opacity: 0.6">{diff.before.slice(0, 500)}{diff.before.length > 500 ? "..." : ""}</pre>
+                                      <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
+                                    </div>
+                                    <div class="w-full h-px" style="background: var(--color-border)"></div>
+                                    <div class="relative overflow-hidden rounded" style="max-height: 80px">
+                                      <pre class="text-[10px] font-mono text-secondary p-2 leading-relaxed whitespace-pre-wrap">{diff.after.slice(0, 500)}{diff.after.length > 500 ? "..." : ""}</pre>
+                                      <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
+                                    </div>
+                                  </div>
+                                {/if}
+                              </div>
+                            {/each}
+                          </div>
+                        </div>
+                      {/if}
+
+                      <!-- Undo button (only on latest non-rolled-back entry) -->
+                      {#if isLatestActive && profileMeta?.can_rollback}
+                        <button
+                          onclick={() => { showRollbackConfirm = true; }}
+                          class="self-start text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors mt-0.5"
+                        >
+                          Undo this refresh
+                        </button>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {:else if !isRefreshing && !isUploading}
+          <p class="text-[10px] text-muted text-center py-4">
+            No refreshes yet. Keep writing and come back when you are ready.
+          </p>
+        {/if}
+      {:else}
+        <p class="text-[10px] text-muted leading-relaxed">
+          Enable edit tracking to let Noren learn from how you modify generated text.
+          Your edits are stored locally and only uploaded when you choose to refresh.
+        </p>
+      {/if}
+
+      <!-- Voice specimen collector -->
+      <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--color-border)">
+        <button
+          onclick={() => { writingDrawerOpen = !writingDrawerOpen; }}
+          class="w-full flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors hover:bg-tint/40"
+          style="background: var(--color-surface)"
+        >
+          <svg class="w-[14px] h-[14px] shrink-0" viewBox="0 0 16 16" fill="none" style="color: var(--color-secondary)">
+            <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9.5 3.5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          <span class="flex-1 text-left">
+            <span class="text-xs font-medium text-foreground">Recent writing</span>
+            {#if writingSamples.length > 0}
+              <span class="ml-1.5 text-[9px] font-medium" style="color: var(--color-secondary)">{writingSamples.length}</span>
+            {/if}
+          </span>
+          <svg
+            class="w-[10px] h-[10px] transition-transform duration-200"
+            class:rotate-180={writingDrawerOpen}
+            viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"
+          >
+            <path d="M2.5 3.75l2.5 2.5 2.5-2.5"/>
+          </svg>
+        </button>
+
+        {#if writingDrawerOpen}
+          <div class="flex flex-col gap-3 px-3 pb-3" style="border-top: 1px dashed var(--color-border)">
+            <p class="text-[10px] leading-relaxed pt-3" style="color: var(--color-muted)">
+              Paste writing you have published elsewhere. Blog posts, tweets, emails. These feed into your next profile refresh.
+            </p>
+
+            <div class="flex gap-1">
+              {#each Object.keys(FORMAT_ACCENTS) as fmt}
+                <button
+                  onclick={() => { sampleFormat = fmt; }}
+                  class="px-2 py-[3px] text-[10px] cursor-pointer rounded-sm transition-all duration-150"
+                  style={sampleFormat === fmt
+                    ? `background: ${FORMAT_ACCENTS[fmt]}; color: white; font-weight: 500`
+                    : `background: transparent; color: var(--color-muted); border: 1px solid var(--color-border)`}
+                >
+                  {fmt}
+                </button>
+              {/each}
+            </div>
+
+            <div class="relative">
+              <textarea
+                bind:value={sampleDraft}
+                class="w-full p-2.5 text-xs leading-[1.7] resize-none placeholder-muted focus:outline-none rounded"
+                style="
+                  border: 1.5px dashed {sampleDraft.trim() ? 'var(--color-secondary)' : 'var(--color-border)'};
+                  background: var(--color-warm-surface);
+                  color: var(--color-foreground);
+                  min-height: 88px;
+                  transition: border-color 0.2s;
+                "
+                placeholder="Paste a piece of your writing..."
+              ></textarea>
+              {#if sampleDraft.trim()}
+                <span class="absolute bottom-2 right-2.5 text-[9px] tabular-nums" style="color: var(--color-muted)">
+                  {sampleDraft.trim().split(/\s+/).length} words
+                </span>
+              {/if}
+            </div>
+
+            <div class="flex justify-end">
+              <button
+                onclick={commitSample}
+                disabled={!sampleDraft.trim()}
+                class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] cursor-pointer rounded transition-all duration-150"
+                style={!sampleDraft.trim()
+                  ? 'background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-border); opacity: 0.45; cursor: not-allowed'
+                  : 'background: var(--color-secondary); color: white'}
+              >
+                Collect
+              </button>
+            </div>
+
+            {#if writingSamples.length > 0}
+              <div class="flex flex-col gap-1" style="border-top: 1px solid var(--color-border); padding-top: 0.5rem">
+                {#each writingSamples as sample, i}
+                  <div class="flex items-center gap-2 py-1 group rounded-sm px-1 transition-colors hover:bg-tint/30">
+                    <div
+                      class="w-[3px] h-[18px] rounded-full shrink-0"
+                      style="background: {FORMAT_ACCENTS[sample.format] || FORMAT_ACCENTS.general}"
+                    ></div>
+                    <span class="text-[9px] font-medium uppercase tracking-wide shrink-0 w-[40px]" style="color: var(--color-muted)">{sample.format}</span>
+                    <span class="flex-1 text-[10px] truncate" style="color: var(--color-foreground)">{sample.text.slice(0, 70)}{sample.text.length > 70 ? '...' : ''}</span>
+                    <button
+                      onclick={() => discardSample(i)}
+                      class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5 rounded hover:bg-error/10"
+                      title="Remove"
+                    >
+                      <svg class="w-[10px] h-[10px]" viewBox="0 0 10 10" fill="none" stroke="var(--color-error)" stroke-width="1.3" stroke-linecap="round">
+                        <path d="M2.5 2.5l5 5M7.5 2.5l-5 5"/>
+                      </svg>
+                    </button>
+                  </div>
+                {/each}
+                <button
+                  onclick={clearAllSamples}
+                  class="self-start text-[9px] mt-1 cursor-pointer text-muted hover:text-error transition-colors"
+                >
+                  Clear all samples
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/snippet}
 </div>

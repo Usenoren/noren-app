@@ -20,6 +20,7 @@
   import { marked } from "marked";
   import DOMPurify from "dompurify";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import { toastInfo, toastWarning } from "$lib/stores/toast.svelte";
 
   // Configure marked for inline rendering
   marked.setOptions({ breaks: true });
@@ -83,14 +84,14 @@
     });
 
     // Pull remote chats then refresh list
-    syncChatsFromServer().then(() => refreshHistory()).catch((e) => console.error("chat sync failed:", e));
+    syncChatsFromServer().then(() => refreshHistory()).catch(() => toastInfo("Chat sync unavailable"));
     refreshHistory();
   });
 
   // Sync chats when window regains focus
   $effect(() => {
     const onFocus = () => {
-      syncChatsFromServer().then(() => refreshHistory()).catch((e) => console.error("chat sync failed:", e));
+      syncChatsFromServer().then(() => refreshHistory()).catch(() => toastInfo("Chat sync unavailable"));
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -220,8 +221,8 @@
         messages,
       });
       await refreshHistory();
-    } catch (e) {
-      console.error("persistChat failed:", e);
+    } catch {
+      toastWarning("Couldn't save chat locally");
     }
   }
 
@@ -299,7 +300,7 @@
     e.stopPropagation();
     try {
       await deleteChat(id);
-      syncDeleteChat(id).catch((e) => console.error("syncDeleteChat failed:", e)); // fire-and-forget server sync
+      syncDeleteChat(id).catch(() => toastInfo("Chat deletion not synced to server")); // fire-and-forget server sync
       if (conversationId === id) {
         handleNewChat();
       }

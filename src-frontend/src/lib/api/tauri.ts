@@ -201,6 +201,8 @@ export interface SubscriptionStatus {
   can_sync: boolean;
   can_export: boolean;
   tokens_limit: number;
+  is_trial: boolean;
+  trial_expires_at: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   one_time_purchases: string[];
@@ -348,21 +350,47 @@ export interface LivingProfileStatus {
   last_upload: string | null;
 }
 
-export interface ProfilePatch {
-  patch_id: string;
+export interface SectionDiff {
   section: string;
-  change_type: string;
-  description: string;
-  original_text: string | null;
-  new_text: string | null;
-  confidence: number;
-  status: string;
+  before: string;
+  after: string;
 }
 
-export interface RefreshResult {
-  patches: ProfilePatch[];
-  signals_found: number;
-  entries_analyzed: number;
+export interface RefreshHistoryEntry {
+  id: string;
+  diffs: SectionDiff[];
+  observations: string[];
+  sections_updated: string[];
+  edits_analyzed: number;
+  samples_analyzed: number;
+  generations_analyzed: number;
+  rolled_back: boolean;
+  created_at: string;
+}
+
+export interface RefreshResponse {
+  refreshed: boolean;
+  sections_updated: string[];
+  message: string;
+  observations: string[];
+  history_id: string | null;
+}
+
+export interface ExternalSample {
+  text: string;
+  format: string;
+  added_at: string;
+}
+
+export interface ProfileMetadataInfo {
+  has_profile: boolean;
+  formats: string[];
+  created_at: string | null;
+  source: string | null;
+  last_extracted_at: string | null;
+  extraction_count: number;
+  next_refresh_available: string | null;
+  can_rollback: boolean;
 }
 
 export async function getLivingProfileStatus(): Promise<LivingProfileStatus> {
@@ -377,24 +405,24 @@ export async function logEdit(ctx: string, orig: string, edit: string, app: stri
   return invoke("log_edit", { ctx, orig, edit, app });
 }
 
-export async function uploadEditLog(): Promise<number> {
-  return invoke("upload_edit_log");
+export async function uploadEditLog(externalSamples?: ExternalSample[]): Promise<number> {
+  return invoke("upload_edit_log", { externalSamples: externalSamples ?? null });
 }
 
-export async function refreshLivingProfile(): Promise<RefreshResult> {
+export async function refreshLivingProfile(): Promise<RefreshResponse> {
   return invoke("refresh_living_profile");
 }
 
-export async function getProfilePatches(): Promise<ProfilePatch[]> {
-  return invoke("get_profile_patches");
+export async function getProfileMetadataInfo(): Promise<ProfileMetadataInfo> {
+  return invoke("get_profile_metadata");
 }
 
-export async function approveProfilePatch(patchId: string): Promise<void> {
-  return invoke("approve_profile_patch", { patchId });
+export async function rollbackProfile(): Promise<string> {
+  return invoke("rollback_profile");
 }
 
-export async function rejectProfilePatch(patchId: string): Promise<void> {
-  return invoke("reject_profile_patch", { patchId });
+export async function getRefreshHistory(limit?: number, offset?: number): Promise<RefreshHistoryEntry[]> {
+  return invoke("get_refresh_history", { limit: limit ?? 20, offset: offset ?? 0 });
 }
 
 // --- Sync ---

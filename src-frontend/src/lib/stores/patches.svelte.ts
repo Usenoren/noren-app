@@ -1,25 +1,13 @@
-import { getProfilePatches } from "$lib/api/tauri";
-import { canLivingProfile } from "$lib/stores/subscription.svelte";
+// Refresh-available indicator for living profile.
+// Derives from ProfileMetadataInfo.next_refresh_available (already fetched in ProfilesView).
+// This store just tracks whether the notification dot should show.
 
-let count = $state(0);
+let refreshAvailable = $state(false);
 
-export function getPatchCount(): number {
-  return count;
+export function isRefreshAvailable(): boolean {
+  return refreshAvailable;
 }
 
-export async function refreshPatches(): Promise<void> {
-  if (!canLivingProfile()) {
-    count = 0;
-    return;
-  }
-  try {
-    const patches = await getProfilePatches();
-    count = patches.length;
-  } catch {
-    count = 0;
-  }
-}
-
-export function setPatchCount(n: number): void {
-  count = n;
+export function setRefreshAvailable(available: boolean): void {
+  refreshAvailable = available;
 }

@@ -14,22 +14,51 @@ pub struct LivingProfileStatus {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ProfilePatch {
-    pub patch_id: String,
+pub struct SectionDiff {
     pub section: String,
-    pub change_type: String,
-    pub description: String,
-    pub original_text: Option<String>,
-    pub new_text: Option<String>,
-    pub confidence: f64,
-    pub status: String,
+    pub before: String,
+    pub after: String,
 }
 
-#[derive(Serialize)]
-pub struct RefreshResult {
-    pub patches: Vec<ProfilePatch>,
-    pub signals_found: u64,
-    pub entries_analyzed: u64,
+#[derive(Serialize, Deserialize)]
+pub struct RefreshHistoryEntry {
+    pub id: String,
+    pub diffs: Vec<SectionDiff>,
+    pub observations: Vec<String>,
+    pub sections_updated: Vec<String>,
+    pub edits_analyzed: u32,
+    pub samples_analyzed: u32,
+    pub generations_analyzed: u32,
+    pub rolled_back: bool,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RefreshResponse {
+    pub refreshed: bool,
+    pub sections_updated: Vec<String>,
+    pub message: String,
+    pub observations: Vec<String>,
+    pub history_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ProfileMetadata {
+    pub has_profile: bool,
+    pub formats: Vec<String>,
+    pub created_at: Option<String>,
+    pub source: Option<String>,
+    pub last_extracted_at: Option<String>,
+    pub extraction_count: u32,
+    pub next_refresh_available: Option<String>,
+    pub can_rollback: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ExternalSample {
+    pub text: String,
+    pub format: String,
+    pub added_at: String,
 }
 
 #[tauri::command]
@@ -89,6 +118,7 @@ pub fn log_edit(
 #[tauri::command]
 pub async fn upload_edit_log(
     state: State<'_, AppState>,
+    external_samples: Option<Vec<ExternalSample>>,
 ) -> Result<u64, String> {
     let config = state.config.lock().unwrap().clone();
 
@@ -108,29 +138,53 @@ pub async fn upload_edit_log(
     let logger = noren_engine::tracking::EditLogger::new(base_dir);
     let entries = logger.read_all();
 
-    if entries.is_empty() {
+    let has_entries = !entries.is_empty();
+    let has_samples = external_samples.as_ref().map_or(false, |s| !s.is_empty());
+
+    if !has_entries && !has_samples {
         return Ok(0);
     }
 
-    // Convert to JSON-friendly format
-    let entries_json: Vec<serde_json::Value> = entries
-        .iter()
-        .map(|e| {
-            serde_json::json!({
-                "ts": e.ts,
-                "ctx": e.ctx,
-                "orig": e.orig,
-                "edit": e.edit,
-                "app": e.app,
+    // Build request body
+    let mut body = serde_json::Map::new();
+
+    if has_entries {
+        let entries_json: Vec<serde_json::Value> = entries
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "ts": e.ts,
+                    "ctx": e.ctx,
+                    "orig": e.orig,
+                    "edit": e.edit,
+                    "app": e.app,
+                })
             })
-        })
-        .collect();
+            .collect();
+        body.insert("entries".to_string(), serde_json::Value::Array(entries_json));
+    }
+
+    if has_samples {
+        let samples_json: Vec<serde_json::Value> = external_samples
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "text": s.text,
+                    "format": s.format,
+                    "added_at": s.added_at,
+                })
+            })
+            .collect();
+        body.insert("external_samples".to_string(), serde_json::Value::Array(samples_json));
+    }
 
     let client = reqwest::Client::new();
     let resp: reqwest::Response = client
         .post(format!("{}/v1/profile/upload-edits", server_url))
         .bearer_auth(&auth_token)
-        .json(&serde_json::json!({ "entries": entries_json }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("Upload failed: {}", e))?;
@@ -146,7 +200,7 @@ pub async fn upload_edit_log(
 #[tauri::command]
 pub async fn refresh_living_profile(
     state: State<'_, AppState>,
-) -> Result<RefreshResult, String> {
+) -> Result<RefreshResponse, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config
         .server_url
@@ -163,7 +217,20 @@ pub async fn refresh_living_profile(
         .await
         .map_err(|e| format!("Refresh failed: {}", e))?;
 
-    if !resp.status().is_success() {
+    let resp_status = resp.status();
+
+    // Handle 429 rate limit
+    if resp_status.as_u16() == 429 {
+        let data: serde_json::Value = resp
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e: reqwest::Error| e.to_string())?;
+        let detail = data["detail"].as_str().unwrap_or("Rate limited");
+        let retry_after = data["retry_after"].as_str().unwrap_or("");
+        return Err(format!("Rate limited: {}. Retry after: {}", detail, retry_after));
+    }
+
+    if !resp_status.is_success() {
         let body: String = resp.text().await.unwrap_or_default();
         return Err(format!("Refresh failed: {}", body));
     }
@@ -173,35 +240,29 @@ pub async fn refresh_living_profile(
         .await
         .map_err(|e: reqwest::Error| e.to_string())?;
 
-    let patches: Vec<ProfilePatch> = data["patches"]
-        .as_array()
-        .unwrap_or(&vec![])
-        .iter()
-        .filter_map(|p| {
-            Some(ProfilePatch {
-                patch_id: p["patch_id"].as_str()?.to_string(),
-                section: p["section"].as_str()?.to_string(),
-                change_type: p["change_type"].as_str()?.to_string(),
-                description: p["description"].as_str()?.to_string(),
-                original_text: p["original_text"].as_str().map(|s| s.to_string()),
-                new_text: p["new_text"].as_str().map(|s| s.to_string()),
-                confidence: p["confidence"].as_f64().unwrap_or(0.0),
-                status: p["status"].as_str().unwrap_or("pending").to_string(),
-            })
-        })
-        .collect();
-
-    Ok(RefreshResult {
-        patches,
-        signals_found: data["signals_found"].as_u64().unwrap_or(0),
-        entries_analyzed: data["entries_analyzed"].as_u64().unwrap_or(0),
+    Ok(RefreshResponse {
+        refreshed: data["refreshed"].as_bool().unwrap_or(false),
+        sections_updated: data["sections_updated"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect(),
+        message: data["message"].as_str().unwrap_or("").to_string(),
+        observations: data["observations"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect(),
+        history_id: data["history_id"].as_str().map(|s| s.to_string()),
     })
 }
 
 #[tauri::command]
-pub async fn get_profile_patches(
+pub async fn get_profile_metadata(
     state: State<'_, AppState>,
-) -> Result<Vec<ProfilePatch>, String> {
+) -> Result<ProfileMetadata, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config
         .server_url
@@ -212,15 +273,15 @@ pub async fn get_profile_patches(
 
     let client = reqwest::Client::new();
     let resp: reqwest::Response = client
-        .get(format!("{}/v1/profile/patches", server_url))
+        .get(format!("{}/v1/profile/voice/metadata", server_url))
         .bearer_auth(&auth_token)
         .send()
         .await
-        .map_err(|e| format!("Failed to get patches: {}", e))?;
+        .map_err(|e| format!("Failed to get metadata: {}", e))?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
-        return Err(format!("Failed to get patches: {}", body));
+        return Err(format!("Failed to get metadata: {}", body));
     }
 
     let data: serde_json::Value = resp
@@ -228,83 +289,135 @@ pub async fn get_profile_patches(
         .await
         .map_err(|e: reqwest::Error| e.to_string())?;
 
-    let patches: Vec<ProfilePatch> = data["patches"]
+    Ok(ProfileMetadata {
+        has_profile: data["has_profile"].as_bool().unwrap_or(false),
+        formats: data["formats"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect(),
+        created_at: data["created_at"].as_str().map(|s| s.to_string()),
+        source: data["source"].as_str().map(|s| s.to_string()),
+        last_extracted_at: data["last_extracted_at"].as_str().map(|s| s.to_string()),
+        extraction_count: data["extraction_count"].as_u64().unwrap_or(1) as u32,
+        next_refresh_available: data["next_refresh_available"].as_str().map(|s| s.to_string()),
+        can_rollback: data["can_rollback"].as_bool().unwrap_or(false),
+    })
+}
+
+#[tauri::command]
+pub async fn rollback_profile(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let auth_token = keychain::get_api_key("noren-pro-token")
+        .ok_or("Not logged in")?;
+
+    let client = reqwest::Client::new();
+    let resp: reqwest::Response = client
+        .post(format!("{}/v1/profile/voice/rollback", server_url))
+        .bearer_auth(&auth_token)
+        .send()
+        .await
+        .map_err(|e| format!("Rollback failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body: String = resp.text().await.unwrap_or_default();
+        return Err(format!("Rollback failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+
+    Ok(data["message"].as_str().unwrap_or("Profile restored").to_string())
+}
+
+#[tauri::command]
+pub async fn get_refresh_history(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<RefreshHistoryEntry>, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let auth_token = keychain::get_api_key("noren-pro-token")
+        .ok_or("Not logged in")?;
+
+    let limit = limit.unwrap_or(20);
+    let offset = offset.unwrap_or(0);
+
+    let client = reqwest::Client::new();
+    let resp: reqwest::Response = client
+        .get(format!(
+            "{}/v1/profile/refresh-history?limit={}&offset={}",
+            server_url, limit, offset
+        ))
+        .bearer_auth(&auth_token)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to get history: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body: String = resp.text().await.unwrap_or_default();
+        return Err(format!("Failed to get history: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+
+    let entries: Vec<RefreshHistoryEntry> = data["entries"]
         .as_array()
         .unwrap_or(&vec![])
         .iter()
-        .filter_map(|p| {
-            Some(ProfilePatch {
-                patch_id: p["patch_id"].as_str()?.to_string(),
-                section: p["section"].as_str()?.to_string(),
-                change_type: p["change_type"].as_str()?.to_string(),
-                description: p["description"].as_str()?.to_string(),
-                original_text: p["original_text"].as_str().map(|s| s.to_string()),
-                new_text: p["new_text"].as_str().map(|s| s.to_string()),
-                confidence: p["confidence"].as_f64().unwrap_or(0.0),
-                status: p["status"].as_str().unwrap_or("pending").to_string(),
+        .filter_map(|e| {
+            Some(RefreshHistoryEntry {
+                id: e["id"].as_str()?.to_string(),
+                diffs: e["diffs"]
+                    .as_array()
+                    .unwrap_or(&vec![])
+                    .iter()
+                    .filter_map(|d| {
+                        Some(SectionDiff {
+                            section: d["section"].as_str()?.to_string(),
+                            before: d["before"].as_str()?.to_string(),
+                            after: d["after"].as_str()?.to_string(),
+                        })
+                    })
+                    .collect(),
+                observations: e["observations"]
+                    .as_array()
+                    .unwrap_or(&vec![])
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect(),
+                sections_updated: e["sections_updated"]
+                    .as_array()
+                    .unwrap_or(&vec![])
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect(),
+                edits_analyzed: e["edits_analyzed"].as_u64().unwrap_or(0) as u32,
+                samples_analyzed: e["samples_analyzed"].as_u64().unwrap_or(0) as u32,
+                generations_analyzed: e["generations_analyzed"].as_u64().unwrap_or(0) as u32,
+                rolled_back: e["rolled_back"].as_bool().unwrap_or(false),
+                created_at: e["created_at"].as_str()?.to_string(),
             })
         })
         .collect();
 
-    Ok(patches)
-}
-
-#[tauri::command]
-pub async fn approve_profile_patch(
-    state: State<'_, AppState>,
-    patch_id: String,
-) -> Result<(), String> {
-    let config = state.config.lock().unwrap().clone();
-    let server_url = config
-        .server_url
-        .as_deref()
-        .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/profile/patches/{}/approve", server_url, patch_id))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        let body: String = resp.text().await.unwrap_or_default();
-        return Err(format!("Failed: {}", body));
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn reject_profile_patch(
-    state: State<'_, AppState>,
-    patch_id: String,
-) -> Result<(), String> {
-    let config = state.config.lock().unwrap().clone();
-    let server_url = config
-        .server_url
-        .as_deref()
-        .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/profile/patches/{}/reject", server_url, patch_id))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        let body: String = resp.text().await.unwrap_or_default();
-        return Err(format!("Failed: {}", body));
-    }
-
-    Ok(())
+    Ok(entries)
 }
 
 fn chrono_now() -> String {

@@ -8,6 +8,7 @@
   import { getIsExtracting } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import { toastError } from "$lib/stores/toast.svelte";
 
   // --- Props ---
   let { isPopup = false, hasProfile: hasProfileProp = true, noApiKey = false }: { isPopup?: boolean; hasProfile?: boolean; noApiKey?: boolean } = $props();
@@ -412,7 +413,7 @@
           <div class="absolute top-full mt-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-lg whitespace-nowrap animate-fade-in-up" style="box-shadow: var(--shadow-dropdown)">
             <p class="text-[10px] text-muted">Compare is a <span class="text-secondary font-medium">Pro</span> feature.</p>
             <button
-              onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch (e) { console.error("createCheckout failed:", e); } }}
+              onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch (e) { toastError(friendlyError(e)); } }}
               class="mt-1 text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
             >Upgrade</button>
           </div>

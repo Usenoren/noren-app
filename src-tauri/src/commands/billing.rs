@@ -16,6 +16,8 @@ pub struct SubscriptionStatus {
     pub can_sync: bool,
     pub can_export: bool,
     pub tokens_limit: u64,
+    pub is_trial: bool,
+    pub trial_expires_at: Option<String>,
     pub current_period_end: Option<String>,
     pub cancel_at_period_end: bool,
     pub one_time_purchases: Vec<String>,
@@ -165,6 +167,8 @@ pub async fn get_subscription_status(
         can_sync: ents["can_sync"].as_bool().unwrap_or(false),
         can_export: ents["can_export"].as_bool().unwrap_or(false),
         tokens_limit: ents["tokens_limit"].as_u64().unwrap_or(0),
+        is_trial: ents["is_trial"].as_bool().unwrap_or(false),
+        trial_expires_at: ents["trial_expires_at"].as_str().map(|s| s.to_string()),
         current_period_end: data["current_period_end"].as_str().map(|s| s.to_string()),
         cancel_at_period_end: data["cancel_at_period_end"].as_bool().unwrap_or(false),
         one_time_purchases: data["one_time_purchases"]

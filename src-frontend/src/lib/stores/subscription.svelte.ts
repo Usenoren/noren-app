@@ -36,6 +36,22 @@ export function canExport(): boolean {
   return status?.can_export ?? false;
 }
 
+export function isTrial(): boolean {
+  return status?.is_trial ?? false;
+}
+
+export function trialExpiresAt(): string | null {
+  return status?.trial_expires_at ?? null;
+}
+
+/** Days remaining in trial, or null if not on trial. */
+export function trialDaysLeft(): number | null {
+  const expires = status?.trial_expires_at;
+  if (!status?.is_trial || !expires) return null;
+  const ms = new Date(expires).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 86_400_000));
+}
+
 export async function refresh(): Promise<void> {
   // Always check local receipt (works without auth)
   try {

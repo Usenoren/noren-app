@@ -21,7 +21,7 @@
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
-  import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
+  import { refresh as refreshSubscription, canExtract, isTrial, trialDaysLeft } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -291,7 +291,7 @@
             <span class="text-xs font-medium text-foreground">{proStatus.email}</span>
             <span class="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full
               {subscription?.tier === 'pro' ? 'bg-secondary/20 text-secondary' : 'bg-border text-muted'}">
-              {subscription?.tier === "pro" ? "Pro" : "Free"}
+              {subscription?.tier === "pro" ? (isTrial() ? "Trial" : "Pro") : "Free"}
             </span>
           </div>
         </div>
@@ -322,6 +322,27 @@
                 </p>
               {/if}
             </div>
+          </div>
+        {/if}
+
+        {#if isTrial()}
+          {@const days = trialDaysLeft()}
+          <div class="p-2.5 bg-secondary/5 border border-secondary/20 rounded-lg flex items-center justify-between">
+            <p class="text-xs text-secondary">
+              {#if days != null && days <= 3}
+                Trial ends in {days === 0 ? "less than a day" : days === 1 ? "1 day" : `${days} days`}
+              {:else if subscription.trial_expires_at}
+                Trial until {formatDate(subscription.trial_expires_at)}
+              {:else}
+                Active trial
+              {/if}
+            </p>
+            <button
+              onclick={() => handleUpgrade("pro")}
+              class="px-2 py-1 text-[10px] font-medium bg-secondary text-background rounded cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              Upgrade
+            </button>
           </div>
         {/if}
 

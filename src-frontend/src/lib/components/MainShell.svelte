@@ -3,7 +3,7 @@
   import { onMount } from "svelte";
   import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
   import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
-  import { getPatchCount, refreshPatches } from "$lib/stores/patches.svelte";
+  import { isRefreshAvailable } from "$lib/stores/patches.svelte";
   import {
     init as initExtraction,
     getIsExtracting,
@@ -26,6 +26,8 @@
   import OnboardingView from "./OnboardingView.svelte";
   import NorenMark from "./NorenMark.svelte";
   import AnnouncementBell from "./AnnouncementBell.svelte";
+  import ToastContainer from "./ToastContainer.svelte";
+  import { toastWarning } from "$lib/stores/toast.svelte";
 
   type View = "generate" | "chat" | "profiles" | "extract" | "account" | "settings" | "onboarding";
   let view: View = $state("generate");
@@ -61,7 +63,7 @@
       checkPermissions().then((ok) => {
         hasPermissions = ok;
       });
-      refreshSubscription().then(() => refreshPatches());
+      refreshSubscription();
     }).then((fn) => cleanups.push(fn));
 
     checkPermissions().then((ok) => {
@@ -82,10 +84,10 @@
       loading = false;
 
       if (settings.noren_pro_logged_in) {
-        refreshSubscription().then(() => refreshPatches());
+        refreshSubscription();
 
         if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
-          migrateProfileToServer().catch((e) => console.error("migrateProfileToServer failed:", e));
+          migrateProfileToServer().catch(() => toastWarning("Profile sync to server failed"));
         }
       }
     }).catch(() => {
@@ -172,7 +174,7 @@
               {#if item.id === "extract" && !canExtract()}
                 <span class="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-accent"></span>
               {/if}
-              {#if item.id === "profiles" && getPatchCount() > 0}
+              {#if item.id === "profiles" && isRefreshAvailable()}
                 <span class="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-secondary"></span>
               {/if}
             </button>
@@ -272,5 +274,6 @@
       </div>
     </div>
   {/if}
+  <ToastContainer />
 </div>
 {/if}
