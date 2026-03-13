@@ -85,7 +85,7 @@
         refreshSubscription().then(() => refreshPatches());
 
         if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
-          migrateProfileToServer().catch(() => {});
+          migrateProfileToServer().catch((e) => console.error("migrateProfileToServer failed:", e));
         }
       }
     }).catch(() => {

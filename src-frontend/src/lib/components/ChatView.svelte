@@ -83,14 +83,14 @@
     });
 
     // Pull remote chats then refresh list
-    syncChatsFromServer().then(() => refreshHistory()).catch(() => {});
+    syncChatsFromServer().then(() => refreshHistory()).catch((e) => console.error("chat sync failed:", e));
     refreshHistory();
   });
 
   // Sync chats when window regains focus
   $effect(() => {
     const onFocus = () => {
-      syncChatsFromServer().then(() => refreshHistory()).catch(() => {});
+      syncChatsFromServer().then(() => refreshHistory()).catch((e) => console.error("chat sync failed:", e));
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -220,8 +220,8 @@
         messages,
       });
       await refreshHistory();
-    } catch {
-      // Non-critical — don't block the chat
+    } catch (e) {
+      console.error("persistChat failed:", e);
     }
   }
 
@@ -299,7 +299,7 @@
     e.stopPropagation();
     try {
       await deleteChat(id);
-      syncDeleteChat(id).catch(() => {}); // fire-and-forget server sync
+      syncDeleteChat(id).catch((e) => console.error("syncDeleteChat failed:", e)); // fire-and-forget server sync
       if (conversationId === id) {
         handleNewChat();
       }

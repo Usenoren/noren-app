@@ -73,7 +73,10 @@ export function friendlyError(raw: unknown): string {
   if (msg.includes("500") || msg.includes("Internal Server Error")) {
     return "Server error. Try again in a moment.";
   }
-  if (msg.includes("502") || msg.includes("503") || msg.includes("Bad Gateway") || msg.includes("Service Unavailable")) {
+  if (msg.includes("503") || msg.includes("Service Unavailable")) {
+    return "Noren is temporarily down for maintenance. Try again in a few minutes.";
+  }
+  if (msg.includes("502") || msg.includes("Bad Gateway")) {
     return "Server temporarily unavailable. Try again in a moment.";
   }
 

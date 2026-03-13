@@ -144,6 +144,37 @@
     }
   });
 
+  // Auto-poll payment status every 5s when waiting, with 10-min timeout
+  $effect(() => {
+    if (viewState !== "polling") return;
+
+    const interval = setInterval(async () => {
+      if (!guestSessionId) return;
+      try {
+        const status = await pollGuestCheckout(guestSessionId);
+        if (status.paid) {
+          await storeExtractionReceipt(guestSessionId);
+          await clearPendingCheckout();
+          await refreshSubscription();
+          viewState = "inputMethod";
+        }
+        // Don't set error on "not yet" — avoid flicker
+      } catch {
+        // Silently retry on next interval
+      }
+    }, 5000);
+
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      error = "Payment verification timed out. Click 'Check status' to try again, or start over.";
+    }, 10 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  });
+
   async function checkAccess() {
     viewState = "loading";
     error = "";

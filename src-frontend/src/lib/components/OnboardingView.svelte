@@ -193,6 +193,11 @@
 
   async function handleProAuth() {
     if (!authEmail.trim() || !authPassword.trim()) return;
+    const email = authEmail.trim();
+    if (!email.includes("@") || !email.includes(".")) {
+      error = "Enter a valid email address.";
+      return;
+    }
     authLoading = true;
     error = "";
     try {
@@ -376,6 +381,11 @@
 
   async function handleGuestCheckout() {
     if (!guestEmail.trim()) return;
+    const email = guestEmail.trim();
+    if (!email.includes("@") || !email.includes(".")) {
+      error = "Enter a valid email address.";
+      return;
+    }
     checkoutLoading = true;
     error = "";
     try {

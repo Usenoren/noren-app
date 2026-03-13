@@ -35,7 +35,7 @@
     if (open && announcements.length > 0) {
       const latest = announcements[0].published_at;
       lastSeen = latest;
-      await saveAnnouncementSeen(latest).catch(() => {});
+      await saveAnnouncementSeen(latest).catch((e) => console.error("saveAnnouncementSeen failed:", e));
     }
   }
 
@@ -47,14 +47,14 @@
   }
 
   function refresh() {
-    fetchAnnouncements().then((data) => { announcements = data; }).catch(() => {});
+    fetchAnnouncements().then((data) => { announcements = data; }).catch((e) => console.error("fetchAnnouncements failed:", e));
   }
 
   onMount(() => {
     getAnnouncementSeen()
       .then((ts) => { lastSeen = ts; return fetchAnnouncements(); })
       .then((data) => { announcements = data; })
-      .catch(() => {});
+      .catch((e) => console.error("announcements init failed:", e));
 
     let unlisten: (() => void) | undefined;
     listen("tauri://focus", refresh).then((fn) => { unlisten = fn; });

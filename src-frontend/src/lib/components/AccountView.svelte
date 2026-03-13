@@ -83,6 +83,11 @@
 
   async function handleProAuth() {
     if (!proEmail.trim() || !proPassword.trim()) return;
+    const email = proEmail.trim();
+    if (!email.includes("@") || !email.includes(".")) {
+      error = "Enter a valid email address.";
+      return;
+    }
     proLoading = true;
     error = "";
     try {

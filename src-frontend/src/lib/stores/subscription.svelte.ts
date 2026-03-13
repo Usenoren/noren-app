@@ -40,14 +40,14 @@ export async function refresh(): Promise<void> {
   // Always check local receipt (works without auth)
   try {
     localExtraction = await hasExtractionReceipt();
-  } catch {
-    // Keep previous value
+  } catch (e) {
+    console.error("hasExtractionReceipt failed:", e);
   }
 
   // Check server status (requires auth, will fail for free BYOK users)
   try {
     status = await getSubscriptionStatus();
-  } catch {
-    // Keep previous status for offline fallback
+  } catch (e) {
+    console.error("getSubscriptionStatus failed:", e);
   }
 }

@@ -76,9 +76,19 @@ export async function startQueue(formats: { samples: string; format: string }[])
       await startExtractionMulti({ formatGroups });
     }
 
-    // Wait for completion via event listener
+    // Wait for completion via event listener (5-min timeout)
     await new Promise<void>((resolve) => {
-      resolveCurrentJob = resolve;
+      const timer = setTimeout(() => {
+        if (resolveCurrentJob) {
+          error = "Extraction timed out. Check your connection and try again.";
+          resolveCurrentJob = null;
+          resolve();
+        }
+      }, 5 * 60 * 1000);
+      resolveCurrentJob = () => {
+        clearTimeout(timer);
+        resolve();
+      };
     });
   } catch (e) {
     error = friendlyExtractionError(String(e));
