@@ -9,6 +9,7 @@
     getSubscriptionStatus,
     createCheckout,
     openBillingPortal,
+    redeemCoupon,
     googleOAuthInit,
     googleOAuthPoll,
     verifyEmail,
@@ -41,6 +42,10 @@
   let showResendSetup = $state(false);
   let resendSetupLoading = $state(false);
   let resendSetupMessage = $state("");
+  let showCouponInput = $state(false);
+  let couponCode = $state("");
+  let couponLoading = $state(false);
+  let couponMessage = $state("");
 
   $effect(() => {
     loadAccount();
@@ -201,10 +206,10 @@
     }
   }
 
-  async function handleUpgrade(tier: string) {
+  async function handleUpgrade(tier: string, promoCode?: string) {
     error = "";
     try {
-      const result = await createCheckout(tier);
+      const result = await createCheckout(tier, promoCode);
       if (result.checkout_url === "dev://granted") {
         await loadAccount();
         await refreshSubscription();
@@ -213,6 +218,42 @@
       }
     } catch (e) {
       error = friendlyError(e);
+    }
+  }
+
+  async function handleApplyCoupon() {
+    const code = couponCode.trim();
+    if (!code) return;
+    couponLoading = true;
+    couponMessage = "";
+    error = "";
+    try {
+      const result = await redeemCoupon(code);
+      couponMessage = result.message;
+      showCouponInput = false;
+      couponCode = "";
+      await refreshSubscription();
+      await loadAccount();
+    } catch (e) {
+      const msg = String(e);
+      // Parse "status:detail" format from Rust command
+      const match = msg.match(/^(\d{3}):(.+)$/);
+      if (match) {
+        const status = parseInt(match[1]);
+        const detail = match[2];
+        if (status === 404) {
+          // Not a trial coupon, try as Stripe promo code
+          couponMessage = "";
+          await handleUpgrade("pro", code);
+        } else {
+          // 400 (expired/limit), 409 (already redeemed)
+          couponMessage = detail;
+        }
+      } else {
+        error = friendlyError(e);
+      }
+    } finally {
+      couponLoading = false;
     }
   }
 
@@ -308,6 +349,43 @@
             </div>
             <span class="text-xs font-medium text-secondary">$5<span class="text-[10px] text-muted font-normal">/mo</span></span>
           </button>
+
+          {#if !showCouponInput}
+            <button
+              onclick={() => { showCouponInput = true; couponMessage = ""; }}
+              class="text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors mt-1"
+            >
+              Have a coupon?
+            </button>
+          {:else}
+            <div class="mt-1 flex flex-col gap-1.5">
+              <div class="flex gap-1.5">
+                <input
+                  type="text"
+                  bind:value={couponCode}
+                  onkeydown={(e) => { if (e.key === "Enter") handleApplyCoupon(); }}
+                  class="flex-1 px-2.5 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+                  placeholder="Coupon or promo code"
+                />
+                <button
+                  onclick={handleApplyCoupon}
+                  disabled={couponLoading || !couponCode.trim()}
+                  class="px-3 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
+                >
+                  {couponLoading ? "..." : "Apply"}
+                </button>
+              </div>
+              {#if couponMessage}
+                <p class="text-[10px] text-muted">{couponMessage}</p>
+              {/if}
+              <button
+                onclick={() => { showCouponInput = false; couponCode = ""; couponMessage = ""; }}
+                class="text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors self-start"
+              >
+                Cancel
+              </button>
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

@@ -167,6 +167,7 @@ fn main() {
             commands::get_subscription_status,
             commands::create_checkout,
             commands::open_billing_portal,
+            commands::redeem_coupon,
             commands::create_guest_checkout,
             commands::poll_guest_checkout,
             commands::restore_guest_purchase,

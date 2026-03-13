@@ -215,8 +215,19 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
   return invoke("get_subscription_status");
 }
 
-export async function createCheckout(tier: string): Promise<CheckoutResult> {
-  return invoke("create_checkout", { tier });
+export async function createCheckout(tier: string, couponCode?: string): Promise<CheckoutResult> {
+  return invoke("create_checkout", { tier, coupon_code: couponCode || undefined });
+}
+
+export interface CouponRedeemResult {
+  message: string;
+  tier: string;
+  trial_days: number;
+  trial_expires_at: string;
+}
+
+export async function redeemCoupon(code: string): Promise<CouponRedeemResult> {
+  return invoke("redeem_coupon", { code });
 }
 
 export async function openBillingPortal(): Promise<string> {

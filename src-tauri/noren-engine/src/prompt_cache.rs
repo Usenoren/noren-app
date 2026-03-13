@@ -293,6 +293,11 @@ pub fn default_dev_prompt_path() -> PathBuf {
 }
 
 /// Built-in enforcement prompt for free/BYOK users.
+///
+/// Intentionally minimal. The full enforcement template (with enforcement
+/// levels, MODE conditionals, and profile-first architecture) is proprietary
+/// IP served only to authenticated Pro users via the server prompt endpoint.
+/// BYOK users get this basic fallback by design. This is not a bug.
 pub const BUILTIN_ENFORCEMENT_PROMPT: &str = r#"### System Prompt
 
 ```

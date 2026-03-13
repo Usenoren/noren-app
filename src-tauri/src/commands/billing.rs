@@ -178,19 +178,36 @@ pub async fn get_subscription_status(
     })
 }
 
+#[derive(Serialize)]
+pub struct CouponRedeemResult {
+    pub message: String,
+    pub tier: String,
+    pub trial_days: u32,
+    pub trial_expires_at: String,
+}
+
 #[tauri::command]
 pub async fn create_checkout(
     state: State<'_, AppState>,
     tier: String,
+    coupon_code: Option<String>,
 ) -> Result<CheckoutResult, String> {
     let server_url = server_url_from_config(&state);
 
     let tier_clone = tier.clone();
+    let code_clone = coupon_code.clone();
     let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        let mut body = serde_json::json!({ "target": tier_clone });
+        if let Some(ref code) = code_clone {
+            let trimmed = code.trim();
+            if !trimmed.is_empty() {
+                body["coupon_code"] = serde_json::Value::String(trimmed.to_string());
+            }
+        }
         client
             .post(format!("{}/v1/billing/checkout", server_url))
             .bearer_auth(token)
-            .json(&serde_json::json!({ "target": tier_clone }))
+            .json(&body)
     })
     .await?;
 
@@ -243,6 +260,56 @@ pub async fn open_billing_portal(
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "No portal URL in response".to_string())
+}
+
+#[tauri::command]
+pub async fn redeem_coupon(
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<CouponRedeemResult, String> {
+    let server_url = server_url_from_config(&state);
+    let code_clone = code.clone();
+
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client
+            .post(format!("{}/v1/billing/redeem-coupon", server_url))
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "code": code_clone }))
+    })
+    .await?;
+
+    let status = resp.status().as_u16();
+
+    if !resp.status().is_success() {
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        let detail = body["detail"]
+            .as_str()
+            .unwrap_or("Coupon redemption failed");
+        return Err(format!("{}:{}", status, detail));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+
+    Ok(CouponRedeemResult {
+        message: data["message"]
+            .as_str()
+            .unwrap_or("Trial activated")
+            .to_string(),
+        tier: data["tier"]
+            .as_str()
+            .unwrap_or("pro")
+            .to_string(),
+        trial_days: data["trial_days"]
+            .as_u64()
+            .unwrap_or(0) as u32,
+        trial_expires_at: data["trial_expires_at"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
+    })
 }
 
 // --- Guest checkout commands (no auth required) ---
