@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
   import { isFree, canExtract } from "$lib/stores/subscription.svelte";
@@ -32,6 +32,7 @@
   let noKey = $derived(isPopup ? noApiKey : noApiKeyLocal);
   let showCompareLock = $state(false);
   let dismissedEmpty = $state(false);
+  let editedText = $state("");
 
   const levels = ["strict", "guided", "light"] as const;
 
@@ -123,6 +124,7 @@
         });
       }
       if (output) {
+        editedText = output.text;
         weaveComplete = true;
         setTimeout(() => { weaveComplete = false; }, 1000);
         try {
@@ -144,7 +146,11 @@
 
   async function handleCopy() {
     if (!output) return;
-    await navigator.clipboard.writeText(output.text);
+    const text = editedText || output.text;
+    if (editedText && editedText !== output.text) {
+      try { await logEdit(format, output.text, editedText, "noren"); } catch (e) { console.error("logEdit failed:", e); }
+    }
+    await navigator.clipboard.writeText(text);
     copied = true;
     setTimeout(() => { copied = false; }, 1500);
   }
@@ -152,7 +158,11 @@
   async function handleInject() {
     if (!output) return;
     try {
-      await injectGeneratedText(output.text);
+      const text = editedText || output.text;
+      if (editedText && editedText !== output.text) {
+        try { await logEdit(format, output.text, editedText, "noren"); } catch (e) { console.error("logEdit failed:", e); }
+      }
+      await injectGeneratedText(text);
     } catch (e) {
       error = friendlyError(e);
     }
@@ -402,7 +412,7 @@
           <div class="absolute top-full mt-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-lg whitespace-nowrap animate-fade-in-up" style="box-shadow: var(--shadow-dropdown)">
             <p class="text-[10px] text-muted">Compare is a <span class="text-secondary font-medium">Pro</span> feature.</p>
             <button
-              onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch {} }}
+              onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch (e) { console.error("createCheckout failed:", e); } }}
               class="mt-1 text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
             >Upgrade</button>
           </div>
@@ -499,8 +509,12 @@
 
   <!-- Error -->
   {#if error}
-    <div class="p-3 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
-      {error}
+    <div class="p-3 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed flex items-start gap-2">
+      <span class="flex-1">{error}</span>
+      <button
+        onclick={() => { error = ""; handleGenerate(); }}
+        class="shrink-0 px-2.5 py-1 text-[10px] font-medium bg-surface border border-border text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer"
+      >Retry</button>
     </div>
   {/if}
 
@@ -567,10 +581,14 @@
         </div>
       </div>
 
-      <!-- Output card -->
-      <div class="flex-1 p-4 rounded-lg overflow-y-auto output-accent-line" style="background:var(--color-warm-surface);border:1px solid rgba(0,0,0,0.04)">
-        <div class="animate-shimmer rounded-lg">
-          <p class="text-sm text-foreground whitespace-pre-wrap" style="line-height:1.75">{output.text}</p>
+      <!-- Output card (editable) -->
+      <div class="flex-1 flex flex-col rounded-lg output-accent-line" style="background:var(--color-warm-surface);border:1px solid rgba(0,0,0,0.04)">
+        <div class="animate-shimmer rounded-lg flex-1 flex flex-col min-h-0">
+          <textarea
+            bind:value={editedText}
+            class="flex-1 w-full p-4 text-sm text-foreground bg-transparent resize-none min-h-0 border-none focus:outline-none selectable"
+            style="line-height:1.75"
+          ></textarea>
         </div>
       </div>
 
@@ -578,6 +596,9 @@
       <div class="flex items-center gap-2">
         <span class="font-mono text-[9px] text-muted mr-auto">
           {output.input_tokens + output.output_tokens} tokens
+          {#if editedText !== output.text}
+            <span class="text-secondary font-medium ml-1.5">edited</span>
+          {/if}
         </span>
         <button
           onclick={handleCopy}

@@ -66,6 +66,52 @@
   // Empty state
   let showManualCreate = $state(false);
 
+  // External writing samples (voice specimens for profile refresh)
+  type WritingSample = { text: string; format: string; added_at: string };
+  let writingDrawerOpen = $state(false);
+  let sampleDraft = $state("");
+  let sampleFormat = $state("general");
+  let writingSamples = $state<WritingSample[]>([]);
+
+  const FORMAT_ACCENTS: Record<string, string> = {
+    general: "var(--color-primary)",
+    blog: "var(--color-secondary)",
+    twitter: "var(--color-accent)",
+    email: "var(--color-signal)",
+  };
+
+  function hydrateWritingSamples() {
+    try {
+      const raw = localStorage.getItem("noren:writing_samples");
+      if (raw) writingSamples = JSON.parse(raw);
+    } catch {}
+  }
+
+  function persistWritingSamples() {
+    localStorage.setItem("noren:writing_samples", JSON.stringify(writingSamples));
+  }
+
+  function commitSample() {
+    const body = sampleDraft.trim();
+    if (!body) return;
+    writingSamples = [
+      ...writingSamples,
+      { text: body, format: sampleFormat, added_at: new Date().toISOString() },
+    ];
+    persistWritingSamples();
+    sampleDraft = "";
+  }
+
+  function discardSample(idx: number) {
+    writingSamples = writingSamples.filter((_, i) => i !== idx);
+    persistWritingSamples();
+  }
+
+  function clearAllSamples() {
+    writingSamples = [];
+    persistWritingSamples();
+  }
+
   let displayContent = $derived(
     activeTab === "core"
       ? profile?.core_identity ?? ""
@@ -74,6 +120,7 @@
 
   $effect(() => {
     loadProfile();
+    hydrateWritingSamples();
   });
 
   async function loadProfile() {
@@ -586,6 +633,118 @@
               Your edits are stored locally and only uploaded when you choose to refresh.
             </p>
           {/if}
+
+          <!-- Voice specimen collector (independent of edit tracking) -->
+          <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--color-border)">
+            <button
+              onclick={() => { writingDrawerOpen = !writingDrawerOpen; }}
+              class="w-full flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors hover:bg-tint/40"
+              style="background: var(--color-surface)"
+            >
+              <svg class="w-[14px] h-[14px] shrink-0" viewBox="0 0 16 16" fill="none" style="color: var(--color-secondary)">
+                <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9.5 3.5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span class="flex-1 text-left">
+                <span class="text-xs font-medium text-foreground">Recent writing</span>
+                {#if writingSamples.length > 0}
+                  <span class="ml-1.5 text-[9px] font-medium" style="color: var(--color-secondary)">{writingSamples.length}</span>
+                {/if}
+              </span>
+              <svg
+                class="w-[10px] h-[10px] transition-transform duration-200"
+                class:rotate-180={writingDrawerOpen}
+                viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"
+              >
+                <path d="M2.5 3.75l2.5 2.5 2.5-2.5"/>
+              </svg>
+            </button>
+
+            {#if writingDrawerOpen}
+              <div class="flex flex-col gap-3 px-3 pb-3" style="border-top: 1px dashed var(--color-border)">
+                <p class="text-[10px] leading-relaxed pt-3" style="color: var(--color-muted)">
+                  Paste writing you have published elsewhere. Blog posts, tweets, emails. These feed into your next profile refresh.
+                </p>
+
+                <div class="flex gap-1">
+                  {#each Object.keys(FORMAT_ACCENTS) as fmt}
+                    <button
+                      onclick={() => { sampleFormat = fmt; }}
+                      class="px-2 py-[3px] text-[10px] cursor-pointer rounded-sm transition-all duration-150"
+                      style={sampleFormat === fmt
+                        ? `background: ${FORMAT_ACCENTS[fmt]}; color: white; font-weight: 500`
+                        : `background: transparent; color: var(--color-muted); border: 1px solid var(--color-border)`}
+                    >
+                      {fmt}
+                    </button>
+                  {/each}
+                </div>
+
+                <div class="relative">
+                  <textarea
+                    bind:value={sampleDraft}
+                    class="w-full p-2.5 text-xs leading-[1.7] resize-none placeholder-muted focus:outline-none rounded"
+                    style="
+                      border: 1.5px dashed {sampleDraft.trim() ? 'var(--color-secondary)' : 'var(--color-border)'};
+                      background: var(--color-warm-surface);
+                      color: var(--color-foreground);
+                      min-height: 88px;
+                      transition: border-color 0.2s;
+                    "
+                    placeholder="Paste a piece of your writing..."
+                  ></textarea>
+                  {#if sampleDraft.trim()}
+                    <span class="absolute bottom-2 right-2.5 text-[9px] tabular-nums" style="color: var(--color-muted)">
+                      {sampleDraft.trim().split(/\s+/).length} words
+                    </span>
+                  {/if}
+                </div>
+
+                <div class="flex justify-end">
+                  <button
+                    onclick={commitSample}
+                    disabled={!sampleDraft.trim()}
+                    class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] cursor-pointer rounded transition-all duration-150"
+                    style={!sampleDraft.trim()
+                      ? 'background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-border); opacity: 0.45; cursor: not-allowed'
+                      : 'background: var(--color-secondary); color: white'}
+                  >
+                    Collect
+                  </button>
+                </div>
+
+                {#if writingSamples.length > 0}
+                  <div class="flex flex-col gap-1" style="border-top: 1px solid var(--color-border); padding-top: 0.5rem">
+                    {#each writingSamples as sample, i}
+                      <div class="flex items-center gap-2 py-1 group rounded-sm px-1 transition-colors hover:bg-tint/30">
+                        <div
+                          class="w-[3px] h-[18px] rounded-full shrink-0"
+                          style="background: {FORMAT_ACCENTS[sample.format] || FORMAT_ACCENTS.general}"
+                        ></div>
+                        <span class="text-[9px] font-medium uppercase tracking-wide shrink-0 w-[40px]" style="color: var(--color-muted)">{sample.format}</span>
+                        <span class="flex-1 text-[10px] truncate" style="color: var(--color-foreground)">{sample.text.slice(0, 70)}{sample.text.length > 70 ? '...' : ''}</span>
+                        <button
+                          onclick={() => discardSample(i)}
+                          class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5 rounded hover:bg-error/10"
+                          title="Remove"
+                        >
+                          <svg class="w-[10px] h-[10px]" viewBox="0 0 10 10" fill="none" stroke="var(--color-error)" stroke-width="1.3" stroke-linecap="round">
+                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5"/>
+                          </svg>
+                        </button>
+                      </div>
+                    {/each}
+                    <button
+                      onclick={clearAllSamples}
+                      class="self-start text-[9px] mt-1 cursor-pointer text-muted hover:text-error transition-colors"
+                    >
+                      Clear all samples
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
         </div>
         {:else}
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
@@ -794,6 +953,118 @@
               Your edits are stored locally and only uploaded when you choose to refresh.
             </p>
           {/if}
+
+          <!-- Voice specimen collector (independent of edit tracking) -->
+          <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--color-border)">
+            <button
+              onclick={() => { writingDrawerOpen = !writingDrawerOpen; }}
+              class="w-full flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors hover:bg-tint/40"
+              style="background: var(--color-surface)"
+            >
+              <svg class="w-[14px] h-[14px] shrink-0" viewBox="0 0 16 16" fill="none" style="color: var(--color-secondary)">
+                <path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9.5 3.5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span class="flex-1 text-left">
+                <span class="text-xs font-medium text-foreground">Recent writing</span>
+                {#if writingSamples.length > 0}
+                  <span class="ml-1.5 text-[9px] font-medium" style="color: var(--color-secondary)">{writingSamples.length}</span>
+                {/if}
+              </span>
+              <svg
+                class="w-[10px] h-[10px] transition-transform duration-200"
+                class:rotate-180={writingDrawerOpen}
+                viewBox="0 0 10 10" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"
+              >
+                <path d="M2.5 3.75l2.5 2.5 2.5-2.5"/>
+              </svg>
+            </button>
+
+            {#if writingDrawerOpen}
+              <div class="flex flex-col gap-3 px-3 pb-3" style="border-top: 1px dashed var(--color-border)">
+                <p class="text-[10px] leading-relaxed pt-3" style="color: var(--color-muted)">
+                  Paste writing you have published elsewhere. Blog posts, tweets, emails. These feed into your next profile refresh.
+                </p>
+
+                <div class="flex gap-1">
+                  {#each Object.keys(FORMAT_ACCENTS) as fmt}
+                    <button
+                      onclick={() => { sampleFormat = fmt; }}
+                      class="px-2 py-[3px] text-[10px] cursor-pointer rounded-sm transition-all duration-150"
+                      style={sampleFormat === fmt
+                        ? `background: ${FORMAT_ACCENTS[fmt]}; color: white; font-weight: 500`
+                        : `background: transparent; color: var(--color-muted); border: 1px solid var(--color-border)`}
+                    >
+                      {fmt}
+                    </button>
+                  {/each}
+                </div>
+
+                <div class="relative">
+                  <textarea
+                    bind:value={sampleDraft}
+                    class="w-full p-2.5 text-xs leading-[1.7] resize-none placeholder-muted focus:outline-none rounded"
+                    style="
+                      border: 1.5px dashed {sampleDraft.trim() ? 'var(--color-secondary)' : 'var(--color-border)'};
+                      background: var(--color-warm-surface);
+                      color: var(--color-foreground);
+                      min-height: 88px;
+                      transition: border-color 0.2s;
+                    "
+                    placeholder="Paste a piece of your writing..."
+                  ></textarea>
+                  {#if sampleDraft.trim()}
+                    <span class="absolute bottom-2 right-2.5 text-[9px] tabular-nums" style="color: var(--color-muted)">
+                      {sampleDraft.trim().split(/\s+/).length} words
+                    </span>
+                  {/if}
+                </div>
+
+                <div class="flex justify-end">
+                  <button
+                    onclick={commitSample}
+                    disabled={!sampleDraft.trim()}
+                    class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] cursor-pointer rounded transition-all duration-150"
+                    style={!sampleDraft.trim()
+                      ? 'background: var(--color-surface); color: var(--color-muted); border: 1px solid var(--color-border); opacity: 0.45; cursor: not-allowed'
+                      : 'background: var(--color-secondary); color: white'}
+                  >
+                    Collect
+                  </button>
+                </div>
+
+                {#if writingSamples.length > 0}
+                  <div class="flex flex-col gap-1" style="border-top: 1px solid var(--color-border); padding-top: 0.5rem">
+                    {#each writingSamples as sample, i}
+                      <div class="flex items-center gap-2 py-1 group rounded-sm px-1 transition-colors hover:bg-tint/30">
+                        <div
+                          class="w-[3px] h-[18px] rounded-full shrink-0"
+                          style="background: {FORMAT_ACCENTS[sample.format] || FORMAT_ACCENTS.general}"
+                        ></div>
+                        <span class="text-[9px] font-medium uppercase tracking-wide shrink-0 w-[40px]" style="color: var(--color-muted)">{sample.format}</span>
+                        <span class="flex-1 text-[10px] truncate" style="color: var(--color-foreground)">{sample.text.slice(0, 70)}{sample.text.length > 70 ? '...' : ''}</span>
+                        <button
+                          onclick={() => discardSample(i)}
+                          class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5 rounded hover:bg-error/10"
+                          title="Remove"
+                        >
+                          <svg class="w-[10px] h-[10px]" viewBox="0 0 10 10" fill="none" stroke="var(--color-error)" stroke-width="1.3" stroke-linecap="round">
+                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5"/>
+                          </svg>
+                        </button>
+                      </div>
+                    {/each}
+                    <button
+                      onclick={clearAllSamples}
+                      class="self-start text-[9px] mt-1 cursor-pointer text-muted hover:text-error transition-colors"
+                    >
+                      Clear all samples
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
         </div>
         {:else}
         <!-- Living Profile locked -->
