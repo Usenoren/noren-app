@@ -16,6 +16,8 @@
     markExtractionUsed,
     readFileAsText,
     createCheckout,
+    scrapeTwitter,
+    scrapeBlog,
     type FormatGroup,
   } from "../api/tauri";
   import {
@@ -92,6 +94,16 @@
   let currentStep = $state(0);
   let formatSamples: Record<string, string> = $state({});
   let currentInput = $state("");
+
+  // Scrape state
+  const SCRAPABLE_FORMATS = ["twitter", "longform"];
+  let scrapeHandle = $state("");
+  let scrapeUrl = $state("");
+  let isScraping = $state(false);
+  let scrapeError = $state("");
+  let scrapeInfoMap: Record<string, string> = $state({});
+
+  let canScrape = $derived(SCRAPABLE_FORMATS.includes(FORMAT_STEPS[currentStep].format));
 
   const statusLabels: Record<string, string> = {
     pending: "Starting extraction...",
@@ -342,6 +354,7 @@
         }
         // Put all content as "longform" and go to review
         formatSamples = { longform: content };
+        scrapeInfoMap = {};
         viewState = "review";
       }
     } catch (e) {
@@ -349,22 +362,26 @@
     }
   }
 
+  function enterStep(stepIndex: number) {
+    currentStep = stepIndex;
+    currentInput = formatSamples[FORMAT_STEPS[stepIndex].format] || "";
+    resetScrapeState();
+  }
+
   function startPasteFlow() {
-    currentStep = 0;
-    currentInput = "";
     formatSamples = {};
+    scrapeInfoMap = {};
+    enterStep(0);
     viewState = "pasteStep";
   }
 
   function nextStep() {
-    // Save current input if non-empty
     if (currentInput.trim()) {
       formatSamples[FORMAT_STEPS[currentStep].format] = currentInput.trim();
     }
 
     if (currentStep < FORMAT_STEPS.length - 1) {
-      currentStep++;
-      currentInput = formatSamples[FORMAT_STEPS[currentStep].format] || "";
+      enterStep(currentStep + 1);
     } else {
       viewState = "review";
     }
@@ -372,31 +389,26 @@
 
   function skipStep() {
     if (currentStep < FORMAT_STEPS.length - 1) {
-      currentStep++;
-      currentInput = formatSamples[FORMAT_STEPS[currentStep].format] || "";
+      enterStep(currentStep + 1);
     } else {
       viewState = "review";
     }
   }
 
   function prevStep() {
-    // Save current input if non-empty
     if (currentInput.trim()) {
       formatSamples[FORMAT_STEPS[currentStep].format] = currentInput.trim();
     }
 
     if (currentStep > 0) {
-      currentStep--;
-      currentInput = formatSamples[FORMAT_STEPS[currentStep].format] || "";
+      enterStep(currentStep - 1);
     } else {
       viewState = "inputMethod";
     }
   }
 
   function goBackToStep(index: number) {
-    // Save current review state and go to a specific step
-    currentStep = index;
-    currentInput = formatSamples[FORMAT_STEPS[index].format] || "";
+    enterStep(index);
     viewState = "pasteStep";
   }
 
@@ -416,6 +428,64 @@
     return Object.entries(formatSamples)
       .filter(([_, text]) => text.trim())
       .map(([format, samples]) => ({ format, samples }));
+  }
+
+  // --- Scraping ---
+
+  function resetScrapeState() {
+    scrapeHandle = "";
+    scrapeUrl = "";
+    isScraping = false;
+    scrapeError = "";
+  }
+
+  async function handleScrapeTwitter() {
+    const handle = scrapeHandle.trim();
+    if (!handle) {
+      scrapeError = "Enter a username or profile link.";
+      return;
+    }
+
+    const targetStep = currentStep;
+    const targetFormat = FORMAT_STEPS[targetStep].format;
+    scrapeError = "";
+    isScraping = true;
+
+    try {
+      const result = await scrapeTwitter(handle);
+      formatSamples[targetFormat] = result.format_group.samples;
+      if (currentStep === targetStep) currentInput = result.format_group.samples;
+      scrapeInfoMap["twitter"] = `Fetched ${result.meta.total_kept} tweets`;
+    } catch (e) {
+      if (currentStep === targetStep) scrapeError = friendlyError(e);
+    } finally {
+      isScraping = false;
+    }
+  }
+
+  async function handleScrapeBlog() {
+    const url = scrapeUrl.trim();
+    if (!url || !url.startsWith("http")) {
+      scrapeError = "Enter a valid URL starting with http:// or https://";
+      return;
+    }
+
+    const targetStep = currentStep;
+    const targetFormat = FORMAT_STEPS[targetStep].format;
+    scrapeError = "";
+    isScraping = true;
+
+    try {
+      const result = await scrapeBlog(url);
+      formatSamples[targetFormat] = result.format_group.samples;
+      if (currentStep === targetStep) currentInput = result.format_group.samples;
+      const label = result.meta.source_type === "rss" ? "posts" : "article";
+      scrapeInfoMap["longform"] = `Fetched ${result.meta.total_kept} ${label}`;
+    } catch (e) {
+      if (currentStep === targetStep) scrapeError = friendlyError(e);
+    } finally {
+      isScraping = false;
+    }
   }
 
   // --- Extraction ---
@@ -708,15 +778,87 @@
       <!-- Step header -->
       <div>
         <p class="text-xs font-medium text-foreground uppercase tracking-wide">{step.label}</p>
-        <p class="text-[10px] text-muted mt-0.5">{step.guidance}</p>
+        <p class="text-[10px] text-muted mt-0.5">
+          {canScrape
+            ? step.format === "twitter"
+              ? "Fetch by username, or paste tweets below."
+              : "Import from a blog URL, or paste articles below."
+            : step.guidance}
+        </p>
       </div>
 
-      <!-- Textarea -->
-      <textarea
-        bind:value={currentInput}
-        class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary min-h-[200px]"
-        placeholder="Paste your {step.label.toLowerCase()} here, separated by blank lines..."
-      ></textarea>
+      <!-- Unified input container -->
+      <div class="flex-1 flex flex-col border border-border rounded-lg bg-surface overflow-hidden focus-within:border-secondary transition-colors">
+
+        <!-- Import bar (scrapable formats only) -->
+        {#if canScrape}
+          <div class="px-3 py-2 bg-tint/50 border-b border-border flex items-center gap-2">
+            {#if step.format === "twitter"}
+              <input
+                type="text"
+                bind:value={scrapeHandle}
+                placeholder="@username or profile link"
+                disabled={isScraping}
+                class="flex-1 text-xs bg-transparent text-foreground placeholder-muted focus:outline-none disabled:opacity-50"
+                onkeydown={(e) => { if (e.key === "Enter") handleScrapeTwitter(); }}
+              />
+            {:else}
+              <input
+                type="url"
+                bind:value={scrapeUrl}
+                placeholder="Blog URL or RSS feed"
+                disabled={isScraping}
+                class="flex-1 text-xs bg-transparent text-foreground placeholder-muted focus:outline-none disabled:opacity-50"
+                onkeydown={(e) => { if (e.key === "Enter") handleScrapeBlog(); }}
+              />
+            {/if}
+            <button
+              onclick={step.format === "twitter" ? handleScrapeTwitter : handleScrapeBlog}
+              disabled={isScraping || (step.format === "twitter" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
+              class="shrink-0 px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer
+                {isScraping || (step.format === 'twitter' ? !scrapeHandle.trim() : !scrapeUrl.trim())
+                  ? 'text-muted cursor-not-allowed opacity-50'
+                  : 'bg-surface border border-border text-foreground hover:border-secondary'}"
+            >
+              {isScraping
+                ? "Fetching..."
+                : step.format === "twitter" ? "Fetch tweets" : "Fetch posts"}
+            </button>
+          </div>
+
+          <!-- Scrape feedback -->
+          {#if isScraping}
+            <div class="px-3 py-1.5 border-b border-border flex items-center gap-1.5">
+              <LoadingSpinner />
+              <span class="text-[10px] text-muted">
+                {step.format === "twitter"
+                  ? `Fetching tweets from @${scrapeHandle.replace(/^@/, "")}...`
+                  : "Fetching posts..."}
+              </span>
+            </div>
+          {:else if scrapeError}
+            <div class="px-3 py-1.5 border-b border-border">
+              <p class="text-[10px] text-error">{scrapeError}</p>
+            </div>
+          {:else if scrapeInfoMap[step.format]}
+            <div class="px-3 py-1.5 border-b border-border bg-signal/5 flex items-center gap-1.5">
+              <svg class="w-3 h-3 text-signal shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span class="text-[10px] text-signal">{scrapeInfoMap[step.format]}</span>
+            </div>
+          {/if}
+        {/if}
+
+        <!-- Textarea -->
+        <textarea
+          bind:value={currentInput}
+          class="flex-1 p-3 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[200px]"
+          placeholder={canScrape
+            ? `Or paste your ${step.label.toLowerCase()} here, separated by blank lines...`
+            : `Paste your ${step.label.toLowerCase()} here, separated by blank lines...`}
+        ></textarea>
+      </div>
 
       {#if currentInput.trim()}
         <p class="text-[10px] text-muted text-right">~{countSamples(currentInput)} samples</p>
@@ -762,6 +904,10 @@
             <span class="text-xs text-foreground">{step.label}</span>
             {#if count > 0}
               <div class="flex items-center gap-2">
+                {#if scrapeInfoMap[step.format]}
+                  <span class="text-[10px] text-muted">{scrapeInfoMap[step.format]}</span>
+                  <span class="text-[10px] text-secondary/30">|</span>
+                {/if}
                 <span class="text-[10px] text-secondary">{count} samples</span>
                 <button
                   onclick={() => goBackToStep(i)}

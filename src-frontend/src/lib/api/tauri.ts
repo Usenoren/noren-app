@@ -557,6 +557,28 @@ export async function showMainWindow(): Promise<void> {
   return invoke("show_main_window");
 }
 
+// --- Scraping ---
+
+export interface ScrapeMeta {
+  source_type: string;
+  total_found: number;
+  total_kept: number;
+  total_discarded: number;
+}
+
+export interface ScrapeResponse {
+  format_group: FormatGroup;
+  meta: ScrapeMeta;
+}
+
+export async function scrapeTwitter(handle: string, count?: number): Promise<ScrapeResponse> {
+  return invoke("scrape_twitter", { handle, count: count ?? 100 });
+}
+
+export async function scrapeBlog(url: string): Promise<ScrapeResponse> {
+  return invoke("scrape_blog", { url });
+}
+
 // ── Announcements ──────────────────────────────────────────────
 
 export interface Announcement {

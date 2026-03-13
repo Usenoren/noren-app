@@ -211,6 +211,8 @@ fn main() {
             commands::fetch_announcements,
             commands::get_announcement_seen,
             commands::save_announcement_seen,
+            commands::scrape_twitter,
+            commands::scrape_blog,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
