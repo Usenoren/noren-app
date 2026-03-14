@@ -8,6 +8,8 @@ import {
 
 function friendlyExtractionError(raw: string): string {
   const lower = raw.toLowerCase();
+  if (lower.includes("verified") || lower.includes("verification") || lower.includes("403"))
+    return "Please verify your email first. Check Account settings.";
   if (lower.includes("rate limit") || lower.includes("429"))
     return "Extraction was rate-limited. Please try again in a minute.";
   if (lower.includes("authentication") || lower.includes("invalid") || lower.includes("401"))

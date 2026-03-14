@@ -381,7 +381,7 @@
         {mode === 'adapt'
           ? 'bg-secondary text-white font-medium'
           : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-      title={mode === "adapt" ? "Adapt mode: restyle existing content" : "Switch to adapt mode"}
+      title={mode === "adapt" ? "Adapt mode: paste existing content and restyle it in your voice" : "Adapt mode: restyle existing content in your voice instead of writing from scratch"}
     >
       Adapt
     </button>
@@ -429,6 +429,11 @@
                 {level === lvl
                   ? 'bg-primary text-white font-medium'
                   : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+              title={lvl === "strict"
+                ? "Strict: maximizes voice fidelity, may constrain creativity"
+                : lvl === "guided"
+                  ? "Guided: balances your voice with natural flow (recommended)"
+                  : "Light: uses your voice as a gentle guide, more creative freedom"}
             >
               {lvl}
             </button>

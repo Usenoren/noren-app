@@ -16,6 +16,9 @@
     clearPendingCheckout,
     storeExtractionReceipt,
     readFileAsText,
+    verifyEmail,
+    resendOtp,
+    setInferenceMode,
   } from "$lib/api/tauri";
   import { open } from "@tauri-apps/plugin-shell";
   import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -28,9 +31,15 @@
   // Events
   let { onComplete }: { onComplete: () => void } = $props();
 
-  type Step = "welcome" | "auth" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "guided" | "guided-pairs" | "done" | "manual";
+  type Step = "welcome" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "guided" | "guided-pairs" | "done" | "manual";
   let step: Step = $state("welcome");
   let pendingPath: "paste" | "guided" = $state("paste");
+
+  // OTP verification state
+  let otpCode = $state("");
+  let otpLoading = $state(false);
+  let otpMessage = $state("");
+  let resendCooldown = $state(0);
 
   // Guest checkout state
   let guestEmail = $state("");
@@ -203,18 +212,61 @@
     try {
       if (authMode === "signup") {
         await norenProSignup(authEmail.trim(), authPassword.trim());
+        authPassword = "";
+        otpMessage = "Check your email for a verification code.";
+        step = "otp";
+        startResendCooldown();
       } else {
         await norenProLogin(authEmail.trim(), authPassword.trim());
+        isLoggedIn = true;
+        authEmail = "";
+        authPassword = "";
+        await afterAuth();
       }
-      isLoggedIn = true;
-      authEmail = "";
-      authPassword = "";
-
-      await afterAuth();
     } catch (e) {
       error = friendlyError(e);
     } finally {
       authLoading = false;
+    }
+  }
+
+  function startResendCooldown() {
+    resendCooldown = 60;
+    const interval = setInterval(() => {
+      resendCooldown--;
+      if (resendCooldown <= 0) clearInterval(interval);
+    }, 1000);
+  }
+
+  async function handleVerifyOtp() {
+    if (!otpCode.trim()) return;
+    otpLoading = true;
+    error = "";
+    otpMessage = "";
+    try {
+      await verifyEmail(otpCode.trim());
+      isLoggedIn = true;
+      otpCode = "";
+      authEmail = "";
+      await setInferenceMode("noren_pro");
+      await afterAuth();
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      otpLoading = false;
+    }
+  }
+
+  async function handleResendOtp() {
+    if (resendCooldown > 0) return;
+    error = "";
+    otpMessage = "";
+    try {
+      const msg = await resendOtp();
+      otpMessage = msg;
+      startResendCooldown();
+    } catch (e) {
+      error = friendlyError(e);
     }
   }
 
@@ -546,11 +598,6 @@
     }
   }
 
-  function goToSettings() {
-    onComplete();
-    emit("navigate", "settings");
-  }
-
   async function handleSaveManualProfile() {
     if (!manualProfile.trim()) return;
     isSavingManual = true;
@@ -767,6 +814,63 @@
       </button>
     </div>
 
+  {:else if step === "otp"}
+    <!-- OTP Verification -->
+    <div class="flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
+      <div class="text-center mb-2">
+        <h2 class="text-lg font-heading font-semibold text-foreground">Verify your email</h2>
+        <p class="text-xs text-muted mt-1">
+          We sent a verification code to <span class="font-medium text-foreground">{authEmail}</span>
+        </p>
+      </div>
+
+      <input
+        type="text"
+        bind:value={otpCode}
+        onkeydown={(e) => { if (e.key === "Enter") handleVerifyOtp(); }}
+        class="w-full px-3 py-2 text-sm text-center tracking-[0.3em] border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+        placeholder="000000"
+        maxlength={6}
+        autocomplete="one-time-code"
+      />
+
+      <button
+        onclick={handleVerifyOtp}
+        disabled={otpLoading || !otpCode.trim()}
+        class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+      >
+        {#if otpLoading}
+          <span class="inline-flex items-center gap-1"><LoadingSpinner /> Verifying...</span>
+        {:else}
+          Verify email
+        {/if}
+      </button>
+
+      {#if otpMessage}
+        <p class="text-[10px] text-secondary">{otpMessage}</p>
+      {/if}
+
+      {#if error}
+        <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+      {/if}
+
+      <div class="flex items-center justify-between w-full">
+        <button
+          onclick={handleResendOtp}
+          disabled={resendCooldown > 0}
+          class="text-[10px] transition-colors cursor-pointer {resendCooldown > 0 ? 'text-muted/50' : 'text-muted hover:text-foreground underline'}"
+        >
+          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+        </button>
+        <button
+          onclick={() => { step = "auth"; otpCode = ""; error = ""; otpMessage = ""; }}
+          class="text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
+        >
+          Back
+        </button>
+      </div>
+    </div>
+
   {:else if step === "paywall"}
     <!-- Extraction gate -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
@@ -808,7 +912,7 @@
           <div class="flex-1 min-w-0 relative z-[1]">
             <div class="flex items-center justify-between">
               <span style="font-size:13px; font-weight:600; line-height:1.3">Start Pro</span>
-              <span style="font-size:12px; font-weight:400">$5<span style="font-size:10px; opacity:0.6">/mo beta</span></span>
+              <span style="font-size:12px; font-weight:400">$7<span style="font-size:10px; opacity:0.6">/mo</span></span>
             </div>
             <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.5">Extraction, inference, living profile, sync. Everything.</div>
           </div>
@@ -1133,14 +1237,14 @@
         </p>
         <div class="flex gap-2 items-center">
           <button
-            onclick={goToSettings}
+            onclick={() => { pendingPath = "paste"; step = "paywall"; }}
             class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
           >
-            One-time $29
+            One-time $19
           </button>
           <span class="text-[10px] text-muted">or</span>
           <button
-            onclick={goToSettings}
+            onclick={() => { pendingPath = "paste"; step = "paywall"; }}
             class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
           >
             Included with Pro
@@ -1374,7 +1478,7 @@
             </div>
             <div class="flex gap-2 items-center mt-2">
               <button
-                onclick={goToSettings}
+                onclick={() => { pendingPath = "paste"; step = "paywall"; }}
                 class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
                 style="font-size:10px; font-weight:500"
               >
@@ -1382,11 +1486,11 @@
               </button>
               <span class="text-muted" style="font-size:10px">or</span>
               <button
-                onclick={goToSettings}
+                onclick={() => { pendingPath = "paste"; step = "paywall"; }}
                 class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
                 style="font-size:10px; font-weight:500"
               >
-                Pro $5/mo
+                Pro $7/mo
               </button>
             </div>
           </div>

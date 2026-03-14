@@ -576,7 +576,7 @@
             onclick={handleProUpgrade}
             class="w-full py-1.5 text-[10px] text-secondary hover:text-primary transition-colors cursor-pointer"
           >
-            Or get Pro ($5/mo beta)
+            Or get Pro ($7/mo)
           </button>
         </div>
 

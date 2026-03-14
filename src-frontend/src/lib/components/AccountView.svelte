@@ -372,7 +372,7 @@
               <span class="text-xs font-medium text-foreground">Subscribe to Pro</span>
               <span class="block text-[10px] text-muted mt-0.5">Bundled inference, living profile, sync, and export</span>
             </div>
-            <span class="text-xs font-medium text-secondary">$5<span class="text-[10px] text-muted font-normal">/mo</span></span>
+            <span class="text-xs font-medium text-secondary">$7<span class="text-[10px] text-muted font-normal">/mo</span></span>
           </button>
 
           {#if !showCouponInput}
@@ -510,7 +510,7 @@
             Export your voice profile anytime.
           </li>
         </ul>
-        <p class="text-xs font-medium text-secondary mt-3">$5/mo <span class="text-[10px] text-muted font-normal">beta pricing</span></p>
+        <p class="text-xs font-medium text-secondary mt-3">$7/mo <span class="text-[10px] text-muted font-normal">founding member pricing</span></p>
         {#if canExtract()}
           <p class="text-[10px] text-muted mt-1.5">You have extraction. Pro adds inference, living profile, sync.</p>
         {/if}
