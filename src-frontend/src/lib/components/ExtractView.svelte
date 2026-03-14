@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import { open } from "@tauri-apps/plugin-shell";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -123,18 +122,7 @@
   // --- Lifecycle ---
 
   onMount(() => {
-    const cleanups: (() => void)[] = [];
-
-    // Auto-poll payment status when app regains focus
-    listen("tauri://focus", () => {
-      if (viewState === "polling") {
-        handlePollStatus();
-      }
-    }).then((fn) => cleanups.push(fn));
-
     checkAccess();
-
-    return () => cleanups.forEach((fn) => fn());
   });
 
   // Watch extraction store for completion
