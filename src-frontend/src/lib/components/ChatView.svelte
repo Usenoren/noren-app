@@ -456,7 +456,7 @@
           {#if msg.role === "user"}
             <div class="flex justify-end animate-fade-in-up group/usr">
               <div class="max-w-[80%]">
-                <div class="px-3.5 py-2.5 bg-primary/10 text-foreground rounded-2xl rounded-br-md selectable">
+                <div class="px-3.5 py-2.5 bg-accent/10 border border-accent/15 text-foreground rounded-2xl rounded-br-md selectable">
                   <p class="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 </div>
                 <div class="flex items-center justify-end gap-1 mt-1 mr-1 h-5 opacity-0 group-hover/usr:opacity-100 transition-opacity">
@@ -473,7 +473,7 @@
           {:else}
             <div class="flex justify-start animate-weave-in group/msg">
               <div class="max-w-[80%]">
-                <div class="px-3.5 py-2.5 bg-surface border border-border text-foreground rounded-2xl rounded-bl-md selectable animate-weave-shimmer">
+                <div class="px-3.5 py-2.5 bg-surface border border-border border-l-[3px] border-l-accent text-foreground rounded-2xl rounded-bl-md selectable animate-weave-shimmer">
                   <div class="text-sm leading-relaxed prose-chat">{@html renderMarkdown(msg.content)}</div>
                 </div>
                 <div class="flex items-center gap-1 mt-1 ml-1 h-5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
@@ -566,7 +566,7 @@
           class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0
             {!input.trim() || isLoading || noApiKey
               ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-              : 'bg-primary text-white hover:bg-primary-hover'}"
+              : 'bg-accent text-white hover:bg-accent-hover'}"
           aria-label="Send"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

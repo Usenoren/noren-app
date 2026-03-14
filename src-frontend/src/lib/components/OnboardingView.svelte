@@ -19,6 +19,9 @@
     verifyEmail,
     resendOtp,
     setInferenceMode,
+    scrapeTwitter,
+    scrapeBlog,
+    type FormatGroup,
   } from "$lib/api/tauri";
   import { open } from "@tauri-apps/plugin-shell";
   import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -31,7 +34,7 @@
   // Events
   let { onComplete }: { onComplete: () => void } = $props();
 
-  type Step = "welcome" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "guided" | "guided-pairs" | "done" | "manual";
+  type Step = "welcome" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
   let step: Step = $state("welcome");
   let pendingPath: "paste" | "guided" = $state("paste");
 
@@ -64,12 +67,26 @@
   let googleLoading = $state(false);
   let isLoggedIn = $state(false);
 
-  // Multi-format paste
-  const formats = ["twitter", "email", "longform", "slack", "linkedin"];
-  let formatSamples = $state<Record<string, string>>({
-    twitter: "", email: "", longform: "", slack: "", linkedin: "",
-  });
-  let activeFormat = $state("twitter");
+  // Stepped sample input (wizard)
+  const FORMAT_STEPS = [
+    { format: "twitter", label: "Tweets / Social", guidance: "Paste 10-20 tweets or social posts. Copy from your Twitter/X archive or timeline." },
+    { format: "email", label: "Emails", guidance: "Paste 2-3 full email threads. The kind you write most, not one-liners." },
+    { format: "longform", label: "Long-form", guidance: "Blog posts, essays, articles, newsletter issues. Even one long piece helps." },
+    { format: "slack", label: "Slack / Chat", guidance: "Paste longer Slack messages or chat threads. Skip quick replies." },
+    { format: "linkedin", label: "LinkedIn", guidance: "Posts, comments, or articles from LinkedIn." },
+  ];
+  let currentFormatStep = $state(0);
+  let formatSamples = $state<Record<string, string>>({});
+  let currentInput = $state("");
+
+  // Scrape state
+  const SCRAPABLE_FORMATS = ["twitter", "longform"];
+  let scrapeHandle = $state("");
+  let scrapeUrl = $state("");
+  let isScraping = $state(false);
+  let scrapeError = $state("");
+  let scrapeInfoMap: Record<string, string> = $state({});
+  let canScrapeStep = $derived(SCRAPABLE_FORMATS.includes(FORMAT_STEPS[currentFormatStep].format));
 
   // Guided path
   let currentQuestion = $state(0);
@@ -515,11 +532,9 @@
         error = "File is empty.";
         return;
       }
-      formatSamples = {
-        twitter: "", email: "", longform: content, slack: "", linkedin: "",
-      };
-      activeFormat = "longform";
-      step = "paste";
+      formatSamples = { longform: content };
+      scrapeInfoMap = {};
+      step = "review";
     } catch (e) {
       error = friendlyError(e);
     }
@@ -533,28 +548,123 @@
     return t.split(/\n\s*\n/).filter((s) => s.trim()).length;
   }
 
-  function filledFormats(): string[] {
-    return formats.filter((f) => sampleCount(formatSamples[f]) >= 5);
+  function totalSamples(): number {
+    return Object.values(formatSamples).reduce(
+      (sum, text) => sum + sampleCount(text),
+      0,
+    );
   }
 
-  function totalFilledFormats(): number {
-    return filledFormats().length;
+  function formatGroups(): FormatGroup[] {
+    return Object.entries(formatSamples)
+      .filter(([_, text]) => text.trim())
+      .map(([format, samples]) => ({ format, samples }));
   }
 
-  function hasAnySamples(fmt: string): boolean {
-    return formatSamples[fmt].trim().length > 0;
+  // --- Stepped wizard navigation ---
+
+  function enterFormatStep(stepIndex: number) {
+    currentFormatStep = stepIndex;
+    currentInput = formatSamples[FORMAT_STEPS[stepIndex].format] || "";
+    resetScrapeState();
+  }
+
+  function startPasteFlow() {
+    formatSamples = {};
+    scrapeInfoMap = {};
+    enterFormatStep(0);
+    step = "paste";
+  }
+
+  function nextFormatStep() {
+    if (currentInput.trim()) {
+      formatSamples[FORMAT_STEPS[currentFormatStep].format] = currentInput.trim();
+    }
+    if (currentFormatStep < FORMAT_STEPS.length - 1) {
+      enterFormatStep(currentFormatStep + 1);
+    } else {
+      step = "review";
+    }
+  }
+
+  function skipFormatStep() {
+    if (currentFormatStep < FORMAT_STEPS.length - 1) {
+      enterFormatStep(currentFormatStep + 1);
+    } else {
+      step = "review";
+    }
+  }
+
+  function prevFormatStep() {
+    if (currentInput.trim()) {
+      formatSamples[FORMAT_STEPS[currentFormatStep].format] = currentInput.trim();
+    }
+    if (currentFormatStep > 0) {
+      enterFormatStep(currentFormatStep - 1);
+    } else {
+      step = "input-method";
+    }
+  }
+
+  function goBackToFormatStep(index: number) {
+    enterFormatStep(index);
+    step = "paste";
+  }
+
+  // --- Scraping ---
+
+  function resetScrapeState() {
+    scrapeHandle = "";
+    scrapeUrl = "";
+    isScraping = false;
+    scrapeError = "";
+  }
+
+  async function handleScrapeTwitter() {
+    const handle = scrapeHandle.trim();
+    if (!handle) { scrapeError = "Enter a username or profile link."; return; }
+    const targetStep = currentFormatStep;
+    const targetFormat = FORMAT_STEPS[targetStep].format;
+    scrapeError = "";
+    isScraping = true;
+    try {
+      const result = await scrapeTwitter(handle);
+      formatSamples[targetFormat] = result.format_group.samples;
+      if (currentFormatStep === targetStep) currentInput = result.format_group.samples;
+      scrapeInfoMap["twitter"] = `Fetched ${result.meta.total_kept} tweets`;
+    } catch (e) {
+      if (currentFormatStep === targetStep) scrapeError = friendlyError(e);
+    } finally {
+      isScraping = false;
+    }
+  }
+
+  async function handleScrapeBlog() {
+    const url = scrapeUrl.trim();
+    if (!url || !url.startsWith("http")) { scrapeError = "Enter a valid URL starting with http:// or https://"; return; }
+    const targetStep = currentFormatStep;
+    const targetFormat = FORMAT_STEPS[targetStep].format;
+    scrapeError = "";
+    isScraping = true;
+    try {
+      const result = await scrapeBlog(url);
+      formatSamples[targetFormat] = result.format_group.samples;
+      if (currentFormatStep === targetStep) currentInput = result.format_group.samples;
+      const label = result.meta.source_type === "rss" ? "posts" : "article";
+      scrapeInfoMap["longform"] = `Fetched ${result.meta.total_kept} ${label}`;
+    } catch (e) {
+      if (currentFormatStep === targetStep) scrapeError = friendlyError(e);
+    } finally {
+      isScraping = false;
+    }
   }
 
   // --- Extraction ---
 
   function handleStartExtraction() {
-    const filled = filledFormats();
-    if (filled.length === 0) return;
-
-    // Fire off background extraction and show done screen
-    startExtractionQueue(
-      filled.map((f) => ({ samples: formatSamples[f].trim(), format: f }))
-    );
+    const groups = formatGroups();
+    if (groups.length === 0 || totalSamples() < 5) return;
+    startExtractionQueue(groups);
     step = "done";
   }
 
@@ -1180,7 +1290,7 @@
 
         <!-- Paste step by step -->
         <button
-          onclick={() => { step = "paste"; }}
+          onclick={startPasteFlow}
           class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="padding: 16px 18px; border: 1px solid var(--color-border)"
           onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
@@ -1276,84 +1386,211 @@
     </div>
 
   {:else if step === "paste"}
-    <!-- Multi-format paste samples -->
-    <div class="flex flex-col gap-3 flex-1">
+    <!-- Step-by-step format wizard -->
+    {@const fmtStep = FORMAT_STEPS[currentFormatStep]}
+    <div class="flex-1 flex flex-col gap-3 p-4 -m-4">
+      <!-- Progress dots -->
+      <div class="flex items-center justify-center gap-1.5">
+        {#each FORMAT_STEPS as _, i}
+          <div
+            class="w-1.5 h-1.5 rounded-full transition-colors
+              {i === currentFormatStep
+                ? 'bg-accent'
+                : i < currentFormatStep || formatSamples[FORMAT_STEPS[i].format]
+                  ? 'bg-secondary/50'
+                  : 'bg-border'}"
+          ></div>
+        {/each}
+        <span class="text-[9px] text-muted ml-1.5">{currentFormatStep + 1}/{FORMAT_STEPS.length}</span>
+      </div>
+
+      <!-- Step header -->
       <div>
-        <span class="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Paste samples by format</span>
-        <p class="text-[10px] text-muted leading-relaxed">
-          Switch between tabs and paste your writing for each format. Fill at least one format with 5+ samples.
+        <p class="text-xs font-medium text-foreground uppercase tracking-wide">{fmtStep.label}</p>
+        <p class="text-[10px] text-muted mt-0.5">
+          {canScrapeStep
+            ? fmtStep.format === "twitter"
+              ? "Fetch by username, or paste tweets below."
+              : "Import from a blog URL, or paste articles below."
+            : fmtStep.guidance}
         </p>
       </div>
 
-      <!-- Format tabs -->
-      <div class="flex flex-wrap gap-1">
-        {#each formats as fmt}
-          <button
-            onclick={() => { activeFormat = fmt; }}
-            class="relative px-2.5 py-1 text-xs transition-colors cursor-pointer uppercase tracking-wide rounded-md
-              {activeFormat === fmt
-                ? 'bg-primary text-white font-medium'
-                : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-          >
-            {fmt}
-            {#if hasAnySamples(fmt)}
-              <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full {sampleCount(formatSamples[fmt]) >= 5 ? 'bg-signal' : 'bg-secondary'}"></span>
+      <!-- Unified input container -->
+      <div class="flex-1 flex flex-col border border-border rounded-lg bg-surface overflow-hidden focus-within:border-secondary transition-colors">
+
+        <!-- Import bar (scrapable formats only) -->
+        {#if canScrapeStep}
+          <div class="px-3 py-2 bg-tint/50 border-b border-border flex items-center gap-2">
+            {#if fmtStep.format === "twitter"}
+              <input
+                type="text"
+                bind:value={scrapeHandle}
+                placeholder="@username or profile link"
+                disabled={isScraping}
+                class="flex-1 text-xs bg-transparent text-foreground placeholder-muted focus:outline-none disabled:opacity-50"
+                onkeydown={(e) => { if (e.key === "Enter") handleScrapeTwitter(); }}
+              />
+            {:else}
+              <input
+                type="url"
+                bind:value={scrapeUrl}
+                placeholder="Blog URL or RSS feed"
+                disabled={isScraping}
+                class="flex-1 text-xs bg-transparent text-foreground placeholder-muted focus:outline-none disabled:opacity-50"
+                onkeydown={(e) => { if (e.key === "Enter") handleScrapeBlog(); }}
+              />
             {/if}
-          </button>
+            <button
+              onclick={fmtStep.format === "twitter" ? handleScrapeTwitter : handleScrapeBlog}
+              disabled={isScraping || (fmtStep.format === "twitter" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
+              class="shrink-0 px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer
+                {isScraping || (fmtStep.format === 'twitter' ? !scrapeHandle.trim() : !scrapeUrl.trim())
+                  ? 'text-muted cursor-not-allowed opacity-50'
+                  : 'bg-surface border border-border text-foreground hover:border-secondary'}"
+            >
+              {isScraping
+                ? "Fetching..."
+                : fmtStep.format === "twitter" ? "Fetch tweets" : "Fetch posts"}
+            </button>
+          </div>
+
+          <!-- Scrape feedback -->
+          {#if isScraping}
+            <div class="px-3 py-1.5 border-b border-border flex items-center gap-1.5">
+              <LoadingSpinner />
+              <span class="text-[10px] text-muted">
+                {fmtStep.format === "twitter"
+                  ? `Fetching tweets from @${scrapeHandle.replace(/^@/, "")}...`
+                  : "Fetching posts..."}
+              </span>
+            </div>
+          {:else if scrapeError}
+            <div class="px-3 py-1.5 border-b border-border">
+              <p class="text-[10px] text-error">{scrapeError}</p>
+            </div>
+          {:else if scrapeInfoMap[fmtStep.format]}
+            <div class="px-3 py-1.5 border-b border-border bg-signal/5 flex items-center gap-1.5">
+              <svg class="w-3 h-3 text-signal shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span class="text-[10px] text-signal">{scrapeInfoMap[fmtStep.format]}</span>
+            </div>
+          {/if}
+        {/if}
+
+        <!-- Textarea -->
+        <textarea
+          bind:value={currentInput}
+          class="flex-1 p-3 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[200px]"
+          placeholder={canScrapeStep
+            ? `Or paste your ${fmtStep.label.toLowerCase()} here, separated by blank lines...`
+            : `Paste your ${fmtStep.label.toLowerCase()} here, separated by blank lines...`}
+        ></textarea>
+      </div>
+
+      {#if currentInput.trim()}
+        <p class="text-[10px] text-muted text-right">~{sampleCount(currentInput)} samples</p>
+      {/if}
+
+      <!-- Navigation buttons -->
+      <div class="flex gap-2">
+        <button
+          onclick={prevFormatStep}
+          class="px-3 py-2 text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
+        >
+          Back
+        </button>
+        <div class="flex-1"></div>
+        <button
+          onclick={skipFormatStep}
+          class="px-3 py-2 text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
+        >
+          Skip
+        </button>
+        <button
+          onclick={nextFormatStep}
+          class="px-4 py-2 text-[11px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer rounded-md"
+        >
+          {currentFormatStep === FORMAT_STEPS.length - 1 ? "Review" : "Next"}
+        </button>
+      </div>
+    </div>
+
+  {:else if step === "review"}
+    <!-- Review collected samples -->
+    <div class="flex-1 flex flex-col gap-4 p-4 -m-4">
+      <div class="text-center">
+        <p class="text-sm font-medium text-foreground">Ready to extract</p>
+      </div>
+
+      <!-- Sample summary -->
+      <div class="space-y-1.5">
+        {#each FORMAT_STEPS as fmtItem, i}
+          {@const text = formatSamples[fmtItem.format]}
+          {@const count = text ? sampleCount(text) : 0}
+          <div class="flex items-center justify-between px-3 py-2 bg-surface border border-border rounded-md">
+            <span class="text-xs text-foreground">{fmtItem.label}</span>
+            {#if count > 0}
+              <div class="flex items-center gap-2">
+                {#if scrapeInfoMap[fmtItem.format]}
+                  <span class="text-[10px] text-muted">{scrapeInfoMap[fmtItem.format]}</span>
+                  <span class="text-[10px] text-secondary/30">|</span>
+                {/if}
+                <span class="text-[10px] text-secondary">{count} samples</span>
+                <button
+                  onclick={() => goBackToFormatStep(i)}
+                  class="text-[9px] text-muted hover:text-secondary transition-colors cursor-pointer"
+                >
+                  Edit
+                </button>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] text-muted">skipped</span>
+                <button
+                  onclick={() => goBackToFormatStep(i)}
+                  class="text-[9px] text-muted hover:text-secondary transition-colors cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            {/if}
+          </div>
         {/each}
       </div>
 
-      <!-- Textarea for active format -->
-      <div class="flex-1 flex flex-col min-h-0">
-        <div class="flex items-center justify-between mb-1.5">
-          <span class="text-xs font-medium text-muted uppercase tracking-wide">{activeFormat} samples</span>
-          {#if formatSamples[activeFormat].trim()}
-            <span class="text-[10px] {sampleCount(formatSamples[activeFormat]) >= 5 ? 'text-signal' : 'text-muted'}">
-              ~{sampleCount(formatSamples[activeFormat])} samples
-            </span>
-          {/if}
-        </div>
-        {#each formats as fmt}
-          <textarea
-            bind:value={formatSamples[fmt]}
-            class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary
-              {activeFormat !== fmt ? 'hidden' : ''}"
-            placeholder="Paste your {fmt} writing samples here, separated by blank lines..."
-          ></textarea>
-        {/each}
-      </div>
+      <p class="text-xs text-center {totalSamples() >= 5 ? 'text-secondary' : 'text-error'}">
+        {totalSamples()} samples across {formatGroups().length} format{formatGroups().length !== 1 ? "s" : ""}
+      </p>
+
+      {#if error}
+        <p class="text-[10px] text-error text-center">{error}</p>
+      {/if}
 
       <!-- Extract button -->
       <button
         onclick={handleStartExtraction}
-        disabled={totalFilledFormats() === 0}
-        class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
-          {totalFilledFormats() === 0
+        disabled={totalSamples() < 5}
+        class="w-full py-2.5 px-4 text-sm font-semibold tracking-wide transition-colors cursor-pointer rounded-md
+          {totalSamples() < 5
             ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-primary text-white hover:bg-primary-hover'}"
+            : 'bg-accent text-white hover:bg-accent-hover'}"
       >
-        {#if totalFilledFormats() > 0}
-          Extract Voice Profile ({totalFilledFormats()} {totalFilledFormats() === 1 ? 'format' : 'formats'})
-        {:else}
-          Extract Voice Profile
-        {/if}
+        Extract Voice Profile
       </button>
 
-      {#if formatSamples[activeFormat].trim() && sampleCount(formatSamples[activeFormat]) < 5}
+      {#if totalSamples() < 5}
         <p class="text-[10px] text-muted text-center">
-          Need at least 5 samples for {activeFormat}. Currently: ~{sampleCount(formatSamples[activeFormat])}
+          Need at least 5 samples. Go back and add more to any format.
         </p>
-      {/if}
-
-      {#if error}
-        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <button
         onclick={() => { step = "input-method"; }}
-        class="text-xs text-muted hover:text-foreground text-center cursor-pointer"
+        class="text-[10px] text-muted hover:text-secondary transition-colors cursor-pointer text-center"
       >
-        &larr; Back
+        Start over
       </button>
     </div>
 

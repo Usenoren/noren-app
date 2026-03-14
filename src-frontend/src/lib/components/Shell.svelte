@@ -109,8 +109,8 @@
   <!-- Chrome bar -->
   <div
     data-tauri-drag-region
-    class="h-8 flex items-center px-3 gap-1.5 shrink-0 noise-texture"
-    style="background:var(--color-kon)"
+    class="h-8 flex items-center px-3 gap-1.5 shrink-0 border-b border-border"
+    style="background:var(--color-bg-rail)"
   >
     <!-- Window dots -->
     <button
@@ -123,7 +123,7 @@
     <div class="w-[9px] h-[9px] rounded-full shrink-0 z-[1]" style="background:#27CA40;opacity:0.8"></div>
 
     <!-- Noren mark -->
-    <div class="ml-1.5 z-[1]" style="color:rgba(255,255,255,0.25)">
+    <div class="ml-1.5 z-[1]" style="color:var(--color-muted)">
       <NorenMark width={12} height={14} />
     </div>
 
@@ -134,34 +134,31 @@
     <div class="flex gap-0.5 z-[1]">
       <button
         onclick={() => { view = "generate"; refreshApiKeyStatus(); }}
-        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors"
-        style="background:{view === 'generate' ? 'rgba(255,255,255,0.08)' : 'transparent'}"
+        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors hover:bg-foreground/[0.04]"
         aria-label="Weave"
         title="Weave"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'generate' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)'}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'generate' ? 'var(--color-accent)' : 'var(--color-muted)'}">
           <path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
         </svg>
       </button>
       <button
         onclick={() => { view = "profiles"; }}
-        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors"
-        style="background:{view === 'profiles' ? 'rgba(255,255,255,0.08)' : 'transparent'}"
+        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors hover:bg-foreground/[0.04]"
         aria-label="Profiles"
         title="Voice profiles"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'profiles' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)'}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'profiles' ? 'var(--color-accent)' : 'var(--color-muted)'}">
           <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
         </svg>
       </button>
       <button
         onclick={() => { view = "settings"; }}
-        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors"
-        style="background:{view === 'settings' ? 'rgba(255,255,255,0.08)' : 'transparent'}"
+        class="w-6 h-[22px] rounded flex items-center justify-center cursor-pointer transition-colors hover:bg-foreground/[0.04]"
         aria-label="Settings"
         title="Settings"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'settings' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)'}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:{view === 'settings' ? 'var(--color-accent)' : 'var(--color-muted)'}">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
         </svg>
       </button>

@@ -45,7 +45,7 @@
   ];
 
   onMount(() => {
-    document.documentElement.style.fontSize = "15px";
+    document.documentElement.style.fontSize = "14px";
   });
 
   $effect(() => {
@@ -131,44 +131,44 @@
     <!-- Main layout: sidebar + content -->
     <div class="flex flex-1 min-h-0">
       <!-- Nav rail -->
-      <nav class="w-14 shrink-0 bg-kon noise-texture flex flex-col items-center py-2.5 gap-0.5">
-        <div class="flex flex-col items-center gap-0.5 z-[1]">
+      <nav class="w-14 shrink-0 flex flex-col items-center py-2.5 gap-0.5 border-r border-border" style="background:var(--color-bg-rail)">
+        <div class="flex flex-col items-center gap-0.5">
           {#each navItems as item}
             <button
               onclick={() => { view = item.id; }}
-              class="w-[44px] flex flex-col items-center gap-[3px] py-[7px] rounded-md transition-colors cursor-pointer relative z-[1]
+              class="w-[44px] flex flex-col items-center gap-[3px] py-[7px] rounded-md transition-colors cursor-pointer relative
                 {view === item.id
-                  ? 'bg-white/[0.08] nav-active-indicator'
-                  : 'hover:bg-white/[0.06]'}"
+                  ? 'nav-active-indicator'
+                  : 'hover:bg-foreground/[0.04]'}"
             >
               {#if item.icon === "pen"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
                 </svg>
               {:else if item.icon === "chat"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
                 </svg>
               {:else if item.icon === "user"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
               {:else if item.icon === "wand"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path d="M15 4V2M15 16v-2M8 9h10M8 5h2m-2 8h2m4 6l-6-6 6-6"/>
                 </svg>
               {:else if item.icon === "badge"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="4" width="18" height="16" rx="2"/>
                   <circle cx="9" cy="11" r="2.5"/>
                   <path d="M15 10h2M15 14h2M5 20c0-2 2-3.5 4-3.5s4 1.5 4 3.5"/>
                 </svg>
               {:else if item.icon === "gear"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
                 </svg>
               {/if}
-              <span class="text-[7px] font-semibold uppercase tracking-wide" style="color:{view === item.id ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)'}">
+              <span class="font-heading italic text-[8px] font-normal tracking-normal" style="color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}">
                 {item.label}
               </span>
               {#if item.id === "extract" && !canExtract()}
@@ -182,9 +182,9 @@
         </div>
 
         <!-- Bottom: announcements + branding -->
-        <div class="mt-auto flex flex-col items-center gap-1.5 pb-0.5 z-[1]">
+        <div class="mt-auto flex flex-col items-center gap-1.5 pb-0.5">
           <AnnouncementBell />
-          <div style="color:rgba(255,255,255,0.15)">
+          <div style="color:var(--color-muted)">
             <NorenMark width={16} height={19} />
           </div>
         </div>
