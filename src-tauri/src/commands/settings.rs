@@ -393,7 +393,11 @@ pub async fn resend_setup_email(
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
 
-    // Always return success message (anti-enumeration)
+    if resp.status().is_server_error() {
+        return Err("Server error, please try again later".to_string());
+    }
+
+    // Return success for all other statuses (anti-enumeration)
     let data: serde_json::Value = resp.json().await.unwrap_or_default();
     Ok(data["message"].as_str().unwrap_or("If that email is in our system, we've sent setup instructions.").to_string())
 }
