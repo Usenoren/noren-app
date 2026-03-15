@@ -427,8 +427,8 @@
           <div class="flex flex-col items-center gap-3">
             <button
               onclick={() => emit("navigate", "extract")}
-              class="px-6 py-2.5 text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition-all duration-200 cursor-pointer rounded-md hover:-translate-y-px"
-              style="box-shadow: 0 2px 8px var(--color-primary-muted)"
+              class="px-6 py-2.5 text-xs font-semibold bg-accent text-white hover:bg-accent-hover transition-all duration-200 cursor-pointer rounded-md hover:-translate-y-px"
+              style="box-shadow: 0 2px 8px var(--color-accent-glow)"
             >
               Extract your voice
             </button>
@@ -446,7 +446,7 @@
       <div class="flex flex-col gap-3 h-full animate-fade-in-up">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-sm font-medium text-foreground">Describe your voice</p>
+            <p class="text-sm font-medium text-foreground font-heading italic">Describe your voice</p>
             <p class="text-[10px] text-muted leading-relaxed mt-1">
               Tone, word choices, sentence length, quirks.
             </p>
@@ -466,7 +466,7 @@
         </div>
 
         <!-- AI extraction nudge -->
-        <div class="p-2 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-1.5">
+        <div class="p-2 bg-tint border border-secondary/20 rounded-xl flex flex-col gap-1.5">
           <p class="text-[10px] text-muted leading-relaxed">
             <span class="text-secondary font-medium">AI Extraction</span> captures more detail from your real writing.
           </p>
@@ -493,13 +493,13 @@
           class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
             {!editContent.trim() || isSaving
               ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-              : 'bg-primary text-white hover:bg-primary-hover'}"
+              : 'bg-accent text-white hover:bg-accent-hover'}"
         >
           {isSaving ? "Saving..." : "Save Profile"}
         </button>
 
         {#if error}
-          <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
+          <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
             {error}
           </div>
         {/if}
@@ -508,8 +508,8 @@
   {:else if overview.is_server}
     <!-- Server profile — metadata only -->
     <div class="flex flex-col gap-3 h-full">
-      <div class="p-3 bg-surface border border-secondary/20 rounded-lg">
-        <p class="text-sm font-medium text-foreground">Voice profile on Noren servers</p>
+      <div class="p-3 bg-surface border border-secondary/20 rounded-xl">
+        <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
         <p class="text-[10px] text-muted mt-1">
           Your extracted profile is securely stored on Noren servers and used automatically when generating text.
         </p>
@@ -523,7 +523,7 @@
       {/if}
 
       {#if overview.formats.length > 0}
-        <div class="p-3 bg-surface border border-border rounded-lg">
+        <div class="p-3 bg-surface border border-border rounded-xl">
           <span class="text-[10px] font-medium text-muted uppercase tracking-wide">Formats</span>
           <div class="flex gap-1.5 mt-1.5 flex-wrap">
             {#each overview.formats as fmt}
@@ -551,7 +551,7 @@
             {/each}
           </div>
           <div class="flex-1 min-h-0 overflow-y-auto">
-            <pre class="p-3 text-xs leading-relaxed text-foreground bg-surface border border-border rounded-lg whitespace-pre-wrap">{displayContent}</pre>
+            <pre class="p-3 text-xs leading-relaxed text-foreground bg-surface border border-border rounded-xl whitespace-pre-wrap">{displayContent}</pre>
           </div>
         {:else}
           <button
@@ -591,7 +591,7 @@
         {@render livingTabContent()}
         {:else}
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
-          <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
+          <div class="p-4 bg-tint border border-secondary/20 rounded-xl text-center max-w-[260px]">
             <p class="text-xs font-medium text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
               Your profile evolves as you write. Noren tracks your edits and refines automatically.
@@ -633,7 +633,7 @@
       </div>
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed shrink-0">
+        <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed shrink-0">
           {error}
         </div>
       {/if}
@@ -690,7 +690,7 @@
         {:else}
         <!-- Living Profile locked -->
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
-          <div class="p-4 bg-tint border border-secondary/20 rounded-lg text-center max-w-[260px]">
+          <div class="p-4 bg-tint border border-secondary/20 rounded-xl text-center max-w-[260px]">
             <p class="text-xs font-medium text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
               Your profile evolves as you write. Noren tracks your edits and refines automatically.
@@ -710,15 +710,15 @@
           class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none rounded-md focus:outline-none focus:border-secondary font-mono"
         ></textarea>
       {:else}
-        <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto">
-          <div class="prose-profile text-xs text-foreground leading-relaxed selectable">{@html renderMarkdown(displayContent)}</div>
+        <div class="flex-1 output-card p-3 overflow-y-auto">
+          <div class="prose-profile text-xs text-foreground leading-relaxed selectable relative z-[1]">{@html renderMarkdown(displayContent)}</div>
         </div>
       {/if}
     </div>
 
     <!-- Upgrade nudge for manual-only profiles (no format contexts) -->
     {#if overview.formats.length === 0 && activeTab === "core" && !isEditing}
-      <div class="p-2 bg-tint border border-secondary/15 rounded-lg shrink-0 flex flex-col gap-1.5">
+      <div class="p-2 bg-tint border border-secondary/15 rounded-xl shrink-0 flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
           Your profile covers the basics. <span class="text-secondary font-medium">AI extraction</span> adds format-specific contexts and vocabulary analysis.
         </p>
@@ -770,7 +770,7 @@
             <button
               onclick={handleSave}
               disabled={isSaving}
-              class="px-3 py-1.5 text-xs bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+              class="px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
             >
               {isSaving ? "Saving..." : "Save"}
             </button>
@@ -816,7 +816,7 @@
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed shrink-0">
+      <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed shrink-0">
         {error}
       </div>
     {/if}
@@ -825,10 +825,10 @@
   {#snippet livingTabContent()}
     <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
       <!-- Edit tracking toggle -->
-      <div class="p-3 bg-surface border border-border rounded-lg">
+      <div class="p-3 bg-surface border border-border rounded-xl">
         <div class="flex items-center justify-between">
           <div>
-            <span class="text-xs font-medium text-foreground">Edit tracking</span>
+            <span class="text-xs font-medium text-foreground font-heading italic">Edit tracking</span>
             <p class="text-[10px] text-muted mt-0.5">Track edits to improve your profile over time.</p>
           </div>
           <button
@@ -887,7 +887,7 @@
 
         <!-- Rollback confirmation -->
         {#if showRollbackConfirm}
-          <div class="p-2.5 bg-surface border border-border rounded-lg">
+          <div class="p-2.5 bg-surface border border-border rounded-xl">
             <p class="text-[10px] text-muted leading-relaxed">Any manual edits made after the last refresh will be lost.</p>
             <div class="flex gap-2 mt-2">
               <button
@@ -1030,7 +1030,7 @@
       {/if}
 
       <!-- Voice specimen collector -->
-      <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--color-border)">
+      <div class="rounded-xl overflow-hidden" style="border: 1px solid var(--color-border)">
         <button
           onclick={() => { writingDrawerOpen = !writingDrawerOpen; }}
           class="w-full flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors hover:bg-tint/40"
@@ -1041,7 +1041,7 @@
             <path d="M9.5 3.5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
           </svg>
           <span class="flex-1 text-left">
-            <span class="text-xs font-medium text-foreground">Recent writing</span>
+            <span class="text-xs font-medium text-foreground font-heading italic">Recent writing</span>
             {#if writingSamples.length > 0}
               <span class="ml-1.5 text-[9px] font-medium" style="color: var(--color-secondary)">{writingSamples.length}</span>
             {/if}

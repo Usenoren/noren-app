@@ -41,12 +41,9 @@
   --color-shimmer-chat-peak: rgba(59, 107, 138, 0.14);
   --color-loom-pulse: rgba(196, 74, 47, 0.45);
 
-  /* v3 nav rail + output tokens */
+  /* Nav rail + output tokens */
   --color-warm-surface: #FAFAF8;
-  --color-kon: #1E3148;
-  --color-hanada: #3B6B8A;
-  --color-kon-deep: #162636;
-  --color-bg-rail: #EAE5DE;
+  --color-bg-rail: #E2DCD4;
   --color-accent-wash: rgba(196, 74, 47, 0.06);
   --color-accent-glow: rgba(196, 74, 47, 0.12);
 }
@@ -402,14 +399,6 @@ button {
   box-shadow: var(--shadow-card-hover);
 }
 
-/* Nav rail noise texture */
-.noise-texture { position: relative; }
-.noise-texture::after {
-  content: ''; position: absolute; inset: 0; opacity: 0.03; pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  background-size: 128px 128px;
-}
-
 /* Active nav indicator bar */
 .nav-active-indicator { position: relative; background: var(--color-accent-wash); }
 .nav-active-indicator::before {
@@ -527,8 +516,7 @@ button {
     --color-loom-pulse: rgba(224, 91, 60, 0.45);
 
     --color-warm-surface: #1A1816;
-    --color-kon-deep: #0F1A26;
-    --color-bg-rail: #1D1B19;
+    --color-bg-rail: #191715;
     --color-accent-wash: rgba(224, 91, 60, 0.08);
     --color-accent-glow: rgba(224, 91, 60, 0.15);
   }

@@ -86,13 +86,13 @@
 
   {#if open && announcements.length > 0}
     <div class="absolute bottom-0 left-full ml-2 w-[280px] max-h-[360px] overflow-y-auto
-                bg-surface border border-border rounded-lg shadow-xl z-50">
+                bg-surface border border-border rounded-xl shadow-xl z-50">
       <div class="p-2.5 border-b border-border">
         <h3 class="text-[10px] font-semibold uppercase tracking-wider text-muted">What's New</h3>
       </div>
       <div class="flex flex-col">
         {#each announcements as a}
-          <div class="p-2.5 border-b border-border/50 last:border-0 {lastSeen && a.published_at > lastSeen ? 'bg-primary/[0.03]' : ''}">
+          <div class="p-2.5 border-b border-border/50 last:border-0 {lastSeen && a.published_at > lastSeen ? 'bg-accent/[0.03]' : ''}">
             <div class="flex items-center gap-1.5 mb-1">
               <span class="text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded-full {typeColor(a.type)}">
                 {a.type}
@@ -110,7 +110,7 @@
                 href={a.cta_url}
                 target="_blank"
                 rel="noopener"
-                class="inline-block mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80"
+                class="inline-block mt-1.5 text-[10px] font-medium text-secondary hover:text-foreground"
               >
                 {a.cta_label || "Learn more"} &rarr;
               </a>
@@ -138,7 +138,7 @@
     margin-bottom: 0;
   }
   .prose-compact :global(a) {
-    color: var(--color-primary, #7c6cff);
+    color: var(--color-secondary);
     text-decoration: underline;
   }
   .prose-compact :global(code) {

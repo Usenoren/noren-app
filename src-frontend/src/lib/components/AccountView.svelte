@@ -285,7 +285,7 @@
     <!-- Logged-in state -->
     <div class="flex flex-col gap-4">
       <!-- Account info card -->
-      <div class="p-3 bg-tint border border-secondary/30 rounded-lg">
+      <div class="p-3 bg-tint border border-secondary/30 rounded-xl">
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span class="text-xs font-medium text-foreground">{proStatus.email}</span>
@@ -327,7 +327,7 @@
 
         {#if isTrial()}
           {@const days = trialDaysLeft()}
-          <div class="p-2.5 bg-secondary/5 border border-secondary/20 rounded-lg flex items-center justify-between">
+          <div class="p-2.5 bg-secondary/5 border border-secondary/20 rounded-xl flex items-center justify-between">
             <p class="text-xs text-secondary">
               {#if days != null && days <= 3}
                 Trial ends in {days === 0 ? "less than a day" : days === 1 ? "1 day" : `${days} days`}
@@ -339,7 +339,7 @@
             </p>
             <button
               onclick={() => handleUpgrade("pro")}
-              class="px-2 py-1 text-[10px] font-medium bg-secondary text-background rounded cursor-pointer hover:opacity-90 transition-opacity"
+              class="px-2 py-1 text-[10px] font-medium bg-accent text-white rounded cursor-pointer hover:bg-accent-hover transition-colors"
             >
               Upgrade
             </button>
@@ -347,7 +347,7 @@
         {/if}
 
         {#if subscription.cancel_at_period_end}
-          <div class="p-2.5 bg-warning/5 border border-warning/20 rounded-lg">
+          <div class="p-2.5 bg-warning/5 border border-warning/20 rounded-xl">
             <p class="text-xs text-warning">
               Cancels at end of period{subscription.current_period_end ? ` (${formatDate(subscription.current_period_end)})` : ""}
             </p>
@@ -395,7 +395,7 @@
                 <button
                   onclick={handleApplyCoupon}
                   disabled={couponLoading || !couponCode.trim()}
-                  class="px-3 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
+                  class="px-3 py-1.5 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
                 >
                   {couponLoading ? "..." : "Apply"}
                 </button>
@@ -431,7 +431,7 @@
     <!-- OTP Verification -->
     <div class="flex flex-col gap-4">
       <div class="p-4 card border-secondary/30">
-        <h3 class="text-sm font-semibold text-foreground mb-2">Verify your email</h3>
+        <h3 class="text-sm font-semibold text-foreground mb-2 font-heading italic">Verify your email</h3>
         <p class="text-[11px] text-muted">
           We sent a verification code to <span class="font-medium text-foreground">{proEmail}</span>. Enter it below to complete your registration.
         </p>
@@ -450,7 +450,7 @@
         <button
           onclick={handleVerifyOtp}
           disabled={otpLoading || !otpCode.trim()}
-          class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+          class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
         >
           {#if otpLoading}
             <span class="inline-flex items-center gap-1"><LoadingSpinner /> Verifying...</span>
@@ -465,7 +465,7 @@
       {/if}
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
+        <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
           {error}
         </div>
       {/if}
@@ -491,7 +491,7 @@
     <div class="flex flex-col gap-4">
       <!-- Pro pitch card -->
       <div class="p-4 card border-secondary/30">
-        <h3 class="text-sm font-semibold text-foreground mb-2">Noren Pro</h3>
+        <h3 class="text-sm font-semibold text-foreground mb-2 font-heading italic">Noren Pro</h3>
         <ul class="flex flex-col gap-1.5 text-[11px] text-muted">
           <li class="flex items-start gap-2">
             <svg class="w-3 h-3 text-secondary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -583,7 +583,7 @@
         <button
           onclick={handleProAuth}
           disabled={proLoading || !proEmail.trim() || !proPassword.trim()}
-          class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+          class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
         >
           {#if proLoading}
             <span class="inline-flex items-center gap-1"><LoadingSpinner /> {authMode === "signup" ? "Creating..." : "Signing in..."}</span>
@@ -596,7 +596,7 @@
 
     <!-- Resend setup email -->
     {#if showResendSetup}
-      <div class="p-3 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-2">
+      <div class="p-3 bg-tint border border-secondary/20 rounded-xl flex flex-col gap-2">
         <p class="text-[10px] text-muted leading-relaxed">
           Signed up on the website? Enter your email to resend the setup link.
         </p>
@@ -610,7 +610,7 @@
           <button
             onclick={handleResendSetup}
             disabled={resendSetupLoading || !proEmail.trim()}
-            class="px-3 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
+            class="px-3 py-1.5 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
           >
             {resendSetupLoading ? "Sending..." : "Resend"}
           </button>
@@ -630,7 +630,7 @@
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
+      <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
         {error}
       </div>
     {/if}

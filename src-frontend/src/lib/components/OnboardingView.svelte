@@ -757,20 +757,20 @@
         <!-- Primary card: Extract my voice -->
         <button
           onclick={() => checkAndProceed("paste")}
-          class="relative overflow-hidden rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
+          class="relative overflow-hidden rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
           style="
             padding: 16px 18px;
-            background: var(--color-primary);
+            background: var(--color-accent);
             color: white;
-            box-shadow: 0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1);
+            box-shadow: 0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12);
           "
-          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(30,49,72,0.2), 0 12px 32px rgba(30,49,72,0.15)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(196,74,47,0.25), 0 12px 32px rgba(196,74,47,0.18)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           <!-- Thread texture overlay -->
           <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.02) 11px, rgba(255,255,255,0.02) 12px)"></div>
 
-          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.1); margin-top:1px">
+          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.15); margin-top:1px">
             <svg class="w-[17px] h-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M15 4V2M15 16v-2M8 9h10M8 5h2m-2 8h2m4 6l-6-6 6-6"/>
             </svg>
@@ -784,7 +784,7 @@
         <!-- Secondary card: Guided interview -->
         <button
           onclick={() => checkAndProceed("guided")}
-          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="
             padding: 16px 18px;
             border: 1px solid var(--color-border);
@@ -834,7 +834,7 @@
     <!-- Sign in / Sign up -->
     <div class="flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
       <div class="text-center mb-2">
-        <h2 class="text-lg font-heading font-semibold text-foreground">Sign in to continue</h2>
+        <h2 class="text-lg font-heading italic font-semibold text-foreground">Sign in to continue</h2>
         <p class="text-xs text-muted mt-1">Extraction requires a Noren account</p>
       </div>
 
@@ -903,7 +903,7 @@
       <button
         onclick={handleProAuth}
         disabled={authLoading || !authEmail.trim() || !authPassword.trim()}
-        class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+        class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
       >
         {#if authLoading}
           <span class="inline-flex items-center gap-1"><LoadingSpinner /> {authMode === "signup" ? "Creating..." : "Signing in..."}</span>
@@ -913,7 +913,7 @@
       </button>
 
       {#if error}
-        <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+        <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <button
@@ -928,7 +928,7 @@
     <!-- OTP Verification -->
     <div class="flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
       <div class="text-center mb-2">
-        <h2 class="text-lg font-heading font-semibold text-foreground">Verify your email</h2>
+        <h2 class="text-lg font-heading italic font-semibold text-foreground">Verify your email</h2>
         <p class="text-xs text-muted mt-1">
           We sent a verification code to <span class="font-medium text-foreground">{authEmail}</span>
         </p>
@@ -947,7 +947,7 @@
       <button
         onclick={handleVerifyOtp}
         disabled={otpLoading || !otpCode.trim()}
-        class="w-full py-2 text-xs font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+        class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
       >
         {#if otpLoading}
           <span class="inline-flex items-center gap-1"><LoadingSpinner /> Verifying...</span>
@@ -961,7 +961,7 @@
       {/if}
 
       {#if error}
-        <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+        <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <div class="flex items-center justify-between w-full">
@@ -990,7 +990,7 @@
         <div class="flex items-center justify-center mb-3" style="color: var(--color-primary)">
           <NorenMark width={28} height={34} />
         </div>
-        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">Choose your path</h2>
+        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic; line-height:1.3">Choose your path</h2>
         <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
           AI extraction analyzes your writing patterns. Included with Pro, or available as a one-time purchase.
         </p>
@@ -1002,7 +1002,7 @@
         <!-- Pro card (primary) -->
         <button
           onclick={() => handleStartPro()}
-          class="relative overflow-hidden rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
+          class="relative overflow-hidden rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
           style="
             padding: 16px 18px;
             background: var(--color-primary);
@@ -1031,7 +1031,7 @@
         <!-- One-time card (secondary) -->
         <button
           onclick={() => { step = "guest-checkout"; error = ""; }}
-          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="
             padding: 16px 18px;
             border: 1px solid var(--color-border);
@@ -1054,7 +1054,7 @@
         </button>
 
         {#if error}
-          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+          <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
         {/if}
 
         <!-- Coupon input -->
@@ -1079,7 +1079,7 @@
               <button
                 onclick={handleApplyCoupon}
                 disabled={couponLoading || !couponCode.trim()}
-                class="px-3 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
+                class="px-3 py-1.5 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
               >
                 {couponLoading ? "..." : "Apply"}
               </button>
@@ -1113,14 +1113,14 @@
     <!-- Guest checkout: email input -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
       <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
-        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">One-time extraction</h2>
+        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic; line-height:1.3">One-time extraction</h2>
         <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
           Enter your email for the receipt. No account created.
         </p>
       </div>
 
       <div class="flex-1 flex flex-col gap-3 bg-surface" style="padding: 0 32px 20px">
-        <div class="rounded-[10px] p-4" style="background: var(--color-tint); border: 1px solid var(--color-border)">
+        <div class="rounded-xl p-4" style="background: var(--color-tint); border: 1px solid var(--color-border)">
           <div class="flex items-center justify-between mb-3">
             <span class="text-foreground" style="font-size:13px; font-weight:600">AI voice extraction</span>
             <span class="text-secondary" style="font-size:14px; font-weight:600">$19</span>
@@ -1145,17 +1145,17 @@
           type="email"
           bind:value={guestEmail}
           onkeydown={(e) => { if (e.key === "Enter") handleGuestCheckout(); }}
-          class="w-full px-3 py-2.5 text-xs border border-border bg-surface text-foreground rounded-[10px] focus:outline-none focus:border-secondary"
+          class="w-full px-3 py-2.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
           placeholder="your@email.com"
         />
 
         <button
           onclick={handleGuestCheckout}
           disabled={checkoutLoading || !guestEmail.trim()}
-          class="w-full py-2.5 text-xs font-semibold transition-colors cursor-pointer rounded-[10px] disabled:opacity-50 disabled:cursor-not-allowed"
-          style="background: var(--color-primary); color: white"
-          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#243A54'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+          class="w-full py-2.5 text-xs font-semibold transition-colors cursor-pointer rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+          style="background: var(--color-accent); color: white"
+          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'var(--color-accent-hover)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; }}
         >
           {#if checkoutLoading}
             <span class="inline-flex items-center gap-1"><LoadingSpinner /> Opening checkout...</span>
@@ -1165,7 +1165,7 @@
         </button>
 
         {#if error}
-          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+          <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
         {/if}
 
         <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
@@ -1190,7 +1190,7 @@
           </svg>
         </div>
         <div class="text-center">
-          <h2 class="font-heading text-foreground" style="font-size:16px; font-weight:600; line-height:1.3">Complete payment in your browser</h2>
+          <h2 class="font-heading text-foreground" style="font-size:16px; font-weight:600; font-style:italic; line-height:1.3">Complete payment in your browser</h2>
           <p class="text-muted mx-auto" style="font-size:11px; margin-top:8px; line-height:1.5; max-width:240px">
             Stripe checkout is open in your browser. Come back here when you're done.
           </p>
@@ -1199,10 +1199,10 @@
         <button
           onclick={handleCheckPayment}
           disabled={checkoutLoading}
-          class="py-2.5 px-6 text-xs font-semibold transition-colors cursor-pointer rounded-[10px] disabled:opacity-50"
-          style="background: var(--color-primary); color: white"
-          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#243A54'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+          class="py-2.5 px-6 text-xs font-semibold transition-colors cursor-pointer rounded-xl disabled:opacity-50"
+          style="background: var(--color-accent); color: white"
+          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'var(--color-accent-hover)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; }}
         >
           {#if checkoutLoading}
             <span class="inline-flex items-center gap-1"><LoadingSpinner /> Checking...</span>
@@ -1212,7 +1212,7 @@
         </button>
 
         {#if error}
-          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed max-w-[280px]">{error}</div>
+          <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed max-w-[280px]">{error}</div>
         {/if}
 
         <button
@@ -1235,7 +1235,7 @@
           </svg>
         </div>
         <div class="text-center">
-          <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">Payment confirmed</h2>
+          <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic; line-height:1.3">Payment confirmed</h2>
           <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
             {#if pendingPath === "guided"}
               Now let's learn how you write through a short interview.
@@ -1247,10 +1247,10 @@
 
         <button
           onclick={continueAfterPayment}
-          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-[10px]"
-          style="background: var(--color-primary); color: white"
-          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-xl"
+          style="background: var(--color-accent); color: white"
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           Continue
         </button>
@@ -1261,7 +1261,7 @@
     <!-- Input method choice -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
       <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
-        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; line-height:1.3">Provide your writing</h2>
+        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic; line-height:1.3">Provide your writing</h2>
         <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
           The more samples you provide, the better the extraction.
         </p>
@@ -1272,7 +1272,7 @@
         <!-- Upload file -->
         <button
           onclick={handleFileUpload}
-          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="padding: 16px 18px; border: 1px solid var(--color-border)"
           onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
           onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
@@ -1291,7 +1291,7 @@
         <!-- Paste step by step -->
         <button
           onclick={startPasteFlow}
-          class="rounded-[10px] flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="padding: 16px 18px; border: 1px solid var(--color-border)"
           onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
           onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
@@ -1308,7 +1308,7 @@
         </button>
 
         {#if error}
-          <div class="w-full p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+          <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
         {/if}
 
         <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
@@ -1327,7 +1327,7 @@
     <!-- Manual profile creation -->
     <div class="flex flex-col gap-3 flex-1">
       <div>
-        <span class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Describe your voice</span>
+        <span class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide font-heading italic">Describe your voice</span>
         <p class="text-[10px] text-muted leading-relaxed">
           Write how you'd describe your writing style to someone. The more specific, the better Noren can match you.
         </p>
@@ -1341,7 +1341,7 @@
         ></textarea>
       </div>
 
-      <div class="p-2.5 bg-tint border border-secondary/20 rounded-lg flex flex-col gap-1.5">
+      <div class="p-2.5 bg-tint border border-secondary/20 rounded-xl flex flex-col gap-1.5">
         <p class="text-[10px] text-muted leading-relaxed">
           <span class="text-secondary font-medium">AI extraction</span> analyzes your actual writing — detecting sentence rhythm, vocabulary fingerprint, rhetorical moves, and format-specific adaptations.
         </p>
@@ -1368,13 +1368,13 @@
         class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
           {!manualProfile.trim() || isSavingManual
             ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-primary text-white hover:bg-primary-hover'}"
+            : 'bg-accent text-white hover:bg-accent-hover'}"
       >
         {isSavingManual ? "Saving..." : "Save Profile"}
       </button>
 
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">{error}</div>
+        <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
       {/if}
 
       <button
@@ -1397,7 +1397,7 @@
               {i === currentFormatStep
                 ? 'bg-accent'
                 : i < currentFormatStep || formatSamples[FORMAT_STEPS[i].format]
-                  ? 'bg-secondary/50'
+                  ? 'bg-accent/50'
                   : 'bg-border'}"
           ></div>
         {/each}
@@ -1406,7 +1406,7 @@
 
       <!-- Step header -->
       <div>
-        <p class="text-xs font-medium text-foreground uppercase tracking-wide">{fmtStep.label}</p>
+        <p class="text-xs font-medium text-foreground uppercase tracking-wide font-heading italic">{fmtStep.label}</p>
         <p class="text-[10px] text-muted mt-0.5">
           {canScrapeStep
             ? fmtStep.format === "twitter"
@@ -1521,7 +1521,7 @@
     <!-- Review collected samples -->
     <div class="flex-1 flex flex-col gap-4 p-4 -m-4">
       <div class="text-center">
-        <p class="text-sm font-medium text-foreground">Ready to extract</p>
+        <p class="text-sm font-medium text-foreground font-heading italic">Ready to extract</p>
       </div>
 
       <!-- Sample summary -->
@@ -1630,7 +1630,7 @@
         class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
           {!currentAnswer.trim()
             ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-primary text-white hover:bg-primary-hover'}"
+            : 'bg-accent text-white hover:bg-accent-hover'}"
       >
         {currentQuestion < questions.length - 1 ? "Next" : "Continue to calibration"}
       </button>
@@ -1688,12 +1688,12 @@
         </div>
         <div class="text-center">
           {#if manualProfile.trim()}
-            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600">Profile saved</h2>
+            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic">Profile saved</h2>
             <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
               Good start. Noren will use your description to match your tone.
             </p>
           {:else}
-            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600">Extraction started</h2>
+            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic">Extraction started</h2>
             <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
               Your voice profile is being built in the background. You can start writing right away.
             </p>
@@ -1701,7 +1701,7 @@
         </div>
 
         {#if manualProfile.trim()}
-          <div class="w-full max-w-[260px] rounded-[10px] p-3" style="background: var(--color-tint); border: 1px solid var(--color-border)">
+          <div class="w-full max-w-[260px] rounded-xl p-3" style="background: var(--color-tint); border: 1px solid var(--color-border)">
             <p class="text-secondary" style="font-size:10px; font-weight:500; margin-bottom:6px">Want a deeper profile?</p>
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
@@ -1735,10 +1735,10 @@
 
         <button
           onclick={onComplete}
-          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-[10px]"
-          style="background: var(--color-primary); color: white"
-          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-xl"
+          style="background: var(--color-accent); color: white"
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           Start writing
         </button>

@@ -6,7 +6,7 @@
   <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs pointer-events-none">
     {#each getToasts() as toast (toast.id)}
       <div
-        class="pointer-events-auto rounded-lg border px-3 py-2.5 text-xs animate-toast-in flex items-start gap-2
+        class="pointer-events-auto rounded-xl border px-3 py-2.5 text-xs animate-toast-in flex items-start gap-2
           {toast.type === 'error' ? 'bg-error/5 border-error/20 text-error' :
            toast.type === 'warning' ? 'bg-warning/5 border-warning/20 text-warning' :
            toast.type === 'success' ? 'bg-signal/5 border-signal/20 text-signal' :

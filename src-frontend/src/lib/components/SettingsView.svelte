@@ -417,7 +417,7 @@
             <button
               onclick={handleHotkeySave}
               disabled={!recordedHotkey}
-              class="flex-1 px-3 py-1.5 text-xs bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+              class="flex-1 px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
             >
               Save
             </button>
@@ -449,7 +449,7 @@
 
     {#if isNorenPro}
       <!-- Noren Pro inference badge -->
-      <div class="p-3 bg-tint border border-secondary/30 rounded-lg">
+      <div class="p-3 bg-tint border border-secondary/30 rounded-xl">
         <div class="flex items-center gap-2">
           <span class="text-xs font-medium text-secondary">Noren Pro</span>
           <span class="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-secondary/20 text-secondary">Active</span>
@@ -714,7 +714,7 @@
               <button
                 onclick={handleSaveKey}
                 disabled={isSaving}
-                class="px-3 py-1.5 text-xs bg-primary text-white hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+                class="px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
               >
                 {isSaving ? "Saving..." : isClaudeToken ? "Save Token" : "Save to Keychain"}
               </button>
@@ -723,7 +723,7 @@
         </div>
       {:else}
         <!-- No key needed message -->
-        <div class="p-2 bg-tint border border-border rounded-lg">
+        <div class="p-2 bg-tint border border-border rounded-xl">
           <p class="text-xs text-muted">
             No API key needed — {settings.provider.name} runs locally.
           </p>
@@ -748,14 +748,14 @@
 
     <!-- Test result -->
     {#if testResult}
-      <div class="p-2 bg-tint border border-signal/30 rounded-lg text-xs text-signal">
+      <div class="p-2 bg-tint border border-signal/30 rounded-xl text-xs text-signal">
         {testResult}
       </div>
     {/if}
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
+      <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
         {error}
       </div>
     {/if}
@@ -780,7 +780,7 @@
       <!-- Factory Reset -->
       <div class="pt-4">
         {#if showResetConfirm}
-          <div class="p-3 border border-error/30 bg-tint rounded-lg">
+          <div class="p-3 border border-error/30 bg-tint rounded-xl">
             <p class="text-xs text-foreground font-medium mb-1">Reset everything?</p>
             <p class="text-[10px] text-muted mb-3">This will delete all config, profiles, chat history, and keychain entries. The app will restart as if freshly installed.</p>
             <div class="flex gap-2">
