@@ -393,21 +393,30 @@
   }
 </script>
 
-<div class="flex flex-col gap-4 h-full p-4 overflow-y-auto animate-fade-in-up">
+<div class="flex flex-col h-full overflow-y-auto animate-fade-in-up">
+  <!-- View title -->
+  <div class="px-6 pt-5 pb-3 shrink-0">
+    <h1 class="text-heading text-foreground">Settings</h1>
+  </div>
+
+  <div class="flex-1 flex flex-col gap-5 px-6 pb-6 max-w-lg">
   {#if !settings}
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner />
     </div>
   {:else}
     <!-- Keyboard Shortcut -->
-    <div>
-      <span class="section-label mb-2">Quick Access Shortcut</span>
+    <div class="card-flat p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="section-label">Quick Access Shortcut</span>
+      </div>
       {#if isRecording}
         <div class="flex flex-col gap-2">
           <div
             tabindex="-1"
             role="textbox"
-            class="px-3 py-2 text-xs border-2 border-secondary bg-surface text-foreground rounded-md focus:outline-none text-center font-medium"
+            class="card-inset px-3 py-3 text-xs text-foreground text-center font-medium"
+            style="border: 2px solid var(--color-secondary);"
             onkeydown={handleHotkeyKeydown}
             use:focusOnMount
           >
@@ -417,13 +426,13 @@
             <button
               onclick={handleHotkeySave}
               disabled={!recordedHotkey}
-              class="flex-1 px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+              class="btn-primary flex-1"
             >
               Save
             </button>
             <button
               onclick={handleHotkeyCancel}
-              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+              class="btn-outline"
             >
               Cancel
             </button>
@@ -433,13 +442,13 @@
           {/if}
         </div>
       {:else}
-        <div class="flex items-center justify-between">
+        <div class="card-inset flex items-center justify-between px-3 py-2.5">
           <span class="text-xs text-foreground font-medium">
             {formatHotkeyHuman(settings.hotkey)}
           </span>
           <button
             onclick={() => { isRecording = true; recordedHotkey = ""; hotkeyError = ""; }}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            class="btn-outline"
           >
             Change
           </button>
@@ -448,13 +457,20 @@
     </div>
 
     {#if isNorenPro}
-      <!-- Noren Pro inference badge -->
-      <div class="card-hero">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-medium text-secondary">Noren Pro</span>
-          <span class="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-secondary/20 text-secondary">Active</span>
+      <!-- Noren Pro inference -->
+      <div class="card-hero p-5">
+        <div class="flex items-center gap-2.5 mb-2">
+          <span class="text-subhead text-foreground">Noren Pro</span>
+          <span class="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-accent/15 text-accent">Active</span>
         </div>
-        <p class="text-[10px] text-muted mt-1">No API key needed. Inference runs on Noren servers.</p>
+        <p class="text-xs text-muted leading-relaxed">No API key needed. Inference runs on Noren servers with your voice profile.</p>
+        <div class="divider-thread mt-4 mb-3"></div>
+        <button
+          onclick={() => emit("navigate", "account")}
+          class="btn-outline text-xs"
+        >
+          Manage subscription
+        </button>
       </div>
     {:else}
       <!-- BYOK section -->
@@ -484,12 +500,12 @@
             <input
               type="text"
               bind:value={baseUrlInput}
-              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              class="input-field flex-1"
               placeholder={selectedPreset === "ollama" ? "http://localhost:11434/v1" : "https://api.example.com/v1"}
             />
             <button
               onclick={isCustom ? handleSaveCustom : handleBaseUrlSave}
-              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+              class="btn-outline"
             >
               Save
             </button>
@@ -508,7 +524,7 @@
           <select
             bind:value={modelInput}
             onchange={handleModelSave}
-            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+            class="input-field"
           >
             {#each claudeModels as m}
               <option value={m.id}>{m.label}</option>
@@ -522,7 +538,7 @@
           <select
             bind:value={modelInput}
             onchange={handleModelSave}
-            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+            class="input-field"
           >
             {#each openaiModels as m}
               <option value={m.id}>{m.label}</option>
@@ -533,12 +549,12 @@
             <input
               type="text"
               bind:value={modelInput}
-              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              class="input-field flex-1"
               placeholder="gpt-4o"
             />
             <button
               onclick={handleModelSave}
-              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+              class="btn-outline"
             >
               Save
             </button>
@@ -551,7 +567,7 @@
           <select
             bind:value={modelInput}
             onchange={handleModelSave}
-            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+            class="input-field"
           >
             {#each geminiModels as m}
               <option value={m.id}>{m.label}</option>
@@ -562,12 +578,12 @@
             <input
               type="text"
               bind:value={modelInput}
-              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              class="input-field flex-1"
               placeholder="gemini-2.0-flash"
             />
             <button
               onclick={handleModelSave}
-              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+              class="btn-outline"
             >
               Save
             </button>
@@ -580,7 +596,7 @@
           <select
             bind:value={modelInput}
             onchange={handleModelSave}
-            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+            class="input-field"
           >
             {#each customModels as m}
               <option value={m.id}>{m.label}</option>
@@ -594,7 +610,7 @@
           <select
             bind:value={modelInput}
             onchange={handleModelSave}
-            class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+            class="input-field"
           >
             {#each ollamaModels as m}
               <option value={m}>{m}</option>
@@ -605,12 +621,12 @@
             <input
               type="text"
               bind:value={modelInput}
-              class="flex-1 px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+              class="input-field flex-1"
               placeholder={isAnthropicType ? "claude-sonnet-4-6" : "Model ID"}
             />
             <button
               onclick={handleModelSave}
-              class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+              class="btn-outline"
             >
               Save
             </button>
@@ -639,7 +655,7 @@
               <select
                 bind:value={thinkingBudget}
                 onchange={handleThinkingBudgetSave}
-                class="flex-1 px-2 py-1 text-[10px] border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+                class="input-field flex-1 text-[10px]"
               >
                 <option value={5000}>5k tokens (fast)</option>
                 <option value={10000}>10k tokens</option>
@@ -684,7 +700,7 @@
               <input
                 type={showKey ? "text" : "password"}
                 bind:value={apiKeyInput}
-                class="w-full px-3 py-1.5 pr-12 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+                class="input-field pr-12"
                 placeholder={isClaudeToken
                   ? (settings.has_key ? "Paste new token to replace" : "sk-ant-oat01-...")
                   : (settings.has_key ? "Enter new key to replace" : "Enter API key")}
@@ -760,25 +776,21 @@
       </div>
     {/if}
 
-    <!-- Info -->
-    <div class="mt-auto">
-      <div class="divider-thread"></div>
-      <p class="text-[10px] text-muted leading-relaxed pt-3">
-        {#if isNorenPro}
-          <button
-            onclick={() => emit("navigate", "account")}
-            class="text-primary hover:text-foreground cursor-pointer underline"
-          >
-            Manage subscription in Account
-          </button>
-        {:else}
+    <!-- Info (for BYOK users only) -->
+    {#if !isNorenPro}
+      <div>
+        <div class="divider-thread"></div>
+        <p class="text-[11px] text-muted leading-relaxed pt-3">
           API keys are stored securely in macOS Keychain, never in config files.
           Any OpenAI-compatible provider works. Groq, Together, Mistral, OpenRouter, LM Studio, and more.
-        {/if}
-      </p>
+        </p>
+      </div>
+    {/if}
 
-      <!-- Factory Reset -->
-      <div class="pt-4">
+    <!-- Factory Reset -->
+    <div class="mt-auto">
+      <div class="divider-thread"></div>
+      <div class="pt-3">
         {#if showResetConfirm}
           <div class="card-flat" style="border-color: var(--color-error)">
             <p class="text-xs text-foreground font-medium mb-1">Reset everything?</p>
@@ -793,7 +805,7 @@
               </button>
               <button
                 onclick={() => { showResetConfirm = false; }}
-                class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+                class="btn-outline"
               >
                 Cancel
               </button>
@@ -810,4 +822,5 @@
       </div>
     </div>
   {/if}
+  </div>
 </div>

@@ -276,24 +276,28 @@
   }
 </script>
 
-<div class="flex flex-col gap-4 h-full p-4 overflow-y-auto animate-fade-in-up">
+<div class="flex flex-col h-full overflow-y-auto animate-fade-in-up">
+  <!-- View title -->
+  <div class="px-6 pt-5 pb-3 shrink-0">
+    <h1 class="text-heading text-foreground">Account</h1>
+  </div>
+
+  <div class="flex-1 flex flex-col gap-5 px-6 pb-6">
   {#if !settings}
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner />
     </div>
   {:else if settings.noren_pro_logged_in && proStatus}
     <!-- Logged-in state -->
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-5 max-w-sm">
       <!-- Account info card -->
-      <div class="card-hero">
-        <div class="flex items-center justify-between mb-1">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-medium text-foreground">{proStatus.email}</span>
-            <span class="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full
-              {subscription?.tier === 'pro' ? 'bg-secondary/20 text-secondary' : 'bg-border text-muted'}">
-              {subscription?.tier === "pro" ? (isTrial() ? "Trial" : "Pro") : "Free"}
-            </span>
-          </div>
+      <div class="card-hero p-4">
+        <div class="flex items-center gap-2.5">
+          <span class="text-sm font-medium text-foreground">{proStatus.email}</span>
+          <span class="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full
+            {subscription?.tier === 'pro' ? 'bg-accent/15 text-accent' : 'bg-border text-muted'}">
+            {subscription?.tier === "pro" ? (isTrial() ? "Trial" : "Pro") : "Free"}
+          </span>
         </div>
       </div>
 
@@ -488,54 +492,58 @@
     </div>
   {:else}
     <!-- Not logged in: pitch + auth -->
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-6 max-w-sm mx-auto w-full">
       <!-- Pro pitch card -->
-      <div class="card-hero">
-        <h3 class="text-sm font-semibold text-foreground mb-2 font-heading italic">Noren Pro</h3>
-        <ul class="flex flex-col gap-1.5 text-[11px] text-muted">
-          <li class="flex items-start gap-2">
-            <svg class="w-3 h-3 text-secondary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      <div class="card-hero p-5">
+        <h3 class="text-heading text-foreground mb-4">Noren Pro</h3>
+        <ul class="flex flex-col gap-2.5 text-xs text-muted">
+          <li class="flex items-start gap-2.5">
+            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             Bundled inference. No API key needed.
           </li>
-          <li class="flex items-start gap-2">
-            <svg class="w-3 h-3 text-secondary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             Living profile that evolves with your writing.
           </li>
-          <li class="flex items-start gap-2">
-            <svg class="w-3 h-3 text-secondary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             Cloud sync across devices.
           </li>
-          <li class="flex items-start gap-2">
-            <svg class="w-3 h-3 text-secondary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             Export your voice profile anytime.
           </li>
         </ul>
-        <p class="text-xs font-medium text-secondary mt-3">$7/mo <span class="text-[10px] text-muted font-normal">founding member pricing</span></p>
+        <div class="divider-thread mt-4 mb-3"></div>
+        <p class="text-subhead text-secondary">$7/mo <span class="text-xs text-muted font-normal" style="font-style: normal;">founding member pricing</span></p>
         {#if canExtract()}
-          <p class="text-[10px] text-muted mt-1.5">You have extraction. Pro adds inference, living profile, sync.</p>
+          <p class="text-[11px] text-muted mt-2">You have extraction. Pro adds inference, living profile, sync.</p>
         {/if}
       </div>
 
       <!-- Auth form -->
-      <div class="flex flex-col gap-3">
-        <div class="flex gap-1">
+      <div class="flex flex-col gap-4">
+        <!-- Mode tabs -->
+        <div class="flex gap-0 card-flat overflow-hidden" style="padding: 0;">
           <button
             onclick={() => { authMode = "login"; }}
-            class="flex-1 px-2 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md
+            class="flex-1 py-2.5 text-xs font-medium cursor-pointer transition-colors
               {authMode === 'login'
-                ? 'bg-secondary text-white font-medium'
-                : 'bg-surface text-muted border border-border'}"
+                ? 'bg-primary text-white'
+                : 'bg-surface text-muted hover:text-foreground'}"
+            style="border-radius: 0;"
           >
-            Sign in
+            Sign In
           </button>
           <button
             onclick={() => { authMode = "signup"; }}
-            class="flex-1 px-2 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md
+            class="flex-1 py-2.5 text-xs font-medium cursor-pointer transition-colors border-l border-border
               {authMode === 'signup'
-                ? 'bg-secondary text-white font-medium'
-                : 'bg-surface text-muted border border-border'}"
+                ? 'bg-primary text-white'
+                : 'bg-surface text-muted hover:text-foreground'}"
+            style="border-radius: 0;"
           >
-            Create account
+            Create Account
           </button>
         </div>
 
@@ -543,102 +551,105 @@
         <button
           onclick={handleGoogleSignIn}
           disabled={googleLoading || proLoading}
-          class="w-full py-2 text-xs font-medium bg-surface border border-border text-foreground hover:border-secondary transition-colors cursor-pointer disabled:opacity-50 rounded-md flex items-center justify-center gap-2"
+          class="w-full py-2.5 text-xs font-medium bg-surface border border-border text-foreground hover:border-secondary transition-colors cursor-pointer disabled:opacity-50 rounded-lg flex items-center justify-center gap-2.5"
         >
           {#if googleLoading}
             <LoadingSpinner /> Waiting for Google...
           {:else}
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            Sign in with Google
+            Continue with Google
           {/if}
         </button>
 
-        <div class="relative">
-          <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t border-border"></div>
-          </div>
-          <div class="relative flex justify-center text-[10px]">
-            <span class="px-2 bg-background text-muted">or</span>
-          </div>
+        <!-- Divider -->
+        <div class="flex items-center gap-4">
+          <div class="divider-thread flex-1"></div>
+          <span class="text-[10px] text-muted">or</span>
+          <div class="divider-thread flex-1"></div>
         </div>
 
-        <input
-          type="email"
-          bind:value={proEmail}
-          class="px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-          placeholder="Email"
-        />
-        <input
-          type="password"
-          bind:value={proPassword}
-          onkeydown={(e) => { if (e.key === "Enter") handleProAuth(); }}
-          class="px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-          placeholder="Password"
-        />
-        <button
-          onclick={handleProAuth}
-          disabled={proLoading || !proEmail.trim() || !proPassword.trim()}
-          class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
-        >
-          {#if proLoading}
-            <span class="inline-flex items-center gap-1"><LoadingSpinner /> {authMode === "signup" ? "Creating..." : "Signing in..."}</span>
-          {:else}
-            {authMode === "signup" ? "Create account" : "Sign in"}
-          {/if}
-        </button>
+        <!-- Email/Password group -->
+        <div class="card-inset p-4 flex flex-col gap-3">
+          <input
+            type="email"
+            bind:value={proEmail}
+            class="input-field"
+            placeholder="Email"
+          />
+          <input
+            type="password"
+            bind:value={proPassword}
+            onkeydown={(e) => { if (e.key === "Enter") handleProAuth(); }}
+            class="input-field"
+            placeholder="Password"
+          />
+          <button
+            onclick={handleProAuth}
+            disabled={proLoading || !proEmail.trim() || !proPassword.trim()}
+            class="btn-primary w-full py-2.5"
+          >
+            {#if proLoading}
+              <span class="inline-flex items-center gap-1.5"><LoadingSpinner /> {authMode === "signup" ? "Creating..." : "Signing in..."}</span>
+            {:else}
+              {authMode === "signup" ? "Create account" : "Sign in"}
+            {/if}
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Resend setup email -->
-    {#if showResendSetup}
-      <div class="p-3 bg-tint border border-secondary/20 rounded-xl flex flex-col gap-2">
-        <p class="text-[10px] text-muted leading-relaxed">
-          Signed up on the website? Enter your email to resend the setup link.
-        </p>
-        <div class="flex gap-1.5">
-          <input
-            type="email"
-            bind:value={proEmail}
-            class="flex-1 px-2.5 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-            placeholder="Email"
-          />
-          <button
-            onclick={handleResendSetup}
-            disabled={resendSetupLoading || !proEmail.trim()}
-            class="px-3 py-1.5 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
-          >
-            {resendSetupLoading ? "Sending..." : "Resend"}
-          </button>
+    <div class="max-w-sm mx-auto w-full">
+      {#if showResendSetup}
+        <div class="card-flat p-4 flex flex-col gap-2.5">
+          <p class="text-[11px] text-muted leading-relaxed">
+            Signed up on the website? Enter your email to resend the setup link.
+          </p>
+          <div class="flex gap-2">
+            <input
+              type="email"
+              bind:value={proEmail}
+              class="input-field flex-1"
+              placeholder="Email"
+            />
+            <button
+              onclick={handleResendSetup}
+              disabled={resendSetupLoading || !proEmail.trim()}
+              class="btn-primary whitespace-nowrap"
+            >
+              {resendSetupLoading ? "Sending..." : "Resend"}
+            </button>
+          </div>
+          {#if resendSetupMessage}
+            <p class="text-[11px] text-secondary">{resendSetupMessage}</p>
+          {/if}
         </div>
-        {#if resendSetupMessage}
-          <p class="text-[10px] text-secondary">{resendSetupMessage}</p>
-        {/if}
-      </div>
-    {:else}
-      <button
-        onclick={() => { showResendSetup = true; }}
-        class="text-[10px] text-muted hover:text-foreground cursor-pointer"
-      >
-        Signed up on the website? Resend setup email
-      </button>
-    {/if}
+      {:else}
+        <button
+          onclick={() => { showResendSetup = true; }}
+          class="text-[11px] text-muted hover:text-foreground cursor-pointer transition-colors"
+        >
+          Signed up on the website? Resend setup email
+        </button>
+      {/if}
+    </div>
 
     <!-- Error -->
     {#if error}
-      <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
+      <div class="max-w-sm mx-auto w-full card-flat p-3 text-xs text-muted leading-relaxed" style="border-color: var(--color-error);">
         {error}
       </div>
     {/if}
 
     <!-- Footer link -->
-    <div class="mt-auto">
+    <div class="mt-auto max-w-sm mx-auto w-full">
       <div class="divider-thread"></div>
-      <p class="text-[10px] text-muted leading-relaxed pt-3">
+      <p class="text-[11px] text-muted leading-relaxed pt-3">
         Already using BYOK?
         <button
           onclick={() => emit("navigate", "settings")}
@@ -649,4 +660,5 @@
       </p>
     </div>
   {/if}
+  </div>
 </div>

@@ -53,7 +53,9 @@ fn create_popup(app: &AppHandle) {
     let builder = WebviewWindowBuilder::new(app, POPUP_LABEL, WebviewUrl::default())
         .title("Noren")
         .inner_size(POPUP_WIDTH, POPUP_HEIGHT)
-        .min_inner_size(440.0, 360.0)
+        .min_inner_size(POPUP_WIDTH, POPUP_HEIGHT)
+        .max_inner_size(POPUP_WIDTH, POPUP_HEIGHT)
+        .resizable(false)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -64,6 +66,21 @@ fn create_popup(app: &AppHandle) {
     match builder.build() {
         Ok(window) => {
             apply_macos_transparency(&window);
+
+            // Hide popup when it loses focus (debounced to avoid
+            // swallowing clicks on the window's own close button)
+            let w = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Focused(false) = event {
+                    let w2 = w.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        if !w2.is_focused().unwrap_or(true) {
+                            let _ = w2.hide();
+                        }
+                    });
+                }
+            });
         }
         Err(e) => eprintln!("Failed to create popup window: {}", e),
     }

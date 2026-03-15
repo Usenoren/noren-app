@@ -26,8 +26,16 @@
     });
   }
 
+  // Escape key closes the popup
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      closeWindow();
+    }
+  }
+
   $effect(() => {
-    const cleanups: (() => void)[] = [];
+    document.addEventListener("keydown", handleKeydown);
+    const cleanups: (() => void)[] = [() => document.removeEventListener("keydown", handleKeydown)];
 
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
@@ -106,29 +114,27 @@
   </div>
 {:else}
 <div class="flex flex-col h-screen overflow-hidden popup-shell">
-  <!-- Chrome bar -->
+  <!-- Chrome bar (drag region — buttons are excluded automatically) -->
   <div
     data-tauri-drag-region
     class="h-8 flex items-center px-3 gap-1.5 shrink-0 border-b border-border"
     style="background:var(--color-bg-rail)"
   >
-    <!-- Window dots -->
+    <!-- Close button -->
     <button
       onclick={closeWindow}
-      class="w-[9px] h-[9px] rounded-full cursor-pointer shrink-0 z-[1]"
+      class="w-3 h-3 rounded-full cursor-pointer shrink-0 hover:opacity-100 transition-opacity"
       style="background:#FF5F57;opacity:0.8"
       aria-label="Close"
     ></button>
-    <div class="w-[9px] h-[9px] rounded-full shrink-0 z-[1]" style="background:#FEBD2E;opacity:0.8"></div>
-    <div class="w-[9px] h-[9px] rounded-full shrink-0 z-[1]" style="background:#27CA40;opacity:0.8"></div>
 
     <!-- Noren mark -->
-    <div class="ml-1.5 z-[1]" style="color:var(--color-muted)">
+    <div data-tauri-drag-region class="ml-1.5" style="color:var(--color-muted)">
       <NorenMark width={12} height={14} />
     </div>
 
     <!-- Spacer -->
-    <div data-tauri-drag-region class="flex-1"></div>
+    <div data-tauri-drag-region class="flex-1 h-full"></div>
 
     <!-- Icon nav buttons -->
     <div class="flex gap-0.5 z-[1]">

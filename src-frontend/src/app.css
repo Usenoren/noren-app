@@ -28,8 +28,6 @@
   --shadow-card-hover: 0 2px 4px rgba(30,49,72,0.04), 0 8px 24px rgba(30,49,72,0.08), 0 20px 60px rgba(30,49,72,0.06);
   --shadow-popup: 0 4px 12px rgba(30,49,72,0.08), 0 16px 48px rgba(30,49,72,0.12), 0 32px 80px rgba(30,49,72,0.08);
   --shadow-dropdown: 0 2px 8px rgba(30,49,72,0.06), 0 8px 24px rgba(30,49,72,0.10);
-  --shadow-inset: inset 0 1px 2px rgba(30,49,72,0.04);
-  --shadow-sm: 0 1px 2px rgba(30,49,72,0.04), 0 2px 6px rgba(30,49,72,0.04);
 
   /* Prose code backgrounds (need dedicated tokens for dark mode swap) */
   --color-code-bg: rgba(30, 49, 72, 0.06);
@@ -49,7 +47,12 @@
   --color-accent-wash: rgba(122, 51, 64, 0.06);
   --color-accent-glow: rgba(122, 51, 64, 0.12);
 
-  /* Animation tokens */
+}
+
+/* Custom tokens outside @theme (not valid Tailwind theme values) */
+:root {
+  --shadow-inset: inset 0 1px 2px rgba(30,49,72,0.04);
+  --shadow-sm: 0 1px 2px rgba(30,49,72,0.04), 0 2px 6px rgba(30,49,72,0.04);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 120ms;
   --duration-normal: 200ms;
@@ -458,6 +461,12 @@ button {
   color: var(--color-foreground);
 }
 
+/* Disabled states */
+.btn-primary:disabled,
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost:disabled,
+.btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* --- Chat markdown prose --- */
 .prose-chat p { margin: 0.4em 0; }
 .prose-chat p:first-child { margin-top: 0; }
@@ -763,6 +772,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
+  padding: 16px;
 }
 .card-hero::before {
   content: '';
