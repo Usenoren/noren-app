@@ -401,7 +401,7 @@
   {:else}
     <!-- Keyboard Shortcut -->
     <div>
-      <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Quick Access Shortcut</span>
+      <span class="section-label mb-2">Quick Access Shortcut</span>
       {#if isRecording}
         <div class="flex flex-col gap-2">
           <div
@@ -449,7 +449,7 @@
 
     {#if isNorenPro}
       <!-- Noren Pro inference badge -->
-      <div class="p-3 bg-tint border border-secondary/30 rounded-xl">
+      <div class="card-hero">
         <div class="flex items-center gap-2">
           <span class="text-xs font-medium text-secondary">Noren Pro</span>
           <span class="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-secondary/20 text-secondary">Active</span>
@@ -460,7 +460,7 @@
       <!-- BYOK section -->
       <!-- Provider -->
       <div>
-        <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Provider</span>
+        <span class="section-label mb-2">Provider</span>
         <div class="flex flex-wrap gap-1">
           {#each presets as p}
             <button
@@ -479,7 +479,7 @@
       <!-- Base URL (for Ollama and Custom) -->
       {#if selectedPreset === "ollama" || isCustom}
         <div>
-          <span class="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Base URL</span>
+          <span class="section-label mb-1.5">Base URL</span>
           <div class="flex gap-2">
             <input
               type="text"
@@ -499,7 +499,7 @@
 
       <!-- Model -->
       <div>
-        <span class="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Model</span>
+        <span class="section-label mb-1.5">Model</span>
         {#if isAnthropicType && claudeModelsLoading}
           <div class="flex items-center gap-2 text-xs text-muted">
             <LoadingSpinner /> Fetching models...
@@ -625,7 +625,7 @@
       {#if isAnthropicType}
         <div>
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-muted uppercase tracking-wide">Extended Thinking</span>
+            <span class="section-label">Extended Thinking</span>
             <button
               onclick={handleThinkingToggle}
               class="relative w-9 h-5 rounded-full transition-colors cursor-pointer {extendedThinking ? 'bg-secondary' : 'bg-border'}"
@@ -663,7 +663,7 @@
             </p>
           {/if}
           <div class="flex items-center justify-between mb-1.5">
-            <span class="text-xs font-medium text-muted uppercase tracking-wide">
+            <span class="section-label">
               {isClaudeToken ? "Setup Token" : "API Key"}
               <span class="ml-1.5 text-[10px] font-normal normal-case tracking-normal {settings.has_key ? 'text-signal' : 'text-muted'}">
                 {settings.has_key ? "Stored in Keychain" : "Not set"}
@@ -762,7 +762,7 @@
 
     <!-- Info -->
     <div class="mt-auto">
-      <div class="divider"></div>
+      <div class="divider-thread"></div>
       <p class="text-[10px] text-muted leading-relaxed pt-3">
         {#if isNorenPro}
           <button
@@ -780,7 +780,7 @@
       <!-- Factory Reset -->
       <div class="pt-4">
         {#if showResetConfirm}
-          <div class="p-3 border border-error/30 bg-tint rounded-xl">
+          <div class="card-flat" style="border-color: var(--color-error)">
             <p class="text-xs text-foreground font-medium mb-1">Reset everything?</p>
             <p class="text-[10px] text-muted mb-3">This will delete all config, profiles, chat history, and keychain entries. The app will restart as if freshly installed.</p>
             <div class="flex gap-2">

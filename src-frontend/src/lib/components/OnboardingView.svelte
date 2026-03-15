@@ -804,7 +804,8 @@
         </button>
 
         <!-- Tertiary section (pushed to bottom) -->
-        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+        <div class="divider-thread mt-auto mb-0"></div>
+        <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
           <button
             onclick={() => { step = "manual"; }}
             class="cursor-pointer bg-transparent border-none text-secondary hover:text-primary transition-colors"
@@ -834,7 +835,7 @@
     <!-- Sign in / Sign up -->
     <div class="flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
       <div class="text-center mb-2">
-        <h2 class="text-lg font-heading italic font-semibold text-foreground">Sign in to continue</h2>
+        <h2 class="text-heading font-heading italic font-semibold text-foreground">Sign in to continue</h2>
         <p class="text-xs text-muted mt-1">Extraction requires a Noren account</p>
       </div>
 
@@ -926,9 +927,9 @@
 
   {:else if step === "otp"}
     <!-- OTP Verification -->
-    <div class="flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
+    <div class="card-hero flex-1 flex flex-col items-center justify-center gap-4 max-w-[300px] mx-auto w-full">
       <div class="text-center mb-2">
-        <h2 class="text-lg font-heading italic font-semibold text-foreground">Verify your email</h2>
+        <h2 class="text-heading font-heading italic font-semibold text-foreground">Verify your email</h2>
         <p class="text-xs text-muted mt-1">
           We sent a verification code to <span class="font-medium text-foreground">{authEmail}</span>
         </p>
@@ -986,11 +987,11 @@
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
 
       <!-- Header -->
-      <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
+      <div class="card-hero shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
         <div class="flex items-center justify-center mb-3" style="color: var(--color-primary)">
           <NorenMark width={28} height={34} />
         </div>
-        <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic; line-height:1.3">Choose your path</h2>
+        <h2 class="text-heading font-heading text-foreground" style="font-weight:600; font-style:italic; line-height:1.3">Choose your path</h2>
         <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
           AI extraction analyzes your writing patterns. Included with Pro, or available as a one-time purchase.
         </p>
@@ -1005,16 +1006,16 @@
           class="relative overflow-hidden rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
           style="
             padding: 16px 18px;
-            background: var(--color-primary);
+            background: var(--color-accent);
             color: white;
-            box-shadow: 0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1);
+            box-shadow: 0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12);
           "
-          onmouseenter={(e) => { e.currentTarget.style.background = '#243A54'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(30,49,72,0.2), 0 12px 32px rgba(30,49,72,0.15)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(30,49,72,0.15), 0 8px 24px rgba(30,49,72,0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(196,74,47,0.25), 0 12px 32px rgba(196,74,47,0.18)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.02) 11px, rgba(255,255,255,0.02) 12px)"></div>
 
-          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.1); margin-top:1px">
+          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.15); margin-top:1px">
             <svg class="w-[17px] h-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
@@ -1097,7 +1098,8 @@
         {/if}
 
         <!-- Tertiary -->
-        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+        <div class="divider-thread mt-auto mb-0"></div>
+        <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
           <button
             onclick={() => { step = "welcome"; error = ""; }}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
@@ -1168,7 +1170,8 @@
           <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
         {/if}
 
-        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+        <div class="divider-thread mt-auto mb-0"></div>
+        <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
           <button
             onclick={() => { step = "paywall"; error = ""; }}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
@@ -1272,7 +1275,7 @@
         <!-- Upload file -->
         <button
           onclick={handleFileUpload}
-          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          class="card rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="padding: 16px 18px; border: 1px solid var(--color-border)"
           onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
           onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
@@ -1291,7 +1294,7 @@
         <!-- Paste step by step -->
         <button
           onclick={startPasteFlow}
-          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          class="card rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="padding: 16px 18px; border: 1px solid var(--color-border)"
           onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,107,138,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
           onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
@@ -1311,7 +1314,8 @@
           <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
         {/if}
 
-        <div class="mt-auto flex flex-col items-center gap-1.5" style="padding-top:14px; border-top: 1px solid var(--color-tint)">
+        <div class="divider-thread mt-auto mb-0"></div>
+        <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
           <button
             onclick={() => { step = "welcome"; error = ""; }}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
@@ -1608,7 +1612,7 @@
         </div>
       </div>
 
-      <div>
+      <div class="card-flat">
         <p class="text-sm font-medium text-foreground leading-relaxed">
           {questions[currentQuestion].prompt}
         </p>
@@ -1688,12 +1692,12 @@
         </div>
         <div class="text-center">
           {#if manualProfile.trim()}
-            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic">Profile saved</h2>
+            <h2 class="text-display font-heading text-foreground" style="font-weight:600; font-style:italic">Profile saved</h2>
             <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
               Good start. Noren will use your description to match your tone.
             </p>
           {:else}
-            <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic">Extraction started</h2>
+            <h2 class="text-display font-heading text-foreground" style="font-weight:600; font-style:italic">Extraction started</h2>
             <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
               Your voice profile is being built in the background. You can start writing right away.
             </p>

@@ -18,8 +18,9 @@
 
   function typeColor(type: string): string {
     switch (type) {
-      case "feature": return "bg-primary/20 text-primary";
+      case "feature": return "bg-accent/20 text-accent";
       case "update": return "bg-secondary/20 text-secondary";
+      case "tip": return "bg-signal/20 text-signal";
       case "promo": return "bg-accent/20 text-accent";
       case "maintenance": return "bg-warning/20 text-warning";
       default: return "bg-muted/20 text-muted";
@@ -86,7 +87,8 @@
 
   {#if open && announcements.length > 0}
     <div class="absolute bottom-0 left-full ml-2 w-[280px] max-h-[360px] overflow-y-auto
-                bg-surface border border-border rounded-xl shadow-xl z-50">
+                bg-surface border border-border rounded-xl z-50"
+      style="box-shadow: var(--shadow-dropdown)">
       <div class="p-2.5 border-b border-border">
         <h3 class="text-[10px] font-semibold uppercase tracking-wider text-muted">What's New</h3>
       </div>

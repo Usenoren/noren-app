@@ -165,6 +165,9 @@
     </div>
   </div>
 
+  <!-- Accent thread -->
+  <div class="divider-thread"></div>
+
   <!-- Detected app context -->
   {#if detectedApp && view === "generate"}
     <div class="flex items-center gap-1.5 px-3 py-1.5 bg-tint border-b border-border shrink-0">

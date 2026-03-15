@@ -136,7 +136,7 @@
           {#each navItems as item}
             <button
               onclick={() => { view = item.id; }}
-              class="w-[44px] flex flex-col items-center gap-[3px] py-[7px] rounded-md transition-colors cursor-pointer relative
+              class="w-[44px] h-[48px] flex flex-col items-center justify-center gap-[3px] rounded-md transition-colors cursor-pointer relative
                 {view === item.id
                   ? 'nav-active-indicator'
                   : 'hover:bg-foreground/[0.04]'}"
@@ -184,7 +184,7 @@
         <!-- Bottom: announcements + branding -->
         <div class="mt-auto flex flex-col items-center gap-1.5 pb-0.5">
           <AnnouncementBell />
-          <div style="color:var(--color-muted)">
+          <div class="opacity-50 hover:opacity-80 transition-opacity" style="color:var(--color-muted)">
             <NorenMark width={16} height={19} />
           </div>
         </div>

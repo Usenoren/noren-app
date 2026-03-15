@@ -518,7 +518,7 @@
       {#if canLivingProfile() && activeTab !== "living"}
         <div class="flex items-center gap-1.5">
           <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
-          <span class="text-[10px] text-secondary font-medium">Living Profile</span>
+          <span class="text-subhead text-secondary">Living Profile</span>
         </div>
       {/if}
 
@@ -571,17 +571,17 @@
       {/if}
 
       <!-- Living Profile tab -->
-      <div class="flex gap-1 shrink-0">
+      <div class="flex gap-1 shrink-0 border-b border-border">
         <button
           onclick={() => switchTab("living")}
-          class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md
+          class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide
             {activeTab === 'living'
-              ? 'bg-secondary text-white font-medium'
-              : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+              ? 'border-b-2 border-accent text-accent font-medium'
+              : 'border-b-2 border-transparent text-muted hover:text-foreground'}"
         >
           Living Profile
           {#if !canLivingProfile()}
-            <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-white/70' : 'text-secondary'} font-medium">PRO</span>
+            <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-accent/70' : 'text-secondary'} font-medium">PRO</span>
           {/if}
         </button>
       </div>
@@ -592,7 +592,7 @@
         {:else}
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
           <div class="p-4 bg-tint border border-secondary/20 rounded-xl text-center max-w-[260px]">
-            <p class="text-xs font-medium text-secondary">Living Profile</p>
+            <p class="text-subhead text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
               Your profile evolves as you write. Noren tracks your edits and refines automatically.
             </p>
@@ -640,37 +640,37 @@
     </div>
   {:else}
     <!-- Tabs -->
-    <div class="flex flex-wrap gap-1 shrink-0">
+    <div class="flex flex-wrap gap-1 shrink-0 border-b border-border">
       <button
         onclick={() => switchTab("core")}
-        class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md
+        class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide
           {activeTab === 'core'
-            ? 'bg-primary text-white font-medium'
-            : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+            ? 'border-b-2 border-accent text-accent font-medium'
+            : 'border-b-2 border-transparent text-muted hover:text-foreground'}"
       >
         Core Identity
       </button>
       {#each overview.formats as fmt}
         <button
           onclick={() => switchTab(fmt)}
-          class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md
+          class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide
             {activeTab === fmt
-              ? 'bg-primary text-white font-medium'
-              : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+              ? 'border-b-2 border-accent text-accent font-medium'
+              : 'border-b-2 border-transparent text-muted hover:text-foreground'}"
         >
           {fmt}
         </button>
       {/each}
       <button
         onclick={() => switchTab("living")}
-        class="px-2.5 py-1 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide rounded-md relative
+        class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide relative
           {activeTab === 'living'
-            ? 'bg-secondary text-white font-medium'
-            : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
+            ? 'border-b-2 border-accent text-accent font-medium'
+            : 'border-b-2 border-transparent text-muted hover:text-foreground'}"
       >
         Living
         {#if !canLivingProfile()}
-          <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-white/70' : 'text-secondary'} font-medium">PRO</span>
+          <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-accent/70' : 'text-secondary'} font-medium">PRO</span>
         {/if}
       </button>
     </div>
@@ -678,7 +678,7 @@
     {#if canLivingProfile() && activeTab !== "living"}
       <div class="flex items-center gap-1.5 shrink-0">
         <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
-        <span class="text-[10px] text-secondary font-medium">Living Profile</span>
+        <span class="text-subhead text-secondary">Living Profile</span>
       </div>
     {/if}
 
@@ -691,7 +691,7 @@
         <!-- Living Profile locked -->
         <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
           <div class="p-4 bg-tint border border-secondary/20 rounded-xl text-center max-w-[260px]">
-            <p class="text-xs font-medium text-secondary">Living Profile</p>
+            <p class="text-subhead text-secondary">Living Profile</p>
             <p class="text-[10px] text-muted mt-1 leading-relaxed">
               Your profile evolves as you write. Noren tracks your edits and refines automatically.
             </p>

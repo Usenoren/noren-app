@@ -285,7 +285,7 @@
     <!-- Logged-in state -->
     <div class="flex flex-col gap-4">
       <!-- Account info card -->
-      <div class="p-3 bg-tint border border-secondary/30 rounded-xl">
+      <div class="card-hero">
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span class="text-xs font-medium text-foreground">{proStatus.email}</span>
@@ -301,7 +301,7 @@
         <!-- Pro: usage stats -->
         {#if proStatus.tokens_used != null && proStatus.tokens_limit != null}
           <div>
-            <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Usage</span>
+            <span class="text-heading block mb-2">Usage</span>
             <div class="p-3 card">
               <div class="flex items-center justify-between text-[10px] text-muted mb-1.5">
                 <span>{proStatus.tokens_used.toLocaleString()} tokens used</span>
@@ -309,7 +309,7 @@
               </div>
               <div class="h-1.5 bg-border rounded-full overflow-hidden">
                 <div
-                  class="h-full bg-secondary rounded-full transition-all"
+                  class="h-full bg-accent rounded-full transition-all"
                   style="width: {Math.min(100, (proStatus.tokens_used / proStatus.tokens_limit) * 100)}%"
                 ></div>
               </div>
@@ -363,7 +363,7 @@
       {:else}
         <!-- Free tier: subscribe card -->
         <div>
-          <span class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Upgrade</span>
+          <span class="section-label mb-2">Upgrade</span>
           <button
             onclick={() => handleUpgrade("pro")}
             class="w-full flex items-center justify-between p-3 card hover:border-secondary cursor-pointer text-left"
@@ -417,7 +417,7 @@
 
     <!-- Sign out -->
     <div class="mt-auto">
-      <div class="divider"></div>
+      <div class="divider-thread"></div>
       <div class="pt-3">
         <button
           onclick={handleProLogout}
@@ -430,7 +430,7 @@
   {:else if pendingVerification}
     <!-- OTP Verification -->
     <div class="flex flex-col gap-4">
-      <div class="p-4 card border-secondary/30">
+      <div class="card-hero">
         <h3 class="text-sm font-semibold text-foreground mb-2 font-heading italic">Verify your email</h3>
         <p class="text-[11px] text-muted">
           We sent a verification code to <span class="font-medium text-foreground">{proEmail}</span>. Enter it below to complete your registration.
@@ -490,7 +490,7 @@
     <!-- Not logged in: pitch + auth -->
     <div class="flex flex-col gap-4">
       <!-- Pro pitch card -->
-      <div class="p-4 card border-secondary/30">
+      <div class="card-hero">
         <h3 class="text-sm font-semibold text-foreground mb-2 font-heading italic">Noren Pro</h3>
         <ul class="flex flex-col gap-1.5 text-[11px] text-muted">
           <li class="flex items-start gap-2">
@@ -637,7 +637,7 @@
 
     <!-- Footer link -->
     <div class="mt-auto">
-      <div class="divider"></div>
+      <div class="divider-thread"></div>
       <p class="text-[10px] text-muted leading-relaxed pt-3">
         Already using BYOK?
         <button

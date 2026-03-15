@@ -733,7 +733,7 @@ button {
     transparent, transparent 13px,
     var(--color-primary-muted) 13px, var(--color-primary-muted) 14px
   );
-  opacity: 0.5;
+  opacity: 0.3;
 }
 
 /* --- Button hover identity --- */

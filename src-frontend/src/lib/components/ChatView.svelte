@@ -450,7 +450,7 @@
     {#if messages.length === 0}
       <div class="flex flex-col items-center justify-center h-full gap-3">
         <div class="opacity-15 animate-panel-sway" style="color: var(--color-primary)">
-          <NorenMark width={48} height={57} />
+          <NorenMark width={56} height={67} />
         </div>
         <div class="text-center">
           <p class="font-heading italic text-lg text-foreground/60">Your voice, in conversation</p>

@@ -8,6 +8,7 @@
   import { getIsExtracting } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import NorenMark from "./NorenMark.svelte";
   import { toastError } from "$lib/stores/toast.svelte";
 
   // --- Props ---
@@ -315,7 +316,7 @@
     </div>
 
     <!-- Toolbar -->
-    <div class="flex items-center gap-2 px-4 pb-3 shrink-0">
+    <div class="card-inset flex items-center gap-2 mx-4 mb-2 p-2 shrink-0">
       <!-- No API key banner -->
       {#if noKey}
         <div class="flex items-center gap-2 p-2 bg-tint border border-warning/20 rounded-lg w-full">
@@ -459,7 +460,15 @@
 
     <!-- Output area -->
     <div class="flex-1 min-h-0 overflow-y-auto px-4">
-      {#if comparison}
+      {#if !comparison && !output}
+        <div class="flex-1 flex flex-col items-center justify-center gap-3">
+          <div class="opacity-15 animate-panel-sway" style="color: var(--color-primary)">
+            <NorenMark width={40} height={48} />
+          </div>
+          <p class="text-display text-foreground/80">Ready to weave</p>
+          <p class="text-xs text-muted">Your voice is loaded and ready</p>
+        </div>
+      {:else if comparison}
         <!-- Side-by-side comparison -->
         <div class="flex flex-col gap-2 h-full animate-fabric-unfurl">
           <div class="flex-1 grid grid-cols-2 gap-2 min-h-0">
@@ -611,6 +620,7 @@
           bind:value={prompt}
           onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) handleGenerate(); }}
           class="flex-1 p-3 text-sm resize-none bg-surface text-foreground placeholder-muted border border-border rounded-xl focus:outline-none focus:border-secondary"
+          style="box-shadow: var(--shadow-inset)"
           rows={1}
           placeholder={mode === "adapt" ? "Paste content to restyle in your voice..." : "What do you want to write?"}
           disabled={isGenerating}

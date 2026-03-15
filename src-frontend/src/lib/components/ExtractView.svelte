@@ -507,7 +507,7 @@
         </svg>
       </div>
       <div class="text-center">
-        <p class="text-sm font-semibold text-foreground font-heading italic">Voice profile created</p>
+        <p class="text-display text-foreground">Voice profile created</p>
         <p class="text-xs text-muted mt-1">
           {p?.status === "stored_server"
             ? "Your profile is stored on Noren servers and ready to use."
@@ -559,7 +559,7 @@
   {:else if viewState === "paywall"}
     <!-- Paywall -->
     <div class="flex-1 flex flex-col items-center justify-center">
-      <div class="p-5 bg-tint border border-secondary/20 rounded-xl text-center max-w-[280px]">
+      <div class="p-5 card-hero text-center max-w-[280px]">
         <p class="text-xs font-medium text-secondary font-heading italic">Voice Extraction</p>
         <p class="text-[10px] text-muted mt-1.5 leading-relaxed">
           AI-powered 4-pass analysis of your writing patterns, vocabulary, and rhetorical style.
@@ -596,7 +596,7 @@
   {:else if viewState === "email"}
     <!-- Email input for guest checkout -->
     <div class="flex-1 flex flex-col items-center justify-center">
-      <div class="p-5 bg-tint border border-secondary/20 rounded-xl text-center max-w-[280px]">
+      <div class="p-5 card-hero text-center max-w-[280px]">
         <p class="text-xs font-medium text-secondary font-heading italic">Almost there</p>
         <p class="text-[10px] text-muted mt-1.5 leading-relaxed">
           Enter your email for the receipt. No account will be created.
@@ -669,7 +669,7 @@
   {:else if viewState === "restore"}
     <!-- Restore purchase by email -->
     <div class="flex-1 flex flex-col items-center justify-center">
-      <div class="p-5 bg-tint border border-secondary/20 rounded-xl text-center max-w-[280px]">
+      <div class="p-5 card-hero text-center max-w-[280px]">
         <p class="text-xs font-medium text-secondary font-heading italic">Restore purchase</p>
         <p class="text-[10px] text-muted mt-1.5 leading-relaxed">
           Enter the email you used at checkout.
@@ -718,7 +718,7 @@
       <div class="flex gap-3 w-full max-w-[320px]">
         <button
           onclick={handleFileUpload}
-          class="flex-1 p-4 bg-surface border border-border rounded-xl hover:border-secondary transition-colors cursor-pointer text-center"
+          class="flex-1 p-4 card cursor-pointer text-center"
         >
           <svg class="w-6 h-6 mx-auto text-muted mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -729,7 +729,7 @@
 
         <button
           onclick={startPasteFlow}
-          class="flex-1 p-4 bg-surface border border-border rounded-xl hover:border-secondary transition-colors cursor-pointer text-center"
+          class="flex-1 p-4 card cursor-pointer text-center"
         >
           <svg class="w-6 h-6 mx-auto text-muted mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
