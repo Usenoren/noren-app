@@ -20,6 +20,7 @@
   import { marked } from "marked";
   import DOMPurify from "dompurify";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import NorenMark from "./NorenMark.svelte";
   import { toastInfo, toastWarning } from "$lib/stores/toast.svelte";
 
   // Configure marked for inline rendering
@@ -447,8 +448,14 @@
     class="flex-1 min-h-0 overflow-y-auto px-4 py-4"
   >
     {#if messages.length === 0}
-      <div class="flex items-center justify-center h-full">
-        <p class="text-sm text-muted">Start a conversation...</p>
+      <div class="flex flex-col items-center justify-center h-full gap-3">
+        <div class="opacity-15 animate-panel-sway" style="color: var(--color-primary)">
+          <NorenMark width={48} height={57} />
+        </div>
+        <div class="text-center">
+          <p class="font-heading italic text-lg text-foreground/60">Your voice, in conversation</p>
+          <p class="text-[11px] text-muted mt-1">Noren responds in your writing style.</p>
+        </div>
       </div>
     {:else}
       <div class="flex flex-col gap-3 max-w-2xl mx-auto">
@@ -473,7 +480,7 @@
           {:else}
             <div class="flex justify-start animate-weave-in group/msg">
               <div class="max-w-[80%]">
-                <div class="px-3.5 py-2.5 bg-surface border border-border border-l-[3px] border-l-accent text-foreground rounded-2xl rounded-bl-md selectable animate-weave-shimmer">
+                <div class="px-3.5 py-2.5 bg-surface border border-border chat-stitch-border text-foreground rounded-2xl rounded-bl-md selectable animate-weave-shimmer">
                   <div class="text-sm leading-relaxed prose-chat">{@html renderMarkdown(msg.content)}</div>
                 </div>
                 <div class="flex items-center gap-1 mt-1 ml-1 h-5 opacity-0 group-hover/msg:opacity-100 transition-opacity">

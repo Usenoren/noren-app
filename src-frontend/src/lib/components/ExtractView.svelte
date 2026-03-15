@@ -515,7 +515,7 @@
         </p>
       </div>
       {#if !isPro()}
-        <div class="p-3 output-card text-center max-w-[280px]">
+        <div class="p-3 card-hero text-center max-w-[280px]">
           <p class="text-[10px] text-muted leading-relaxed">
             Save a backup of your voice profile. If you lose it, you'll need to extract again.
           </p>

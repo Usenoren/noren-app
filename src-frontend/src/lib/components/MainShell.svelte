@@ -131,7 +131,7 @@
     <!-- Main layout: sidebar + content -->
     <div class="flex flex-1 min-h-0">
       <!-- Nav rail -->
-      <nav class="w-14 shrink-0 flex flex-col items-center py-2.5 gap-0.5 border-r border-border" style="background:var(--color-bg-rail)">
+      <nav class="w-14 shrink-0 flex flex-col items-center py-2.5 gap-0.5 border-r border-border nav-rail-threads" style="background:var(--color-bg-rail)">
         <div class="flex flex-col items-center gap-0.5">
           {#each navItems as item}
             <button

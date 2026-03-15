@@ -464,15 +464,15 @@
         <div class="flex flex-col gap-2 h-full animate-fabric-unfurl">
           <div class="flex-1 grid grid-cols-2 gap-2 min-h-0">
             <div class="flex flex-col min-h-0">
-              <span class="text-[10px] font-medium text-accent mb-1 uppercase tracking-wide">With your voice</span>
-              <div class="flex-1 p-3 overflow-y-auto output-card">
+              <span class="font-heading italic text-[11px] text-accent mb-1 tracking-wide">With your voice</span>
+              <div class="flex-1 p-3 overflow-y-auto output-card output-weave-bg">
                 <div class="animate-shimmer rounded-lg">
-                  <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed animate-text-weave">{comparison.with_voice.text}</p>
+                  <p class="font-heading italic text-xs text-foreground whitespace-pre-wrap animate-text-weave" style="line-height:1.75">{comparison.with_voice.text}</p>
                 </div>
               </div>
             </div>
             <div class="flex flex-col min-h-0">
-              <span class="text-[10px] font-medium text-muted mb-1 uppercase tracking-wide">Without voice</span>
+              <span class="font-heading italic text-[11px] text-muted mb-1 tracking-wide">Without voice</span>
               <div class="flex-1 p-3 bg-surface border border-border rounded-lg overflow-y-auto opacity-75">
                 <div class="animate-shimmer rounded-lg">
                   <p class="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{comparison.without_voice.text}</p>
@@ -511,18 +511,18 @@
         <div class="flex flex-col gap-2 h-full animate-fabric-unfurl">
           <!-- Voice badge + format pills -->
           <div class="flex items-center gap-2">
-            <span class="font-mono text-[9px] font-medium uppercase tracking-wide" style="color:var(--color-muted)">{format}</span>
+            <span class="font-heading italic text-[11px] text-muted tracking-wide">{format}</span>
             <span class="text-[9px]" style="color:var(--color-border)">/</span>
-            <span class="font-mono text-[9px] font-medium uppercase tracking-wide" style="color:var(--color-muted)">{level}</span>
+            <span class="font-heading italic text-[11px] text-muted tracking-wide">{level}</span>
           </div>
 
           <!-- Output card (editable) -->
-          <div class="flex-1 flex flex-col output-card min-h-0">
+          <div class="flex-1 flex flex-col output-card output-weave-bg min-h-0">
             <div class="animate-shimmer rounded-lg flex-1 flex flex-col min-h-0">
               <textarea
                 bind:value={editedText}
-                class="flex-1 w-full p-4 text-sm text-foreground bg-transparent resize-none min-h-0 border-none focus:outline-none selectable animate-text-weave"
-                style="line-height:1.75"
+                class="flex-1 w-full p-4 font-heading italic text-[15px] text-foreground bg-transparent resize-none min-h-0 border-none focus:outline-none selectable animate-text-weave"
+                style="line-height:1.85;letter-spacing:-0.2px"
               ></textarea>
             </div>
           </div>
