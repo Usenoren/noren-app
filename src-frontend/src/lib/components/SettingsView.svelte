@@ -472,6 +472,55 @@
           Manage subscription
         </button>
       </div>
+
+      <div class="divider-thread"></div>
+
+      <!-- Model (read-only for Pro) -->
+      <div>
+        <span class="section-label" style="display:block; margin-bottom: 8px;">Model</span>
+        <div class="card-flat" style="padding: 14px 16px;">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-mono text-xs text-foreground">{settings.provider.model}</span>
+            <span class="px-1.5 py-0.5 text-[8px] font-semibold rounded-full bg-tint text-secondary">Voice router</span>
+          </div>
+          <p class="text-[11px] text-muted">Selected automatically based on your voice profile</p>
+        </div>
+      </div>
+
+      <!-- Extended Thinking (also available for Pro) -->
+      <div class="divider-thread"></div>
+      <div>
+        <span class="section-label" style="display:block; margin-bottom: 8px;">Output Preferences</span>
+        <div class="card-flat" style="overflow: hidden;">
+          <div class="flex items-center justify-between" style="padding: 14px 16px;">
+            <div>
+              <div class="text-xs font-medium text-foreground">Extended thinking</div>
+              <div class="text-[11px] text-muted mt-0.5">Chain-of-thought for complex tasks</div>
+            </div>
+            <button
+              onclick={handleThinkingToggle}
+              class="toggle {extendedThinking ? 'active' : ''}"
+              aria-label="Toggle extended thinking"
+            ></button>
+          </div>
+          {#if extendedThinking}
+            <div class="divider" style="height: 1px; background: var(--color-border);"></div>
+            <div class="flex items-center gap-2" style="padding: 10px 16px;">
+              <span class="text-[11px] text-muted whitespace-nowrap">Budget:</span>
+              <select
+                bind:value={thinkingBudget}
+                onchange={handleThinkingBudgetSave}
+                class="input-field flex-1 text-[11px]"
+              >
+                <option value={5000}>5k tokens (fast)</option>
+                <option value={10000}>10k tokens</option>
+                <option value={25000}>25k tokens</option>
+                <option value={50000}>50k tokens (deep)</option>
+              </select>
+            </div>
+          {/if}
+        </div>
+      </div>
     {:else}
       <!-- BYOK section -->
       <!-- Provider -->

@@ -402,6 +402,89 @@ pub async fn resend_setup_email(
     Ok(data["message"].as_str().unwrap_or("If that email is in our system, we've sent setup instructions.").to_string())
 }
 
+// --- Password Reset ---
+
+#[tauri::command]
+pub async fn request_password_reset(
+    state: State<'_, AppState>,
+    email: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/request-password-reset", server_url))
+        .json(&serde_json::json!({ "email": email }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if resp.status().is_server_error() {
+        return Err("Server error, please try again later".to_string());
+    }
+
+    let data: serde_json::Value = resp.json().await.unwrap_or_default();
+    Ok(data["message"].as_str().unwrap_or("If that email exists, a reset code has been sent.").to_string())
+}
+
+// --- Account Deletion ---
+
+#[tauri::command]
+pub async fn request_delete_account(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/request-account-deletion", server_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Failed to request deletion: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(data["message"].as_str().unwrap_or("Verification code sent").to_string())
+}
+
+#[tauri::command]
+pub async fn confirm_delete_account(
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/delete-account", server_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::json!({ "code": code }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Deletion failed: {}", body));
+    }
+
+    // Clean up local credentials
+    let _ = keychain::delete_api_key("noren-pro-token");
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(data["message"].as_str().unwrap_or("Account deleted").to_string())
+}
+
 // --- Google OAuth ---
 
 #[derive(Serialize)]

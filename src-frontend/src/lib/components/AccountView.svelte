@@ -15,6 +15,9 @@
     verifyEmail,
     resendOtp,
     resendSetupEmail,
+    requestPasswordReset,
+    requestDeleteAccount,
+    confirmDeleteAccount,
     type SettingsInfo,
     type NorenProStatus,
     type SubscriptionStatus,
@@ -23,6 +26,7 @@
   import { open } from "@tauri-apps/plugin-shell";
   import { refresh as refreshSubscription, canExtract, isTrial, trialDaysLeft } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
+  import { toastInfo } from "$lib/stores/toast.svelte";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   let settings = $state<SettingsInfo | null>(null);
@@ -46,6 +50,10 @@
   let couponCode = $state("");
   let couponLoading = $state(false);
   let couponMessage = $state("");
+  let showDeleteConfirm = $state(false);
+  let deleteCode = $state("");
+  let deleteStep = $state<"confirm" | "code">("confirm");
+  let deleteLoading = $state(false);
 
   $effect(() => {
     loadAccount();
@@ -261,6 +269,45 @@
     }
   }
 
+  async function handlePasswordReset() {
+    if (!proStatus?.email) return;
+    try {
+      await requestPasswordReset(proStatus.email);
+      toastInfo("Reset link sent to " + proStatus.email);
+    } catch (e) {
+      toastInfo("Reset link sent to " + proStatus.email);
+    }
+  }
+
+  async function handleRequestDelete() {
+    if (!proStatus?.email) return;
+    deleteLoading = true;
+    error = "";
+    try {
+      await requestDeleteAccount();
+      deleteStep = "code";
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      deleteLoading = false;
+    }
+  }
+
+  async function handleConfirmDelete() {
+    deleteLoading = true;
+    error = "";
+    try {
+      await confirmDeleteAccount(deleteCode);
+      await norenProLogout();
+      proStatus = null;
+      subscription = null;
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      deleteLoading = false;
+    }
+  }
+
   async function handleManageBilling() {
     error = "";
     try {
@@ -290,24 +337,34 @@
   {:else if settings.noren_pro_logged_in && proStatus}
     <!-- Logged-in state -->
     <div class="flex flex-col gap-5 max-w-sm">
-      <!-- Account info card -->
-      <div class="card-hero p-4">
+      <!-- Account card -->
+      <div class="card-hero p-5">
         <div class="flex items-center gap-2.5">
-          <span class="text-sm font-medium text-foreground">{proStatus.email}</span>
+          <span class="text-sm font-medium text-foreground">{proStatus?.email || "Account"}</span>
           <span class="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full
             {subscription?.tier === 'pro' ? 'bg-accent/15 text-accent' : 'bg-border text-muted'}">
             {subscription?.tier === "pro" ? (isTrial() ? "Trial" : "Pro") : "Free"}
           </span>
         </div>
+        {#if subscription?.tier === "pro"}
+          <div class="divider-thread mt-3 mb-3"></div>
+          <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Inference</span>
+            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Extraction</span>
+            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Living profile</span>
+            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Sync</span>
+            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Export</span>
+          </div>
+        {/if}
       </div>
 
       {#if subscription?.tier === "pro" && subscription.active}
-        <!-- Pro: usage stats -->
-        {#if proStatus.tokens_used != null && proStatus.tokens_limit != null}
-          <div>
-            <span class="text-heading block mb-2">Usage</span>
-            <div class="p-3 card">
-              <div class="flex items-center justify-between text-[10px] text-muted mb-1.5">
+        <!-- Usage + Billing -->
+        <div>
+          <span class="text-heading block mb-2">Usage</span>
+          <div class="card p-4">
+            {#if proStatus.tokens_used != null && proStatus.tokens_limit != null}
+              <div class="flex items-center justify-between text-[11px] text-muted mb-2">
                 <span>{proStatus.tokens_used.toLocaleString()} tokens used</span>
                 <span>{proStatus.tokens_limit.toLocaleString()} limit</span>
               </div>
@@ -317,21 +374,30 @@
                   style="width: {Math.min(100, (proStatus.tokens_used / proStatus.tokens_limit) * 100)}%"
                 ></div>
               </div>
-              <p class="text-[10px] text-muted mt-1.5">
+              <p class="text-[11px] text-muted mt-2">
                 {proStatus.requests_this_month} requests this month
               </p>
               {#if subscription.current_period_end}
-                <p class="text-[10px] text-muted mt-0.5">
+                <p class="text-[11px] text-muted mt-0.5">
                   Period ends {formatDate(subscription.current_period_end)}
                 </p>
               {/if}
-            </div>
+            {:else}
+              <p class="text-[11px] text-muted">No usage data yet</p>
+            {/if}
+            <div class="divider-thread mt-3 mb-3"></div>
+            <button
+              onclick={handleManageBilling}
+              class="btn-outline"
+            >
+              Manage billing
+            </button>
           </div>
-        {/if}
+        </div>
 
         {#if isTrial()}
           {@const days = trialDaysLeft()}
-          <div class="p-2.5 bg-secondary/5 border border-secondary/20 rounded-xl flex items-center justify-between">
+          <div class="card-flat p-3 flex items-center justify-between" style="border-color: var(--color-secondary);">
             <p class="text-xs text-secondary">
               {#if days != null && days <= 3}
                 Trial ends in {days === 0 ? "less than a day" : days === 1 ? "1 day" : `${days} days`}
@@ -343,7 +409,7 @@
             </p>
             <button
               onclick={() => handleUpgrade("pro")}
-              class="px-2 py-1 text-[10px] font-medium bg-accent text-white rounded cursor-pointer hover:bg-accent-hover transition-colors"
+              class="btn-primary text-[11px] py-1.5 px-3"
             >
               Upgrade
             </button>
@@ -351,19 +417,33 @@
         {/if}
 
         {#if subscription.cancel_at_period_end}
-          <div class="p-2.5 bg-warning/5 border border-warning/20 rounded-xl">
+          <div class="card-flat p-3" style="border-color: var(--color-warning);">
             <p class="text-xs text-warning">
               Cancels at end of period{subscription.current_period_end ? ` (${formatDate(subscription.current_period_end)})` : ""}
             </p>
           </div>
         {/if}
 
-        <button
-          onclick={handleManageBilling}
-          class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md self-start"
-        >
-          Manage billing
-        </button>
+        <div class="divider-thread"></div>
+
+        <!-- Security -->
+        <div>
+          <span class="section-label" style="display:block; margin-bottom: 8px;">Security</span>
+          <div class="card-flat" style="padding: 14px 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-xs font-medium text-foreground">Password</div>
+                <div class="text-[11px] text-muted mt-0.5">Sends a reset link to {proStatus?.email || "your email"}</div>
+              </div>
+              <button
+                onclick={handlePasswordReset}
+                class="btn-outline"
+              >
+                Change password
+              </button>
+            </div>
+          </div>
+        </div>
       {:else}
         <!-- Free tier: subscribe card -->
         <div>
@@ -419,16 +499,88 @@
       {/if}
     </div>
 
-    <!-- Sign out -->
-    <div class="mt-auto">
+    <!-- Account actions -->
+    <div class="max-w-sm">
       <div class="divider-thread"></div>
       <div class="pt-3">
-        <button
-          onclick={handleProLogout}
-          class="text-[10px] text-muted hover:text-error transition-colors cursor-pointer"
-        >
-          Sign out
-        </button>
+        {#if showDeleteConfirm}
+          <div class="card-flat p-4" style="border-color: var(--color-error);">
+            {#if deleteStep === "confirm"}
+              <p class="text-xs text-muted leading-relaxed mb-3">
+                This will permanently delete your account, voice profiles, and all data. This cannot be undone.
+              </p>
+              <div class="flex gap-2">
+                <button
+                  onclick={handleRequestDelete}
+                  disabled={deleteLoading}
+                  class="px-3 py-1.5 text-xs font-medium text-white rounded-md cursor-pointer disabled:opacity-50 transition-colors"
+                  style="background: var(--color-error);"
+                >
+                  {#if deleteLoading}
+                    <span class="inline-flex items-center gap-1"><LoadingSpinner /> Sending...</span>
+                  {:else}
+                    Send verification code
+                  {/if}
+                </button>
+                <button
+                  onclick={() => { showDeleteConfirm = false; deleteStep = "confirm"; deleteCode = ""; error = ""; }}
+                  class="btn-ghost"
+                >
+                  Cancel
+                </button>
+              </div>
+            {:else}
+              <p class="text-xs text-muted mb-3">
+                Enter the code sent to <span class="text-foreground font-medium">{proStatus?.email}</span>
+              </p>
+              <input
+                type="text"
+                bind:value={deleteCode}
+                class="input-field mb-3"
+                style="text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 16px; letter-spacing: 6px; padding: 10px;"
+                placeholder="000000"
+                maxlength={6}
+                onkeydown={(e) => { if (e.key === "Enter" && deleteCode.trim()) handleConfirmDelete(); }}
+              />
+              <div class="flex gap-2">
+                <button
+                  onclick={handleConfirmDelete}
+                  disabled={deleteLoading || !deleteCode.trim()}
+                  class="px-3 py-1.5 text-xs font-medium text-white rounded-md cursor-pointer disabled:opacity-50 transition-colors"
+                  style="background: var(--color-error);"
+                >
+                  {#if deleteLoading}
+                    <span class="inline-flex items-center gap-1"><LoadingSpinner /> Deleting...</span>
+                  {:else}
+                    Delete permanently
+                  {/if}
+                </button>
+                <button
+                  onclick={() => { showDeleteConfirm = false; deleteStep = "confirm"; deleteCode = ""; error = ""; }}
+                  class="btn-ghost"
+                >
+                  Cancel
+                </button>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="flex items-center gap-1.5">
+            <button
+              onclick={handleProLogout}
+              class="text-[11px] text-muted hover:text-error transition-colors cursor-pointer"
+            >
+              Sign out
+            </button>
+            <span class="text-[11px] text-border">&middot;</span>
+            <button
+              onclick={() => { showDeleteConfirm = true; }}
+              class="text-[11px] text-muted hover:text-error transition-colors cursor-pointer"
+            >
+              Delete account
+            </button>
+          </div>
+        {/if}
       </div>
     </div>
   {:else if pendingVerification}

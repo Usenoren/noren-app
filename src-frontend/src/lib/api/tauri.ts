@@ -118,6 +118,18 @@ export async function norenProLogout(): Promise<void> {
   return invoke("noren_pro_logout");
 }
 
+export async function requestPasswordReset(email: string): Promise<string> {
+  return invoke("request_password_reset", { email });
+}
+
+export async function requestDeleteAccount(): Promise<string> {
+  return invoke("request_delete_account");
+}
+
+export async function confirmDeleteAccount(code: string): Promise<string> {
+  return invoke("confirm_delete_account", { code });
+}
+
 export async function verifyEmail(code: string): Promise<string> {
   return invoke("verify_email", { code });
 }
