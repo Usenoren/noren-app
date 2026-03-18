@@ -669,14 +669,23 @@
   }
 
   function handleGuidedExtraction() {
-    const guidedSamples = guidedAnswers.join("\n\n");
-    const pairContext = pairs
-      .map((p, i) => (pairChoices[i] === "a" ? p.a : p.b))
-      .join("\n\n");
-    const combinedSamples = guidedSamples + "\n\n" + pairContext;
+    const calibration = {
+      source: "guided",
+      domain: "",
+      writing_format: "general",
+      sentence_pairs: pairs.map((p, i) => ({
+        dimension: p.dimension,
+        selected: pairChoices[i] === "a" ? "A" : "B",
+        option_a: p.a,
+        option_b: p.b,
+      })),
+    };
 
-    // Fire off background extraction and show done screen
-    startExtractionQueue([{ samples: combinedSamples.trim(), format: "general" }]);
+    startExtractionQueue([{
+      samples: guidedAnswers.join("\n\n").trim(),
+      format: "general",
+      calibration,
+    }]);
     step = "done";
   }
 
@@ -799,7 +808,7 @@
           </div>
           <div class="flex-1 min-w-0">
             <div style="font-size:13px; font-weight:600; line-height:1.3">Guided interview</div>
-            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">7 questions + style calibration builds your profile</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">No writing samples? Answer 7 questions to build your profile.</div>
           </div>
         </button>
 

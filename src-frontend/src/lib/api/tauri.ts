@@ -317,6 +317,7 @@ export interface ExtractionProgress {
 export async function startExtraction(params: {
   samples: string;
   format: string;
+  calibration?: object;
 }): Promise<void> {
   return invoke("start_extraction", params);
 }

@@ -113,6 +113,7 @@ pub async fn start_extraction(
     state: tauri::State<'_, AppState>,
     samples: String,
     format: String,
+    calibration: Option<serde_json::Value>,
 ) -> Result<(), String> {
     let server_url = {
         let config = state.config.lock().unwrap();
@@ -147,6 +148,9 @@ pub async fn start_extraction(
                 let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
                 let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
             });
+        }
+        if let Some(cal) = calibration {
+            client = client.with_calibration(cal);
         }
 
         match client.extract(&samples, &format).await {

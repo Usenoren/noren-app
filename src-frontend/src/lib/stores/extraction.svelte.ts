@@ -29,7 +29,7 @@ let progress = $state<ExtractionProgress | null>(null);
 let error = $state("");
 let done = $state(false);
 
-let lastFormats: { samples: string; format: string }[] = [];
+let lastFormats: { samples: string; format: string; calibration?: object }[] = [];
 let initialized = false;
 let resolveCurrentJob: (() => void) | null = null;
 
@@ -54,7 +54,7 @@ export function init() {
   });
 }
 
-export async function startQueue(formats: { samples: string; format: string }[]) {
+export async function startQueue(formats: { samples: string; format: string; calibration?: object }[]) {
   if (isExtracting || formats.length === 0) return;
 
   lastFormats = formats;

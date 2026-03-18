@@ -53,6 +53,7 @@ pub struct ServerExtractionClient {
     on_progress: Option<ProgressCallback>,
     refresh_token: Option<String>,
     on_tokens_refreshed: Option<Box<dyn Fn(String, String) + Send + Sync>>,
+    calibration: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -104,11 +105,17 @@ impl ServerExtractionClient {
             on_progress: None,
             refresh_token: None,
             on_tokens_refreshed: None,
+            calibration: None,
         }
     }
 
     pub fn with_progress(mut self, callback: ProgressCallback) -> Self {
         self.on_progress = Some(callback);
+        self
+    }
+
+    pub fn with_calibration(mut self, calibration: serde_json::Value) -> Self {
+        self.calibration = Some(calibration);
         self
     }
 
@@ -243,10 +250,13 @@ impl ExtractionClient for ServerExtractionClient {
         samples: &str,
         format: &str,
     ) -> Result<ExtractionResult, EngineError> {
-        let payload = serde_json::json!({
+        let mut payload = serde_json::json!({
             "samples": samples,
             "format": format,
         });
+        if let Some(ref cal) = self.calibration {
+            payload["calibration"] = cal.clone();
+        }
         self.run_extraction_job(payload).await
     }
 
