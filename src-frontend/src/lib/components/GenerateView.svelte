@@ -10,6 +10,7 @@
   import LoadingSpinner from "./LoadingSpinner.svelte";
   import NorenMark from "./NorenMark.svelte";
   import { toastError } from "$lib/stores/toast.svelte";
+  import loomIdleUrl from "../../assets/loom-idle.png";
 
   // --- Props ---
   let { isPopup = false, hasProfile: hasProfileProp = true, noApiKey = false }: { isPopup?: boolean; hasProfile?: boolean; noApiKey?: boolean } = $props();
@@ -36,12 +37,8 @@
   let dismissedEmpty = $state(false);
   let editedText = $state("");
 
-  const levels = ["strict", "guided", "light"] as const;
-
   // --- Init ---
   $effect(() => {
-    // Use profile overview for both profile status and format list
-    // (works for both local and server-side profiles)
     getProfileOverview().then((overview) => {
       hasProfileLocal = overview.exists;
       let f = overview.formats;
@@ -54,7 +51,6 @@
       }
     });
 
-    // Also get local formats as fallback (for BYOK path)
     listFormats().then((f) => {
       if (formats.length <= 1) {
         if (!f.includes("general")) {
@@ -133,9 +129,35 @@
           await navigator.clipboard.writeText(output.text);
           copied = true;
         } catch {
-          // Clipboard API may not be available in Tauri webview — user can use Copy button
+          // Clipboard API may not be available in Tauri webview
         }
       }
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isGenerating = false;
+    }
+  }
+
+  async function handleCompare() {
+    if (!output || isGenerating) return;
+    if (isFree()) {
+      showCompareLock = true;
+      setTimeout(() => { showCompareLock = false; }, 3000);
+      return;
+    }
+
+    isGenerating = true;
+    error = "";
+
+    try {
+      comparison = await generateComparison({
+        prompt: prompt.trim(),
+        format,
+        context: contextText || undefined,
+        attachments: attachedFiles.length > 0 ? attachedFiles.map((f) => f.content) : undefined,
+      });
+      compareMode = true;
     } catch (e) {
       error = friendlyError(e);
     } finally {
@@ -212,16 +234,11 @@
   <!-- Empty state: no profile, no output yet -->
   {#if !hasProfile && !getIsExtracting() && !output && !comparison && !dismissedEmpty && !isPopup}
     <div class="flex-1 flex flex-col items-center justify-center overflow-hidden relative">
-      <!-- Warm radial glow -->
       <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 55% 45% at 50% 40%, var(--color-primary-muted), transparent 70%)"></div>
 
       <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-        <!-- Warp threads + accent weft -->
         <svg class="w-[120px] h-[68px]" viewBox="0 0 120 68" fill="none">
-          <!-- Beam -->
           <line x1="18" y1="10" x2="102" y2="10" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.2"/>
-
-          <!-- Warp threads — staggered entrance -->
           {#each [
             { x: 36, delay: 0.15 },
             { x: 52, delay: 0.28 },
@@ -236,8 +253,6 @@
               style="animation: warp-appear 0.7s {thread.delay}s ease-out forwards"
             />
           {/each}
-
-          <!-- Accent weft — draws after warps settle -->
           <path
             d="M26 36 C40 31, 50 40, 60 35 C70 30, 80 38, 94 33"
             stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round"
@@ -310,14 +325,9 @@
   {:else}
 
   <div class="flex flex-col h-full">
-    <!-- View title -->
-    <div class="px-4 pt-4 pb-2 shrink-0">
-      <h1 class="font-heading italic text-[22px] text-foreground font-normal">Weave</h1>
-    </div>
-
     <!-- Toolbar -->
-    <div class="card-inset flex items-center gap-2 mx-4 mb-2 p-2 shrink-0">
-      <!-- No API key banner -->
+    <div class="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-border shrink-0">
+      <span class="font-heading italic text-[18px] mr-auto">Weave</span>
       {#if noKey}
         <div class="flex items-center gap-2 p-2 bg-tint border border-warning/20 rounded-lg w-full">
           <p class="flex-1 text-[10px] text-muted leading-relaxed">
@@ -337,89 +347,35 @@
             <option value={fmt}>{fmt}</option>
           {/each}
         </select>
+
         <button
           onclick={handleAttachFile}
-          class="px-2 py-1 text-[10px] bg-surface text-muted border border-border hover:border-secondary hover:text-foreground transition-colors cursor-pointer rounded-md"
+          class="inline-flex items-center gap-1.5 bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-muted hover:text-foreground hover:border-secondary transition-colors cursor-pointer"
           title="Attach a file (PDF, text, etc.)"
           disabled={attachedFiles.length >= 3}
         >
+          <svg class="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
           Attach{#if attachedFiles.length > 0} ({attachedFiles.length}/3){/if}
         </button>
 
         <button
           onclick={() => { mode = mode === "generate" ? "adapt" : "generate"; }}
-          class="px-2 py-1 text-[10px] transition-colors cursor-pointer rounded-md
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors cursor-pointer rounded-lg
             {mode === 'adapt'
-              ? 'bg-secondary text-white font-medium'
+              ? 'bg-[var(--color-primary-muted)] text-foreground border border-[rgba(90,154,194,0.15)]'
               : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
           title={mode === "adapt" ? "Adapt mode: paste existing content and restyle it in your voice" : "Adapt mode: restyle existing content in your voice instead of writing from scratch"}
         >
+          <svg class="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
           Adapt
         </button>
 
-        <div class="flex items-center gap-1.5 ml-auto">
-          <!-- Compare toggle -->
-          <div class="relative">
-            <button
-              onclick={() => {
-                if (isFree()) {
-                  showCompareLock = true;
-                  setTimeout(() => { showCompareLock = false; }, 3000);
-                  return;
-                }
-                compareMode = !compareMode;
-              }}
-              class="px-2 py-1 text-[10px] transition-colors cursor-pointer rounded-md
-                {compareMode
-                  ? 'bg-secondary text-white font-medium'
-                  : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-              title={isFree() ? "Compare requires Pro" : "Compare with and without your voice"}
-            >
-              Compare
-              {#if isFree()}
-                <span class="ml-0.5 text-[8px] text-secondary font-medium">PRO</span>
-              {/if}
-            </button>
-            {#if showCompareLock}
-              <div class="absolute top-full mt-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-lg whitespace-nowrap animate-fade-in-up" style="box-shadow: var(--shadow-dropdown)">
-                <p class="text-[10px] text-muted">Compare is a <span class="text-secondary font-medium">Pro</span> feature.</p>
-                <button
-                  onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch (e) { toastError(friendlyError(e)); } }}
-                  class="mt-1 text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
-                >Upgrade</button>
-              </div>
-            {/if}
-          </div>
-
-          {#if !compareMode}
-            <div class="flex gap-1">
-              {#each levels as lvl}
-                <button
-                  onclick={() => { level = lvl; }}
-                  class="px-1.5 py-1 text-[10px] transition-colors cursor-pointer uppercase tracking-wide rounded-md
-                    {level === lvl
-                      ? 'bg-primary text-white font-medium'
-                      : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-                  title={lvl === "strict"
-                    ? "Strict: maximizes voice fidelity, may constrain creativity"
-                    : lvl === "guided"
-                      ? "Guided: balances your voice with natural flow (recommended)"
-                      : "Light: uses your voice as a gentle guide, more creative freedom"}
-                >
-                  {lvl}
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          <!-- Voice badge -->
-          {#if hasProfile}
-            <div class="voice-badge">
-              <div class="voice-badge-dot"></div>
-              <span class="font-mono text-[8px] font-medium uppercase tracking-wide text-signal">Voice</span>
-            </div>
-          {/if}
-        </div>
+        {#if hasProfile}
+          <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent-wash border border-accent text-accent rounded-lg cursor-default">
+            <div class="voice-badge-dot"></div>
+            Voice
+          </button>
+        {/if}
       {/if}
     </div>
 
@@ -461,12 +417,12 @@
     <!-- Output area -->
     <div class="flex-1 min-h-0 overflow-y-auto px-4">
       {#if !comparison && !output}
-        <div class="flex-1 flex flex-col items-center justify-center gap-3">
-          <div class="opacity-15 animate-panel-sway" style="color: var(--color-primary)">
-            <NorenMark width={40} height={48} />
+        <div class="h-full flex flex-col items-center justify-center gap-5">
+          <img src={loomIdleUrl} alt="" class="w-[170px] opacity-50" />
+          <div class="flex flex-col items-center gap-1.5">
+            <p class="text-display text-foreground/75">Ready to weave</p>
+            <p class="text-xs text-muted">Your voice is loaded and ready</p>
           </div>
-          <p class="text-display text-foreground/80">Ready to weave</p>
-          <p class="text-xs text-muted">Your voice is loaded and ready</p>
         </div>
       {:else if comparison}
         <!-- Side-by-side comparison -->
@@ -518,14 +474,10 @@
         </div>
       {:else if output}
         <div class="flex flex-col gap-2 h-full animate-fabric-unfurl">
-          <!-- Voice badge + format pills -->
           <div class="flex items-center gap-2">
             <span class="font-heading italic text-[11px] text-muted tracking-wide">{format}</span>
-            <span class="text-[9px]" style="color:var(--color-border)">/</span>
-            <span class="font-heading italic text-[11px] text-muted tracking-wide">{level}</span>
           </div>
 
-          <!-- Output card (editable) -->
           <div class="flex-1 flex flex-col output-card output-weave-bg min-h-0">
             <div class="animate-shimmer rounded-lg flex-1 flex flex-col min-h-0">
               <textarea
@@ -538,12 +490,38 @@
 
           <!-- Actions -->
           <div class="flex items-center gap-2 pb-2">
-            <span class="font-mono text-[9px] text-muted mr-auto">
+            <span class="font-mono text-[9px] text-muted">
               {output.input_tokens + output.output_tokens} tokens
               {#if editedText !== output.text}
                 <span class="text-secondary font-medium ml-1.5">edited</span>
               {/if}
             </span>
+
+            <!-- Compare link -->
+            <div class="relative ml-auto">
+              <button
+                onclick={handleCompare}
+                class="inline-flex items-center gap-1 text-[10px] text-muted hover:text-secondary transition-colors cursor-pointer"
+                title="Compare with and without your voice"
+                disabled={isGenerating}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+                Compare
+                {#if isFree()}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-secondary opacity-60"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                {/if}
+              </button>
+              {#if showCompareLock}
+                <div class="absolute bottom-full mb-1 right-0 z-10 p-2 bg-tint border border-secondary/20 rounded-lg whitespace-nowrap animate-fade-in-up" style="box-shadow: var(--shadow-dropdown)">
+                  <p class="text-[10px] text-muted">Compare is a <span class="text-secondary font-medium">Pro</span> feature.</p>
+                  <button
+                    onclick={async () => { try { const r = await createCheckout("pro"); if (r.checkout_url !== "dev://granted") await openUrl(r.checkout_url); } catch (e) { toastError(friendlyError(e)); } }}
+                    class="mt-1 text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
+                  >Upgrade</button>
+                </div>
+              {/if}
+            </div>
+
             <button
               onclick={handleCopy}
               class="w-8 h-8 flex items-center justify-center border border-border hover:border-secondary transition-colors cursor-pointer rounded-md"
@@ -580,9 +558,8 @@
       </div>
     {/if}
 
-    <!-- Input bar (bottom-pinned) -->
+    <!-- Input bar -->
     <div class="shrink-0 border-t border-border px-4 py-3">
-      <!-- Context banner -->
       {#if contextText}
         <div class="flex items-start gap-2 mb-2 px-3 py-2 bg-tint/50 border border-border rounded-lg text-xs">
           <div class="flex-1 min-w-0">
@@ -599,7 +576,6 @@
         </div>
       {/if}
 
-      <!-- Attachments -->
       {#if attachedFiles.length > 0}
         <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
           {#each attachedFiles as file, i}
