@@ -12,6 +12,7 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:window:allow-is-visible",
+    "core:window:allow-start-dragging",
     "shell:default",
     "global-shortcut:default",
     "clipboard-manager:default",
