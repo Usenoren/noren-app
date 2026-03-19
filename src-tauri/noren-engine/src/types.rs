@@ -23,6 +23,7 @@ pub struct LlmOptions {
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
     pub thinking: Option<ThinkingConfig>,
+    pub cache: Option<bool>,
     pub chat_id: Option<String>,
     pub chat_title: Option<String>,
 }
@@ -339,6 +340,66 @@ pub struct CalibrationPair {
     pub option_a: String,
     #[serde(rename = "optionB")]
     pub option_b: String,
+}
+
+// --- Voice Metadata ---
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceMetadata {
+    pub version: u32,
+    pub routing: VoiceRoutingFields,
+    pub corpus: CorpusInfo,
+    pub counts: MetadataCounts,
+    pub baseline_rhythm: Option<BaselineRhythm>,
+    pub format_rhythms: Option<HashMap<String, BaselineRhythm>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct VoiceRoutingFields {
+    pub structure_predictability: String,
+    pub register_break_frequency: u32,
+    pub casual_marker_density: String,
+    pub signature_phrase_rigidity: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CorpusInfo {
+    pub unique_sample_count: u32,
+    pub formats: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetadataCounts {
+    pub analogy_domains: u32,
+    pub micro_constructions: u32,
+    pub signature_phrases: u32,
+    pub anti_patterns: u32,
+    pub profile_lines: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BaselineRhythm {
+    pub total_sentences: u32,
+    pub median_word_count: f64,
+    pub mean_word_count: f64,
+    pub distribution: RhythmDistribution,
+    pub distribution_pct: RhythmDistribution,
+    pub long_to_short_ratio: f64,
+    pub median_commas_per_sentence: f64,
+    pub mean_commas_per_sentence: f64,
+    pub mean_paragraph_sentences: f64,
+    pub sentence_ceiling: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RhythmDistribution {
+    pub short: f64,
+    pub medium: f64,
+    pub long: f64,
+    pub very_long: f64,
 }
 
 /// Profile content returned to the frontend

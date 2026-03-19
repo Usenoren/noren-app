@@ -852,4 +852,18 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A847E' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
   }
+
+  /* Idle loom weft drift */
+  @keyframes idle-weft-drift {
+    0%   { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }
+    50%  { d: path("M10 38 C26 42, 40 33, 54 38 C68 43, 76 34, 92 37"); }
+    100% { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }
+  }
+  @keyframes idle-weft-ghost-drift {
+    0%   { d: path("M10 42 C28 38, 42 46, 56 41 C70 36, 80 43, 92 40"); }
+    50%  { d: path("M10 40 C26 44, 40 37, 54 42 C68 47, 78 39, 92 42"); }
+    100% { d: path("M10 42 C28 38, 42 46, 56 41 C70 36, 80 43, 92 40"); }
+  }
+  .idle-weft { animation: idle-weft-drift 8s ease-in-out infinite; }
+  .idle-weft-ghost { animation: idle-weft-ghost-drift 10s ease-in-out infinite; }
 }

@@ -562,6 +562,36 @@ export async function syncChatsFromServer(): Promise<number> {
   return invoke("sync_chats_from_server");
 }
 
+// --- Repurpose ---
+
+export interface RepurposeFormatResult {
+  format: string;
+  content: string;
+  input_tokens: number;
+  output_tokens: number;
+  passed: boolean;
+}
+
+export interface RepurposeResult {
+  results: RepurposeFormatResult[];
+  total_input_tokens: number;
+  total_output_tokens: number;
+}
+
+export async function repurpose(params: {
+  sourceContent: string;
+  sourceFormat: string;
+  targetFormats?: string[];
+}): Promise<RepurposeResult> {
+  return invoke("repurpose", {
+    sourceContent: params.sourceContent,
+    sourceFormat: params.sourceFormat,
+    targetFormats: params.targetFormats ?? null,
+  });
+}
+
+// --- Factory Reset ---
+
 export async function factoryReset(): Promise<void> {
   return invoke("factory_reset");
 }

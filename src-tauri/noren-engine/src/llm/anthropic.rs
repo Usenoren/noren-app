@@ -35,10 +35,33 @@ struct ApiRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
+    system: Option<SystemContent>,
     messages: Vec<ApiMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<ApiThinking>,
+}
+
+/// System content: plain string or content blocks with cache control.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum SystemContent {
+    Text(String),
+    Blocks(Vec<SystemBlock>),
+}
+
+#[derive(Serialize)]
+struct SystemBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<CacheControl>,
+}
+
+#[derive(Serialize)]
+struct CacheControl {
+    #[serde(rename = "type")]
+    cache_type: String,
 }
 
 #[derive(Serialize)]
@@ -117,11 +140,25 @@ impl LlmClient for AnthropicClient {
             (None, options.max_tokens.unwrap_or(8192))
         };
 
+        let system = system_message.map(|m| {
+            if options.cache.unwrap_or(false) {
+                SystemContent::Blocks(vec![SystemBlock {
+                    block_type: "text".to_string(),
+                    text: m.content.clone(),
+                    cache_control: Some(CacheControl {
+                        cache_type: "ephemeral".to_string(),
+                    }),
+                }])
+            } else {
+                SystemContent::Text(m.content.clone())
+            }
+        });
+
         let request = ApiRequest {
             model: self.model.clone(),
             max_tokens,
             temperature: if thinking_field.is_some() { None } else { options.temperature },
-            system: system_message.map(|m| m.content.clone()),
+            system,
             messages: non_system,
             thinking: thinking_field,
         };

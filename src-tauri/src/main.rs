@@ -214,6 +214,7 @@ fn main() {
             commands::fetch_announcements,
             commands::get_announcement_seen,
             commands::save_announcement_seen,
+            commands::repurpose,
             commands::scrape_twitter,
             commands::scrape_blog,
         ])

@@ -35,11 +35,25 @@ fn resolve_context_format<'a>(
     None
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct GenerateResult {
     pub text: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice_check: Option<VoiceCheckResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routed_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_reason: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct VoiceCheckResult {
+    pub passed: bool,
+    pub violations: Vec<noren_engine::generate::output_checks::Violation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub density: Option<noren_engine::generate::output_checks::DensityCounts>,
 }
 
 #[tauri::command]
@@ -132,6 +146,9 @@ async fn generate_pro(
         text: response.content,
         input_tokens: response.input_tokens,
         output_tokens: response.output_tokens,
+        voice_check: None,
+        routed_model: None,
+        route_reason: None,
     })
 }
 
@@ -155,6 +172,9 @@ async fn generate_byok(
 
     // Load calibration data if available
     let calibration = noren_engine::load_calibration(&config.profile_dir);
+
+    // Load voice metadata for routing + output checks
+    let metadata = noren_engine::load_voice_metadata(&config.profile_dir);
 
     // Get the appropriate template based on pipeline
     let cache_dir = noren_engine::prompt_cache::default_cache_dir();
@@ -215,13 +235,35 @@ async fn generate_byok(
         }
     }
 
+    // Voice routing: only override model when user is on the default Anthropic model.
+    // If someone manually set Opus, respect their choice.
+    let is_default_model = config.provider.model == "claude-sonnet-4-6";
+    let (active_model, route_info) =
+        if config.provider.provider_type == noren_engine::ProviderType::Anthropic && is_default_model {
+            if let Some(ref meta) = metadata {
+                let decision = noren_engine::generate::voice_router::route_voice_to_model(meta, format);
+                if decision.model != config.provider.model {
+                    (decision.model.clone(), Some((decision.model, decision.reason)))
+                } else {
+                    (config.provider.model.clone(), None)
+                }
+            } else {
+                (config.provider.model.clone(), None)
+            }
+        } else {
+            (config.provider.model.clone(), None)
+        };
+
     let client: Box<dyn noren_engine::LlmClient> = {
         let api_key = if config.provider.requires_key {
             crate::keychain::get_api_key(&config.provider.keychain_id())
         } else {
             None
         };
-        noren_engine::create_llm_client(config, api_key).map_err(|e| e.to_string())?
+        // Apply routed model override
+        let mut effective_config = config.clone();
+        effective_config.provider.model = active_model;
+        noren_engine::create_llm_client(&effective_config, api_key).map_err(|e| e.to_string())?
     };
 
     // Auto-enable thinking for internalized on Anthropic, matching CLI behavior
@@ -254,10 +296,16 @@ async fn generate_byok(
             content: user_content,
         },
     ];
+
+    // Enable prompt caching for Anthropic BYOK: the system message (voice profile +
+    // enforcement instructions) is identical across generation calls with the same profile.
+    // Cached prefix tokens are 90% cheaper and process faster.
+    let use_cache = config.provider.provider_type == noren_engine::ProviderType::Anthropic;
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
         max_tokens: Some(8192),
         thinking,
+        cache: if use_cache { Some(true) } else { None },
         ..Default::default()
     };
 
@@ -266,10 +314,38 @@ async fn generate_byok(
         .await
         .map_err(|e| e.to_string())?;
 
+    // Run output checks against the generated text
+    let rhythm = metadata.as_ref().and_then(|m| {
+        m.format_rhythms
+            .as_ref()
+            .and_then(|fr| fr.get(format))
+            .or(m.baseline_rhythm.as_ref())
+    });
+    let checks = noren_engine::generate::output_checks::run_output_checks(
+        &response.content,
+        &core_identity,
+        context_layer.map(String::as_str),
+        rhythm,
+    );
+
+    let voice_check = Some(VoiceCheckResult {
+        passed: checks.passed,
+        violations: checks.violations,
+        density: checks.density,
+    });
+
+    let (routed_model, route_reason) = match route_info {
+        Some((model, reason)) => (Some(model), Some(reason)),
+        None => (None, None),
+    };
+
     Ok(GenerateResult {
         text: response.content,
         input_tokens: response.input_tokens,
         output_tokens: response.output_tokens,
+        voice_check,
+        routed_model,
+        route_reason,
     })
 }
 
@@ -376,6 +452,9 @@ pub async fn generate_comparison(
         text: response.content,
         input_tokens: response.input_tokens,
         output_tokens: response.output_tokens,
+        voice_check: None,
+        routed_model: None,
+        route_reason: None,
     };
 
     Ok(ComparisonResult {

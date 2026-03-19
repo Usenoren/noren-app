@@ -80,6 +80,14 @@ pub fn load_calibration(profile_dir: &Path) -> Option<crate::types::CalibrationD
     serde_json::from_str(&data).ok()
 }
 
+/// Load voice metadata from a profile directory.
+/// Returns None if voice-metadata.json doesn't exist or is unparseable.
+pub fn load_voice_metadata(profile_dir: &Path) -> Option<crate::types::VoiceMetadata> {
+    let path = profile_dir.join("voice-metadata.json");
+    let data = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
 /// List available context formats in a profile directory
 pub fn list_formats(profile_dir: &Path) -> Vec<String> {
     let contexts_dir = profile_dir.join("contexts");

@@ -134,10 +134,12 @@ pub async fn chat_send(
         None
     };
 
+    let use_cache = config.provider.provider_type == noren_engine::ProviderType::Anthropic;
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
         max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
         thinking,
+        cache: if use_cache { Some(true) } else { None },
         chat_id,
         chat_title,
     };
@@ -183,6 +185,9 @@ pub async fn chat_send(
         text: response.content,
         input_tokens: response.input_tokens,
         output_tokens: response.output_tokens,
+        voice_check: None,
+        routed_model: None,
+        route_reason: None,
     })
 }
 
