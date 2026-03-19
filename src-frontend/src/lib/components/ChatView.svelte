@@ -368,9 +368,7 @@
             <p class="p-3 text-xs text-muted text-center">No previous chats</p>
           {:else}
             {#each conversations as conv}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <div
+              <button
                 onclick={() => handleLoadChat(conv.id)}
                 class="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-tint transition-colors cursor-pointer border-b border-border last:border-b-0 group
                   {conversationId === conv.id ? 'bg-primary/5' : ''}"
@@ -381,16 +379,19 @@
                     {relativeTime(conv.updated_at)} · {conv.message_count} messages
                   </p>
                 </div>
-                <button
+                <span
+                  role="button"
+                  tabindex="-1"
                   onclick={(e) => handleDeleteChat(conv.id, e)}
-                  class="shrink-0 text-muted hover:text-error opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5"
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDeleteChat(conv.id, e); } }}
+                  class="shrink-0 text-muted hover:text-error opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity cursor-pointer p-0.5"
                   aria-label="Delete conversation"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                </button>
-              </div>
+                </span>
+              </button>
             {/each}
           {/if}
         </div>
@@ -564,7 +565,7 @@
           oninput={autoResize}
           class="flex-1 p-3 text-sm border border-border resize-none bg-surface text-foreground placeholder-muted rounded-xl focus:outline-none focus:border-secondary"
           rows={1}
-          placeholder={noApiKey ? "API key required..." : "Message..."}
+          placeholder={noApiKey ? "API key required..." : "What do you want to say?"}
           disabled={isLoading || noApiKey}
         ></textarea>
         <button

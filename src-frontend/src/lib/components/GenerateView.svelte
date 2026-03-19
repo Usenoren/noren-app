@@ -384,13 +384,13 @@
       <div class="flex items-center gap-2 mx-4 mb-3 p-2 bg-tint border border-secondary/20 rounded-lg">
         <p class="flex-1 text-[10px] text-muted leading-relaxed">
           {#if isPopup}
-            No voice profile yet. Output will use default voice.
+            No voice profile yet. Output won't carry your voice.
             <button
               onclick={() => showMainWindow()}
               class="text-secondary font-medium cursor-pointer hover:text-foreground"
             >Open Noren to set up</button>
           {:else if canExtract()}
-            Output will be generic.
+            Output won't carry your voice.
             <button
               onclick={() => emit("navigate", "extract")}
               class="text-secondary font-medium cursor-pointer hover:text-foreground"
@@ -400,7 +400,7 @@
               class="text-secondary font-medium cursor-pointer hover:text-foreground"
             >create one manually</button>.
           {:else}
-            Output will be generic.
+            Output won't carry your voice.
             <button
               onclick={() => emit("navigate", "profiles")}
               class="text-secondary font-medium cursor-pointer hover:text-foreground"
@@ -454,6 +454,7 @@
               onclick={handleCopy}
               class="w-8 h-8 flex items-center justify-center border border-border hover:border-secondary transition-colors cursor-pointer rounded-md"
               title={copied ? "Copied" : "Copy voiced"}
+              aria-label={copied ? "Copied" : "Copy voiced"}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted">
                 {#if copied}
@@ -526,6 +527,7 @@
               onclick={handleCopy}
               class="w-8 h-8 flex items-center justify-center border border-border hover:border-secondary transition-colors cursor-pointer rounded-md"
               title={copied ? "Copied" : "Copy"}
+              aria-label={copied ? "Copied" : "Copy"}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted">
                 {#if copied}

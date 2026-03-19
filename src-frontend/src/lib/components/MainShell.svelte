@@ -18,6 +18,7 @@
     canRetry as canRetryExtraction,
   } from "$lib/stores/extraction.svelte";
   import GenerateView from "./GenerateView.svelte";
+  import RepurposeView from "./RepurposeView.svelte";
   import ChatView from "./ChatView.svelte";
   import SettingsView from "./SettingsView.svelte";
   import ProfilesView from "./ProfilesView.svelte";
@@ -29,7 +30,7 @@
   import ToastContainer from "./ToastContainer.svelte";
   import { toastWarning } from "$lib/stores/toast.svelte";
 
-  type View = "generate" | "chat" | "profiles" | "extract" | "account" | "settings" | "onboarding";
+  type View = "generate" | "repurpose" | "chat" | "profiles" | "extract" | "account" | "settings" | "onboarding";
   let view: View = $state("generate");
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
@@ -37,6 +38,7 @@
 
   const navItems: { id: View; label: string; icon: string }[] = [
     { id: "generate", label: "Weave", icon: "pen" },
+    // { id: "repurpose", label: "Repurpose", icon: "refresh" },
     { id: "chat", label: "Chat", icon: "chat" },
     { id: "profiles", label: "Profiles", icon: "user" },
     { id: "extract", label: "Extract", icon: "wand" },
@@ -54,7 +56,7 @@
 
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
-      if (["generate", "chat", "profiles", "extract", "account", "settings"].includes(target)) {
+      if (["generate", "repurpose", "chat", "profiles", "extract", "account", "settings"].includes(target)) {
         view = target;
       }
     }).then((fn) => cleanups.push(fn));
@@ -145,6 +147,10 @@
                 <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
                 </svg>
+              {:else if item.icon === "refresh"}
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/>
+                </svg>
               {:else if item.icon === "chat"}
                 <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
@@ -154,8 +160,8 @@
                   <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
               {:else if item.icon === "wand"}
-                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path d="M15 4V2M15 16v-2M8 9h10M8 5h2m-2 8h2m4 6l-6-6 6-6"/>
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>
                 </svg>
               {:else if item.icon === "badge"}
                 <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -259,6 +265,8 @@
         <div class="flex-1 min-h-0 max-w-3xl mx-auto w-full">
           {#if view === "generate"}
             <GenerateView />
+          {:else if view === "repurpose"}
+            <RepurposeView />
           {:else if view === "chat"}
             <ChatView />
           {:else if view === "profiles"}
