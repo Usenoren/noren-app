@@ -205,6 +205,7 @@ fn main() {
             commands::get_thinking_settings,
             commands::set_thinking_settings,
             commands::chat_send,
+            commands::chat_send_stream,
             commands::save_chat,
             commands::list_chats,
             commands::load_chat,

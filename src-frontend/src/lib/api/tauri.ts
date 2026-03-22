@@ -557,6 +557,17 @@ export async function chatSend(params: {
   return invoke("chat_send", params);
 }
 
+/** Start a streaming chat response. Events: chat:chunk, chat:done. */
+export async function chatSendStream(params: {
+  messages: ChatMessage[];
+  format: string;
+  attachments?: string[];
+  chatId?: string;
+  chatTitle?: string;
+}): Promise<void> {
+  return invoke("chat_send_stream", params);
+}
+
 export async function saveChat(conversation: Conversation): Promise<void> {
   return invoke("save_chat", { conversation });
 }

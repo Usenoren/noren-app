@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Emitter, State, Window};
 
 use crate::AppState;
 use super::generate::GenerateResult;
@@ -189,6 +189,100 @@ pub async fn chat_send(
         routed_model: None,
         route_reason: None,
     })
+}
+
+#[derive(Clone, Serialize)]
+struct ChatChunk { text: String }
+
+#[derive(Clone, Serialize)]
+struct ChatDone { content: String, input_tokens: u64, output_tokens: u64 }
+
+#[tauri::command]
+pub async fn chat_send_stream(
+    window: Window,
+    state: State<'_, AppState>,
+    messages: Vec<ChatMessage>,
+    format: String,
+    attachments: Option<Vec<String>>,
+    chat_id: Option<String>,
+    chat_title: Option<String>,
+) -> Result<(), String> {
+    let config = state.config.lock().unwrap().clone();
+
+    let (core_identity, contexts) = noren_engine::load_profile(&config.profile_dir)
+        .unwrap_or_else(|_| (String::new(), std::collections::HashMap::new()));
+    let context_layer = contexts.get(&format);
+    let system_prompt = build_chat_system_prompt(&core_identity, context_layer.map(String::as_str));
+
+    let mut llm_messages = vec![noren_engine::LlmMessage {
+        role: noren_engine::Role::System,
+        content: system_prompt,
+    }];
+
+    let last_user_idx = messages.iter().rposition(|m| m.role == "user");
+    for (i, msg) in messages.iter().enumerate() {
+        let role = match msg.role.as_str() {
+            "assistant" => noren_engine::Role::Assistant,
+            _ => noren_engine::Role::User,
+        };
+        let content = if Some(i) == last_user_idx {
+            if let Some(ref atts) = attachments {
+                if !atts.is_empty() {
+                    let mut parts: Vec<String> = atts.iter().enumerate()
+                        .map(|(j, att)| format!("[Attached file {}]\n{}", j + 1, att)).collect();
+                    parts.push(msg.content.clone());
+                    parts.join("\n\n")
+                } else { msg.content.clone() }
+            } else { msg.content.clone() }
+        } else { msg.content.clone() };
+        llm_messages.push(noren_engine::LlmMessage { role, content });
+    }
+
+    let thinking = if config.extended_thinking {
+        Some(noren_engine::ThinkingConfig { budget_tokens: config.thinking_budget })
+    } else { None };
+
+    let use_cache = config.provider.provider_type == noren_engine::ProviderType::Anthropic;
+    let options = noren_engine::LlmOptions {
+        temperature: Some(0.7),
+        max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
+        thinking, cache: if use_cache { Some(true) } else { None },
+        chat_id, chat_title,
+    };
+
+    let client: Box<dyn noren_engine::LlmClient> =
+        if config.inference_mode == noren_engine::InferenceMode::NorenPro {
+            let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai").to_string();
+            let auth_token = crate::keychain::get_api_key("noren-pro-token")
+                .ok_or("Not logged in to Noren Pro.")?;
+            let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+            let mut proxy = noren_engine::NorenProxyClient::new(server_url, auth_token, format);
+            if let Some(rt) = refresh_token {
+                proxy = proxy.with_token_refresh(rt, |a, r| {
+                    let _ = crate::keychain::store_api_key("noren-pro-token", &a);
+                    let _ = crate::keychain::store_api_key("noren-pro-refresh", &r);
+                });
+            }
+            Box::new(proxy)
+        } else {
+            let api_key = if config.provider.requires_key {
+                crate::keychain::get_api_key(&config.provider.keychain_id())
+            } else { None };
+            noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
+        };
+
+    let w = window.clone();
+    let on_chunk: noren_engine::StreamCallback = Box::new(move |text: &str| {
+        let _ = w.emit("chat:chunk", ChatChunk { text: text.to_string() });
+    });
+
+    let response = client.stream_complete(&llm_messages, &options, on_chunk)
+        .await.map_err(|e| e.to_string())?;
+
+    let _ = window.emit("chat:done", ChatDone {
+        content: response.content, input_tokens: response.input_tokens, output_tokens: response.output_tokens,
+    });
+    Ok(())
 }
 
 fn validate_chat_id(id: &str) -> Result<(), String> {
