@@ -224,6 +224,98 @@ impl NorenProxyClient {
         })
     }
 
+    /// Stream generation with server-side prompt composition.
+    ///
+    /// Returns a reqwest Response with `text/event-stream` body.
+    /// Caller is responsible for reading SSE lines from the body.
+    pub async fn generate_server_composed_stream(
+        &self,
+        prompt: &str,
+        format: &str,
+        level: &str,
+        pipeline: Option<&str>,
+        generation_mode: Option<&str>,
+        context: Option<&str>,
+        attachments: Option<&[String]>,
+        options: &LlmOptions,
+    ) -> Result<reqwest::Response, EngineError> {
+        let url = format!("{}/v1/generate/", self.server_url);
+
+        #[derive(Serialize)]
+        struct StreamRequest {
+            prompt: String,
+            format: String,
+            level: String,
+            stream: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            mode: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            generation_mode: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            context: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            attachments: Option<Vec<String>>,
+            temperature: Option<f64>,
+            max_tokens: Option<u32>,
+        }
+
+        let req = StreamRequest {
+            prompt: prompt.to_string(),
+            format: format.to_string(),
+            level: level.to_string(),
+            stream: true,
+            mode: pipeline.map(|s| s.to_string()),
+            generation_mode: generation_mode.map(|s| s.to_string()),
+            context: context.map(|s| s.to_string()),
+            attachments: attachments.map(|a| a.to_vec()),
+            temperature: options.temperature,
+            max_tokens: options.max_tokens,
+        };
+
+        let mut auth = format!("Bearer {}", self.auth_token);
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", &auth)
+            .json(&req)
+            .send()
+            .await
+            .map_err(|e| EngineError::Network(e.to_string()))?;
+
+        // Handle 401 with token refresh
+        if resp.status().as_u16() == 401 {
+            if let Some(new_token) = self.try_refresh().await {
+                auth = format!("Bearer {}", new_token);
+                let retry = self
+                    .http
+                    .post(&url)
+                    .header("Authorization", &auth)
+                    .json(&req)
+                    .send()
+                    .await
+                    .map_err(|e| EngineError::Network(e.to_string()))?;
+                if retry.status().is_success() {
+                    return Ok(retry);
+                }
+            }
+            return Err(EngineError::Network(
+                "Session expired. Please sign in again.".to_string(),
+            ));
+        }
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            if let Ok(err) = serde_json::from_str::<ErrorDetail>(&body) {
+                return Err(EngineError::Network(err.detail));
+            }
+            return Err(EngineError::Network(format!("Server error ({}): {}", status, body)));
+        }
+
+        Ok(resp)
+    }
+
     /// Fetch current usage from server.
     pub async fn get_usage(&self) -> Result<(u64, u64, u64), EngineError> {
         let url = format!("{}/v1/generate/usage", self.server_url);

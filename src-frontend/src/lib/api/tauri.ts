@@ -6,6 +6,11 @@ export interface GenerateResult {
   output_tokens: number;
 }
 
+export interface FixSpan {
+  start: number;
+  end: number;
+}
+
 export interface ProviderConfig {
   name: string;
   type: "anthropic" | "openai_compatible";
@@ -42,6 +47,20 @@ export async function generate(params: {
   attachments?: string[];
 }): Promise<GenerateResult> {
   return invoke("generate", params);
+}
+
+/** Start a streaming generation. Events arrive via Tauri event listeners:
+ *  gen:delta, gen:done, gen:cleanup_start, gen:cleanup_done, gen:error.
+ *  For BYOK, falls back to blocking generate and emits a single gen:done. */
+export async function generateStream(params: {
+  prompt: string;
+  format: string;
+  level: string;
+  mode?: "generate" | "adapt";
+  context?: string;
+  attachments?: string[];
+}): Promise<void> {
+  return invoke("generate_stream", params);
 }
 
 export async function getContextText(): Promise<string | null> {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use serde::Serialize;
-use tauri::State;
+use serde::{Deserialize, Serialize};
+use tauri::{Emitter, State, Window};
 
 use crate::AppState;
 
@@ -461,6 +461,175 @@ pub async fn generate_comparison(
         with_voice,
         without_voice,
     })
+}
+
+/// SSE event payloads emitted to the frontend window.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum StreamEvent {
+    #[serde(rename = "delta")]
+    Delta { text: String },
+    #[serde(rename = "done")]
+    Done {
+        content: String,
+        input_tokens: u64,
+        output_tokens: u64,
+        model: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        route_reason: Option<String>,
+    },
+    #[serde(rename = "cleanup_start")]
+    CleanupStart,
+    #[serde(rename = "cleanup_done")]
+    CleanupDone {
+        content: String,
+        issues_found: u32,
+        issues_fixed: u32,
+        fix_spans: Vec<FixSpan>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        checks: Option<serde_json::Value>,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FixSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
+/// Streaming generation for Pro mode. Emits events to the frontend window:
+/// gen:delta, gen:done, gen:cleanup_start, gen:cleanup_done, gen:error.
+///
+/// BYOK path falls through to blocking generate (no streaming).
+#[tauri::command]
+pub async fn generate_stream(
+    window: Window,
+    state: State<'_, AppState>,
+    prompt: String,
+    format: String,
+    level: String,
+    mode: Option<String>,
+    context: Option<String>,
+    attachments: Option<Vec<String>>,
+) -> Result<(), String> {
+    let config = state.config.lock().unwrap().clone();
+
+    if config.inference_mode != noren_engine::InferenceMode::NorenPro {
+        // BYOK: fall back to blocking generate, emit done event
+        let result = generate(
+            state, prompt, format, level, mode, None, context, attachments,
+        )
+        .await?;
+        let _ = window.emit(
+            "gen:done",
+            serde_json::json!({
+                "type": "done",
+                "content": result.text,
+                "input_tokens": result.input_tokens,
+                "output_tokens": result.output_tokens,
+                "model": "byok"
+            }),
+        );
+        return Ok(());
+    }
+
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai")
+        .to_string();
+    let auth_token = crate::keychain::get_api_key("noren-pro-token")
+        .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
+    let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+    let mut client =
+        noren_engine::NorenProxyClient::new(server_url, auth_token, format.clone());
+    if let Some(rt) = refresh_token {
+        client = client.with_token_refresh(rt, |new_access, new_refresh| {
+            let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+            let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+        });
+    }
+
+    let pipeline_str = "internalized";
+    let generation_mode = match mode.as_deref() {
+        Some("adapt") => Some("adapt"),
+        _ => Some("generate"),
+    };
+    let options = noren_engine::LlmOptions {
+        temperature: Some(0.7),
+        max_tokens: None,
+        thinking: None,
+        ..Default::default()
+    };
+
+    let resp = client
+        .generate_server_composed_stream(
+            &prompt,
+            &format,
+            &level,
+            Some(pipeline_str),
+            generation_mode,
+            context.as_deref(),
+            attachments.as_deref(),
+            &options,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Read SSE stream line by line
+    use futures_util::StreamExt;
+    let mut stream = resp.bytes_stream();
+    let mut buffer = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        // Process complete SSE events (separated by \n\n)
+        while let Some(pos) = buffer.find("\n\n") {
+            let event_str = buffer[..pos].to_string();
+            buffer = buffer[pos + 2..].to_string();
+
+            let trimmed = event_str.trim();
+            if !trimmed.starts_with("data: ") {
+                continue;
+            }
+            let json_str = &trimmed[6..];
+
+            match serde_json::from_str::<StreamEvent>(json_str) {
+                Ok(event) => {
+                    let event_name = match &event {
+                        StreamEvent::Delta { .. } => "gen:delta",
+                        StreamEvent::Done { .. } => "gen:done",
+                        StreamEvent::CleanupStart => "gen:cleanup_start",
+                        StreamEvent::CleanupDone { .. } => "gen:cleanup_done",
+                        StreamEvent::Error { .. } => "gen:error",
+                    };
+                    let _ = window.emit(event_name, &event);
+                }
+                Err(_) => {
+                    // Try as raw JSON value for forward compatibility
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                        if let Some(t) = val.get("type").and_then(|t| t.as_str()) {
+                            let event_name = match t {
+                                "delta" => "gen:delta",
+                                "done" => "gen:done",
+                                "cleanup_start" => "gen:cleanup_start",
+                                "cleanup_done" => "gen:cleanup_done",
+                                "error" => "gen:error",
+                                _ => continue,
+                            };
+                            let _ = window.emit(event_name, &val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

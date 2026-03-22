@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, type GenerateResult, type ComparisonResult } from "$lib/api/tauri";
+  import { generate, generateStream, generateComparison, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, type GenerateResult, type ComparisonResult, type FixSpan } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
   import { isFree, canExtract } from "$lib/stores/subscription.svelte";
@@ -26,7 +26,6 @@
   let comparison = $state<ComparisonResult | null>(null);
   let compareMode = $state(false);
   let mode: "generate" | "adapt" = $state("generate");
-  let isGenerating = $state(false);
   let error = $state("");
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
   let hasProfileLocal = $state(true);
@@ -36,6 +35,14 @@
   let showCompareLock = $state(false);
   let dismissedEmpty = $state(false);
   let editedText = $state("");
+
+  // --- Streaming state (ready for Pro streaming, currently wraps blocking call) ---
+  let phase = $state<"idle" | "streaming" | "polishing" | "done">("idle");
+  let streamedText = $state("");
+  let cleanedText = $state("");
+  let fixSpans = $state<FixSpan[]>([]);
+  let cleanupStats = $state<{ found: number; fixed: number } | null>(null);
+  let isGenerating = $derived(phase === "streaming" || phase === "polishing");
 
   // --- Init ---
   $effect(() => {
@@ -93,17 +100,22 @@
   async function handleGenerate() {
     if (!prompt.trim() || isGenerating) return;
 
-    isGenerating = true;
+    phase = "streaming";
     error = "";
     output = null;
     comparison = null;
+    streamedText = "";
+    cleanedText = "";
+    fixSpans = [];
+    cleanupStats = null;
 
-    try {
-      const attachmentContents = attachedFiles.length > 0
-        ? attachedFiles.map((f) => f.content)
-        : undefined;
+    const attachmentContents = attachedFiles.length > 0
+      ? attachedFiles.map((f) => f.content)
+      : undefined;
 
-      if (compareMode) {
+    // Compare mode: non-streaming
+    if (compareMode) {
+      try {
         comparison = await generateComparison({
           prompt: prompt.trim(),
           format,
@@ -111,31 +123,99 @@
           attachments: attachmentContents,
         });
         output = comparison.with_voice;
-      } else {
-        output = await generate({
-          prompt: prompt.trim(),
-          format,
-          level,
-          mode: mode !== "generate" ? mode : undefined,
-          context: contextText || undefined,
-          attachments: attachmentContents,
-        });
-      }
-      if (output) {
         editedText = output.text;
+      } catch (e) {
+        error = friendlyError(e);
+      } finally {
+        phase = output ? "done" : "idle";
+      }
+      return;
+    }
+
+    // Streaming generation via Tauri events
+    const cleanups: (() => void)[] = [];
+    let cleanupTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      // Set up event listeners before starting the stream
+      const deltaUn = await listen<{ text: string }>("gen:delta", (e) => {
+        streamedText += e.payload.text;
+      });
+      cleanups.push(deltaUn);
+
+      const doneUn = await listen<{ content: string; input_tokens: number; output_tokens: number }>("gen:done", (e) => {
+        streamedText = e.payload.content;
+        // Graceful degradation: if no cleanup event within 2s, finalize
+        cleanupTimeout = setTimeout(() => {
+          if (phase === "streaming") {
+            output = { text: streamedText, input_tokens: e.payload.input_tokens, output_tokens: e.payload.output_tokens };
+            editedText = streamedText;
+            phase = "done";
+            weaveComplete = true;
+            setTimeout(() => { weaveComplete = false; }, 1000);
+          }
+        }, 2000);
+      });
+      cleanups.push(doneUn);
+
+      const cleanupStartUn = await listen("gen:cleanup_start", () => {
+        if (cleanupTimeout) clearTimeout(cleanupTimeout);
+        phase = "polishing";
+      });
+      cleanups.push(cleanupStartUn);
+
+      const cleanupDoneUn = await listen<{
+        content: string; issues_found: number; issues_fixed: number;
+        fix_spans: FixSpan[]; checks: unknown;
+      }>("gen:cleanup_done", (e) => {
+        if (cleanupTimeout) clearTimeout(cleanupTimeout);
+        cleanedText = e.payload.content;
+        fixSpans = e.payload.fix_spans || [];
+        cleanupStats = { found: e.payload.issues_found, fixed: e.payload.issues_fixed };
+        // Use done event tokens if available, otherwise estimate
+        const tokens = output ? { input: output.input_tokens, output: output.output_tokens } : { input: 0, output: 0 };
+        output = { text: e.payload.content, input_tokens: tokens.input, output_tokens: tokens.output };
+        editedText = e.payload.content;
+        phase = "done";
         weaveComplete = true;
         setTimeout(() => { weaveComplete = false; }, 1000);
-        try {
-          await navigator.clipboard.writeText(output.text);
-          copied = true;
-        } catch {
-          // Clipboard API may not be available in Tauri webview
-        }
+        try { navigator.clipboard.writeText(e.payload.content); copied = true; } catch {}
+      });
+      cleanups.push(cleanupDoneUn);
+
+      const errorUn = await listen<{ message: string }>("gen:error", (e) => {
+        error = e.payload.message;
+        phase = "idle";
+      });
+      cleanups.push(errorUn);
+
+      // Start the stream (resolves when stream ends)
+      await generateStream({
+        prompt: prompt.trim(),
+        format,
+        level,
+        mode: mode !== "generate" ? mode : undefined,
+        context: contextText || undefined,
+        attachments: attachmentContents,
+      });
+
+      // If stream ended without reaching done (edge case), finalize
+      if (phase === "streaming" && streamedText) {
+        if (cleanupTimeout) clearTimeout(cleanupTimeout);
+        output = { text: streamedText, input_tokens: 0, output_tokens: 0 };
+        editedText = streamedText;
+        phase = "done";
+        weaveComplete = true;
+        setTimeout(() => { weaveComplete = false; }, 1000);
+      } else if (phase === "streaming") {
+        phase = "idle";
       }
     } catch (e) {
       error = friendlyError(e);
+      phase = "idle";
     } finally {
-      isGenerating = false;
+      cleanups.forEach((fn) => fn());
+      if (cleanupTimeout) clearTimeout(cleanupTimeout);
     }
   }
 
@@ -147,7 +227,8 @@
       return;
     }
 
-    isGenerating = true;
+    const prevPhase = phase;
+    phase = "streaming";
     error = "";
 
     try {
@@ -158,10 +239,10 @@
         attachments: attachedFiles.length > 0 ? attachedFiles.map((f) => f.content) : undefined,
       });
       compareMode = true;
+      phase = "done";
     } catch (e) {
       error = friendlyError(e);
-    } finally {
-      isGenerating = false;
+      phase = prevPhase;
     }
   }
 
@@ -416,7 +497,7 @@
 
     <!-- Output area -->
     <div class="flex-1 min-h-0 overflow-y-auto px-4">
-      {#if !comparison && !output}
+      {#if phase === "idle" && !comparison && !output}
         <div class="h-full flex flex-col items-center justify-center gap-5">
           <img src={loomIdleUrl} alt="" class="w-[170px] opacity-50" />
           <div class="flex flex-col items-center gap-1.5">

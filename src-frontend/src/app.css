@@ -645,6 +645,106 @@ button {
   animation: thread-draw 0.5s ease-out forwards;
 }
 
+/* --- Streaming generation --- */
+.stream-progress {
+  height: 2px;
+  background: var(--color-border);
+  position: relative;
+  z-index: 1;
+}
+.stream-progress-fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.3s linear;
+}
+.stream-progress-fill.complete {
+  width: 100% !important;
+  transition: width 0.2s ease;
+}
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--color-muted);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s step-end infinite;
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.stream-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.stream-status-dot.generating {
+  background: var(--color-muted);
+  animation: status-pulse 1.8s ease-in-out infinite;
+}
+.stream-status-dot.polishing {
+  background: var(--color-accent);
+  animation: status-pulse-accent 0.8s ease-in-out infinite;
+}
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@keyframes status-pulse-accent {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+.stream-text-dim {
+  opacity: 0.35;
+  filter: blur(1px);
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+.polish-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.polish-overlay.visible { opacity: 1; }
+.polish-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent);
+  border-radius: 100px;
+  padding: 8px 16px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.15), 0 0 24px var(--color-accent-glow);
+}
+.polish-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--color-accent);
+  border-right-color: var(--color-accent);
+  border-radius: 50%;
+  animation: polish-spin 0.8s linear infinite;
+}
+@keyframes polish-spin {
+  to { transform: rotate(360deg); }
+}
+.rhythm-fix {
+  border-radius: 2px;
+  padding: 1px 0;
+  transition: background 0.6s ease, box-shadow 0.6s ease;
+}
+.rhythm-fix.glow {
+  background: var(--color-accent-wash);
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
 /* Voice badge */
 .voice-badge {
   display: inline-flex;

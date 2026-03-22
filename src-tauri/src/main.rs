@@ -137,6 +137,7 @@ fn main() {
             check_permissions,
             request_permissions,
             commands::generate,
+            commands::generate_stream,
             commands::list_formats,
             commands::get_config,
             commands::get_settings,
