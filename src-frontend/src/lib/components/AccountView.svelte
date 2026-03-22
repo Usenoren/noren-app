@@ -30,6 +30,7 @@
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   let settings = $state<SettingsInfo | null>(null);
+  let accountReady = $state(false);
   let proEmail = $state("");
   let proPassword = $state("");
   let proLoading = $state(false);
@@ -60,10 +61,11 @@
   });
 
   async function loadAccount() {
+    accountReady = false;
     try {
-      settings = await getSettings();
+      const s = await getSettings();
 
-      if (settings.noren_pro_logged_in) {
+      if (s.noren_pro_logged_in) {
         try {
           proStatus = await getNorenProUsage();
           try {
@@ -76,17 +78,21 @@
           try {
             await norenProLogout();
             settings = await getSettings();
+            accountReady = true;
           } catch { /* ignore */ }
           proStatus = null;
           subscription = null;
+          return;
         }
       } else {
         proStatus = null;
         subscription = null;
       }
+      settings = s;
     } catch (e) {
       error = friendlyError(e);
     }
+    accountReady = true;
   }
 
   async function handleProAuth() {
@@ -330,7 +336,7 @@
   </div>
 
   <div class="flex-1 flex flex-col gap-5 px-6 pb-6">
-  {#if !settings}
+  {#if !accountReady}
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner />
     </div>

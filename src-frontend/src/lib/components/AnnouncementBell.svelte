@@ -9,11 +9,18 @@
   let announcements: Announcement[] = $state([]);
   let lastSeen: string | null = $state(null);
   let open = $state(false);
+  let showAll = $state(false);
+
+  const VISIBLE_COUNT = 5;
 
   const unreadCount = $derived(
     lastSeen
       ? announcements.filter(a => a.published_at > lastSeen!).length
       : announcements.length
+  );
+
+  const visibleAnnouncements = $derived(
+    showAll ? announcements : announcements.slice(0, VISIBLE_COUNT)
   );
 
   function typeColor(type: string): string {
@@ -33,6 +40,9 @@
 
   async function handleOpen() {
     open = !open;
+    if (!open) {
+      showAll = false;
+    }
     if (open && announcements.length > 0) {
       const latest = announcements[0].published_at;
       lastSeen = latest;
@@ -71,11 +81,11 @@
 <div class="announcement-bell relative">
   <button
     onclick={handleOpen}
-    class="relative p-1 rounded transition-colors cursor-pointer hover:bg-white/[0.08] {unreadCount > 0 ? 'bell-breathe' : ''}"
+    class="relative p-1 rounded transition-colors cursor-pointer hover:bg-foreground/[0.08] {unreadCount > 0 ? 'bell-breathe' : ''}"
     title="Announcements"
   >
     <svg class="w-[14px] h-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-      style="color:rgba(255,255,255,{unreadCount > 0 ? '0.85' : '0.2'})">
+      style="color:var(--color-muted);opacity:{unreadCount > 0 ? '0.85' : '0.35'}">
       <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
     </svg>
     {#if unreadCount > 0}
@@ -93,7 +103,7 @@
         <h3 class="text-[10px] font-semibold uppercase tracking-wider text-muted">What's New</h3>
       </div>
       <div class="flex flex-col">
-        {#each announcements as a}
+        {#each visibleAnnouncements as a}
           <div class="p-2.5 border-b border-border/50 last:border-0 {lastSeen && a.published_at > lastSeen ? 'bg-accent/[0.03]' : ''}">
             <div class="flex items-center gap-1.5 mb-1">
               <span class="text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded-full {typeColor(a.type)}">
@@ -119,6 +129,14 @@
             {/if}
           </div>
         {/each}
+        {#if !showAll && announcements.length > VISIBLE_COUNT}
+          <button
+            onclick={() => { showAll = true; }}
+            class="p-2 text-[10px] text-muted hover:text-foreground text-center cursor-pointer"
+          >
+            Show {announcements.length - VISIBLE_COUNT} older
+          </button>
+        {/if}
       </div>
     </div>
   {/if}

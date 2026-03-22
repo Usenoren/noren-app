@@ -78,17 +78,11 @@ export async function startQueue(formats: { samples: string; format: string; cal
       await startExtractionMulti({ formatGroups });
     }
 
-    // Wait for completion via event listener (5-min timeout)
+    // Wait for completion via event listener — no client-side timeout.
+    // The server manages its own timeouts and will emit a failure event
+    // if extraction takes too long (assembly stage can exceed 30 minutes).
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        if (resolveCurrentJob) {
-          error = "Extraction timed out. Check your connection and try again.";
-          resolveCurrentJob = null;
-          resolve();
-        }
-      }, 5 * 60 * 1000);
       resolveCurrentJob = () => {
-        clearTimeout(timer);
         resolve();
       };
     });

@@ -323,7 +323,7 @@ impl ServerExtractionClient {
 
         // Step 2: Poll for completion (uses authed_get for automatic token refresh)
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
             let poll_url = format!("{}/v1/extract/{}", self.server_url, job_id);
             let resp = self.authed_get(&poll_url).await?;
