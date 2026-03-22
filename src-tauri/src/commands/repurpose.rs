@@ -202,7 +202,7 @@ async fn repurpose_pro(
 
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{}/v1/repurpose", server_url))
+        .post(format!("{}/v1/repurpose/", server_url))
         .json(&body)
         .header("Authorization", format!("Bearer {}", auth_token))
         .send()
@@ -233,7 +233,7 @@ async fn repurpose_pro(
 
                 // Retry with new token
                 let retry_resp = client
-                    .post(format!("{}/v1/repurpose", server_url))
+                    .post(format!("{}/v1/repurpose/", server_url))
                     .json(&body)
                     .header("Authorization", format!("Bearer {}", new_access))
                     .send()
