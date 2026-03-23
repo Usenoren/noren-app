@@ -514,6 +514,7 @@ pub async fn generate_stream(
     context: Option<String>,
     attachments: Option<Vec<String>>,
 ) -> Result<(), String> {
+    eprintln!("[generate_stream] called: prompt={:?} format={}", &prompt[..prompt.len().min(30)], format);
     let config = state.config.lock().unwrap().clone();
 
     if config.inference_mode != noren_engine::InferenceMode::NorenPro {

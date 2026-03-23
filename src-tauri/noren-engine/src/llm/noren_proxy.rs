@@ -84,7 +84,10 @@ impl NorenProxyClient {
             server_url: server_url.trim_end_matches('/').to_string(),
             auth_token,
             format,
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .pool_max_idle_per_host(0)
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
             refresh_token: None,
             on_tokens_refreshed: None,
         }

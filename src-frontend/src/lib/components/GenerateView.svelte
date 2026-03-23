@@ -145,16 +145,12 @@
 
       const doneUn = await listen<{ content: string; input_tokens: number; output_tokens: number }>("gen:done", (e) => {
         streamedText = e.payload.content;
-        // Graceful degradation: if no cleanup event within 2s, finalize
-        cleanupTimeout = setTimeout(() => {
-          if (phase === "streaming") {
-            output = { text: streamedText, input_tokens: e.payload.input_tokens, output_tokens: e.payload.output_tokens };
-            editedText = streamedText;
-            phase = "done";
-            weaveComplete = true;
-            setTimeout(() => { weaveComplete = false; }, 1000);
-          }
-        }, 2000);
+        output = { text: streamedText, input_tokens: e.payload.input_tokens, output_tokens: e.payload.output_tokens };
+        editedText = streamedText;
+        phase = "done";
+        weaveComplete = true;
+        setTimeout(() => { weaveComplete = false; }, 1000);
+        try { navigator.clipboard.writeText(streamedText); copied = true; } catch {}
       });
       cleanups.push(doneUn);
 
@@ -189,8 +185,9 @@
       });
       cleanups.push(errorUn);
 
-      // Start the stream (resolves when stream ends)
-      await generateStream({
+      // Start the stream. Race with a timeout so we don't hang forever
+      // if the SSE connection doesn't close cleanly.
+      const streamPromise = generateStream({
         prompt: prompt.trim(),
         format,
         level,
@@ -198,6 +195,10 @@
         context: contextText || undefined,
         attachments: attachmentContents,
       });
+      const timeoutPromise = new Promise<void>((resolve) => {
+        setTimeout(resolve, 300_000); // 5 min max
+      });
+      await Promise.race([streamPromise, timeoutPromise]);
 
       // If stream ended without reaching done (edge case), finalize
       if (phase === "streaming" && streamedText) {
