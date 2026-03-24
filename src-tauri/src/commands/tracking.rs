@@ -1,3 +1,7 @@
+// AUDIT TAG: Dead code. This module is not imported in mod.rs.
+// living_profile.rs defines its own log_edit that is actually used.
+// CTO decision needed: clear or keep. See audit 2026-03-24.
+
 use noren_engine::{EditEntry, EditLogger, EditStats};
 use tauri::State;
 

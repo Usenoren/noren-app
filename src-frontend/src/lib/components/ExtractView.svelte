@@ -15,6 +15,7 @@
     createCheckout,
     scrapeTwitter,
     scrapeBlog,
+    exportProfile,
     type FormatGroup,
   } from "../api/tauri";
   import {
@@ -102,6 +103,37 @@
 
   let canScrape = $derived(SCRAPABLE_FORMATS.includes(FORMAT_STEPS[currentStep].format));
 
+  // --- Draft persistence ---
+  const EXTRACT_DRAFT_KEY = "noren:extract_draft";
+
+  function saveExtractDraft() {
+    try {
+      localStorage.setItem(EXTRACT_DRAFT_KEY, JSON.stringify({
+        viewState, currentStep, formatSamples, currentInput, scrapeInfoMap,
+      }));
+    } catch {}
+  }
+
+  function loadExtractDraft(): boolean {
+    try {
+      const raw = localStorage.getItem(EXTRACT_DRAFT_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      const resumable = ["inputMethod", "pasteStep", "review"];
+      if (!resumable.includes(d.viewState)) return false;
+      viewState = d.viewState;
+      currentStep = d.currentStep || 0;
+      formatSamples = d.formatSamples || {};
+      currentInput = d.currentInput || "";
+      scrapeInfoMap = d.scrapeInfoMap || {};
+      return true;
+    } catch { return false; }
+  }
+
+  function clearExtractDraft() {
+    localStorage.removeItem(EXTRACT_DRAFT_KEY);
+  }
+
   const statusLabels: Record<string, string> = {
     pending: "Starting extraction...",
     preprocessing: "Preprocessing samples...",
@@ -121,6 +153,12 @@
 
   onMount(() => {
     checkAccess();
+  });
+
+  // Auto-save draft
+  $effect(() => {
+    void [viewState, currentStep, formatSamples, currentInput, scrapeInfoMap];
+    saveExtractDraft();
   });
 
   // Watch extraction store for completion
@@ -188,7 +226,9 @@
 
     // Check if user can extract (Pro or has valid local receipt)
     if (canExtract() || isPro()) {
-      viewState = "inputMethod";
+      if (!loadExtractDraft()) {
+        viewState = "inputMethod";
+      }
       return;
     }
 
@@ -330,8 +370,10 @@
   }
 
   function startPasteFlow() {
-    formatSamples = {};
-    scrapeInfoMap = {};
+    // Only reset if no existing samples (preserve draft)
+    if (Object.keys(formatSamples).length === 0) {
+      scrapeInfoMap = {};
+    }
     enterStep(0);
     viewState = "pasteStep";
   }
@@ -364,8 +406,17 @@
     if (currentStep > 0) {
       enterStep(currentStep - 1);
     } else {
+      // Go back to entry screen but keep samples
       viewState = "inputMethod";
     }
+  }
+
+  function resetPasteFlow() {
+    formatSamples = {};
+    scrapeInfoMap = {};
+    currentStep = 0;
+    currentInput = "";
+    viewState = "inputMethod";
   }
 
   function goBackToStep(index: number) {
@@ -375,7 +426,15 @@
 
   function countSamples(text: string): number {
     if (!text.trim()) return 0;
-    return text.split(/\n\s*\n/).filter((s) => s.trim()).length;
+    // Match engine logic: split on === or --- separators
+    if (/^===.*$/m.test(text)) {
+      return text.split(/^===.*$/m).map(s => s.trim()).filter(s => s.length > 0).length;
+    }
+    if (/\n---\n/.test(text)) {
+      return text.split(/\n---\n/).map(s => s.trim()).filter(s => s.length > 0).length;
+    }
+    // No separators found — treat entire text as 1 sample
+    return 1;
   }
 
   function totalSamples(): number {
@@ -457,6 +516,7 @@
 
     error = "";
     viewState = "extracting";
+    clearExtractDraft();
 
     startQueue(groups);
   }
@@ -493,7 +553,7 @@
             Save a backup of your voice profile. If you lose it, you'll need to extract again.
           </p>
           <button
-            onclick={() => { /* TODO: export profile */ }}
+            onclick={async () => { try { await exportProfile(); } catch {} }}
             class="mt-2 text-[10px] text-secondary hover:text-primary transition-colors cursor-pointer"
           >
             Export profile
@@ -682,47 +742,89 @@
 
   {:else if viewState === "inputMethod"}
     <!-- Provide writing samples -->
-    <div class="flex-1 flex flex-col items-center justify-center gap-5">
-      <div class="text-center max-w-xs">
-        <p class="text-heading text-foreground">Provide your writing</p>
-        <p class="text-xs text-muted mt-2 leading-relaxed">We'll walk you through 5 format categories: tweets, emails, long-form, chat, and LinkedIn. Skip any you don't have.</p>
+    <div class="flex-1 flex flex-col items-center justify-center -m-4 overflow-hidden">
+      <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
+        <!-- Extraction emblem: thread panels with weaving weft -->
+        <svg class="w-[96px] h-[72px]" viewBox="0 0 96 72" fill="none">
+          <line x1="12" y1="20" x2="84" y2="20" stroke="var(--color-border)" stroke-width="0.75" opacity="0.4"/>
+          <line x1="8" y1="32" x2="88" y2="32" stroke="var(--color-border)" stroke-width="0.75" opacity="0.3"/>
+          <line x1="12" y1="44" x2="84" y2="44" stroke="var(--color-border)" stroke-width="0.75" opacity="0.4"/>
+          <path d="M16 26 C28 22, 36 30, 48 26 C60 22, 68 30, 80 26" stroke="var(--color-accent)" stroke-width="1.5" fill="none" opacity="0.25" stroke-linecap="round">
+            <animate attributeName="d" dur="6s" repeatCount="indefinite" values="M16 26 C28 22, 36 30, 48 26 C60 22, 68 30, 80 26;M16 28 C28 32, 36 24, 48 28 C60 32, 68 24, 80 28;M16 26 C28 22, 36 30, 48 26 C60 22, 68 30, 80 26"/>
+          </path>
+          <g style="animation: panel-sway 5s ease-in-out infinite; transform-origin: 32px 12px">
+            <rect x="28" y="14" width="8" height="40" rx="1" stroke="var(--color-primary)" stroke-width="0.6" fill="var(--color-tint)" opacity="0.25"/>
+          </g>
+          <g style="animation: panel-sway 5s 0.7s ease-in-out infinite; transform-origin: 48px 12px">
+            <rect x="44" y="12" width="8" height="46" rx="1" stroke="var(--color-primary)" stroke-width="0.6" fill="var(--color-tint)" opacity="0.3"/>
+          </g>
+          <g style="animation: panel-sway 5s 1.4s ease-in-out infinite; transform-origin: 64px 12px">
+            <rect x="60" y="16" width="8" height="36" rx="1" stroke="var(--color-primary)" stroke-width="0.6" fill="var(--color-tint)" opacity="0.25"/>
+          </g>
+          <circle cx="48" cy="32" r="2" fill="var(--color-accent)" opacity="0.3">
+            <animate attributeName="opacity" dur="2.5s" repeatCount="indefinite" values="0.2;0.4;0.2"/>
+          </circle>
+        </svg>
+
+        <div class="text-center max-w-[260px]">
+          <h2 class="font-heading text-[21px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
+            Provide your writing
+          </h2>
+          <p class="text-[11px] text-muted leading-[1.7] mt-3">
+            We'll walk you through five format categories. Paste what you have, skip what you don't.
+          </p>
+          <div class="flex gap-1.5 flex-wrap justify-center mt-2">
+            <span class="text-[10px] text-muted bg-tint px-2 py-0.5 rounded">tweets</span>
+            <span class="text-[10px] text-muted bg-tint px-2 py-0.5 rounded">emails</span>
+            <span class="text-[10px] text-muted bg-tint px-2 py-0.5 rounded">long-form</span>
+            <span class="text-[10px] text-muted bg-tint px-2 py-0.5 rounded">chat</span>
+            <span class="text-[10px] text-muted bg-tint px-2 py-0.5 rounded">linkedin</span>
+          </div>
+        </div>
+
+        <button
+          onclick={startPasteFlow}
+          class="px-7 py-2.5 text-[13px] font-semibold bg-accent text-white hover:bg-accent-hover transition-all duration-200 cursor-pointer rounded-lg hover:-translate-y-px"
+          style="box-shadow: 0 2px 8px var(--color-accent-glow)"
+        >
+          Get started
+        </button>
+
+        {#if error}
+          <p class="text-[10px] text-error">{error}</p>
+        {/if}
       </div>
-
-      <button
-        onclick={startPasteFlow}
-        class="btn-primary py-2.5 px-8"
-      >
-        Get started
-      </button>
-
-      {#if error}
-        <p class="text-[10px] text-error">{error}</p>
-      {/if}
     </div>
 
   {:else if viewState === "pasteStep"}
     <!-- Format-specific paste step -->
     {@const step = FORMAT_STEPS[currentStep]}
-    <div class="flex-1 flex flex-col gap-4 px-4">
+    <div class="flex-1 flex flex-col px-4 pt-4 pb-3" style="animation: view-enter 0.35s ease-out both">
       <!-- Progress bar -->
-      <div class="flex items-center gap-3">
-        <div class="flex gap-1 flex-1">
+      <div class="flex items-center gap-2.5 mb-4">
+        <div class="flex gap-[3px] flex-1">
           {#each FORMAT_STEPS as _, i}
             <div
-              class="flex-1 h-1 rounded-full transition-colors
-                {i <= currentStep || formatSamples[FORMAT_STEPS[i].format]
+              class="flex-1 h-[3px] rounded-full transition-all duration-300
+                {i < currentStep || (i !== currentStep && formatSamples[FORMAT_STEPS[i].format])
                   ? 'bg-accent'
-                  : 'bg-border'}"
+                  : i === currentStep
+                    ? 'bg-accent'
+                    : 'bg-border'}"
+              style={i === currentStep ? 'box-shadow: 0 0 6px var(--color-accent-glow)' : ''}
             ></div>
           {/each}
         </div>
-        <span class="text-micro text-muted shrink-0">{currentStep + 1}/{FORMAT_STEPS.length}</span>
+        <span class="text-[10px] text-muted shrink-0 tabular-nums">{currentStep + 1} / {FORMAT_STEPS.length}</span>
       </div>
 
       <!-- Step header -->
-      <div>
-        <h3 class="text-subhead text-foreground">{step.label}</h3>
-        <p class="text-xs text-muted mt-1.5 leading-relaxed">
+      <div class="mb-3.5">
+        <h3 class="text-[15px] font-heading italic font-normal text-foreground flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent shrink-0"></span>
+          {step.label}
+        </h3>
+        <p class="text-[11px] text-muted mt-1 leading-relaxed pl-3.5">
           {canScrape
             ? step.format === "twitter"
               ? "Fetch by username, or paste tweets below."
@@ -733,14 +835,14 @@
 
       <!-- Scrape section (scrapable formats only) -->
       {#if canScrape}
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 mb-3">
           {#if step.format === "twitter"}
             <input
               type="text"
               bind:value={scrapeHandle}
               placeholder="@username or profile link"
               disabled={isScraping}
-              class="input-field flex-1"
+              class="input-field flex-1 !py-[7px] !text-xs"
               onkeydown={(e) => { if (e.key === "Enter") handleScrapeTwitter(); }}
             />
           {:else}
@@ -749,14 +851,14 @@
               bind:value={scrapeUrl}
               placeholder="Blog URL or RSS feed"
               disabled={isScraping}
-              class="input-field flex-1"
+              class="input-field flex-1 !py-[7px] !text-xs"
               onkeydown={(e) => { if (e.key === "Enter") handleScrapeBlog(); }}
             />
           {/if}
           <button
             onclick={step.format === "twitter" ? handleScrapeTwitter : handleScrapeBlog}
             disabled={isScraping || (step.format === "twitter" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
-            class="btn-outline shrink-0"
+            class="btn-outline shrink-0 !text-[11px]"
           >
             {isScraping
               ? "Fetching..."
@@ -766,7 +868,7 @@
 
         <!-- Scrape feedback -->
         {#if isScraping}
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 mb-3">
             <LoadingSpinner />
             <span class="text-[11px] text-muted">
               {step.format === "twitter"
@@ -775,9 +877,9 @@
             </span>
           </div>
         {:else if scrapeError}
-          <p class="text-[11px] text-error">{scrapeError}</p>
+          <p class="text-[11px] text-error mb-3">{scrapeError}</p>
         {:else if scrapeInfoMap[step.format]}
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 mb-3">
             <svg class="w-3.5 h-3.5 text-signal shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
             </svg>
@@ -787,22 +889,25 @@
       {/if}
 
       <!-- Textarea -->
-      <div class="card-inset flex-1 flex flex-col p-1">
+      <div class="flex-1 flex flex-col bg-background border border-border rounded-[10px] p-0.5 min-h-0 transition-colors focus-within:border-secondary" style="box-shadow: var(--shadow-inset)">
         <textarea
           bind:value={currentInput}
-          class="flex-1 p-3 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[180px]"
+          class="flex-1 px-3 py-2.5 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[160px]"
           placeholder={canScrape
-            ? `Or paste your ${step.label.toLowerCase()} here, separated by blank lines...`
-            : `Paste your ${step.label.toLowerCase()} here, separated by blank lines...`}
+            ? `Or paste your ${step.label.toLowerCase()} here. Use === or --- on its own line between samples.`
+            : `Paste your ${step.label.toLowerCase()} here. Use === or --- on its own line between samples.`}
         ></textarea>
       </div>
 
       {#if currentInput.trim()}
-        <p class="text-[11px] text-muted text-right -mt-2">~{countSamples(currentInput)} samples</p>
+        <div class="flex items-center justify-end gap-1 pt-1.5 pb-0.5">
+          <span class="text-[11px] text-accent font-medium">~{countSamples(currentInput)}</span>
+          <span class="text-[11px] text-muted">samples detected</span>
+        </div>
       {/if}
 
       <!-- Navigation -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 pt-2 mt-2 border-t border-border">
         <button
           onclick={prevStep}
           class="btn-ghost"
@@ -827,73 +932,83 @@
 
   {:else if viewState === "review"}
     <!-- Review collected samples -->
-    <div class="flex-1 flex flex-col gap-5 px-4 max-w-md mx-auto w-full">
-      <div class="text-center">
+    <div class="flex-1 flex flex-col px-4 pt-5 pb-4 max-w-md mx-auto w-full animate-fade-in-up" style="animation-duration: 0.4s">
+      <div class="text-center mb-5">
         <h3 class="text-heading text-foreground">Review samples</h3>
-        <p class="text-xs text-muted mt-1.5 {totalSamples() >= 5 ? '' : 'text-warning'}">
-          {totalSamples()} sample{totalSamples() !== 1 ? "s" : ""} across {formatGroups().length} format{formatGroups().length !== 1 ? "s" : ""}
-        </p>
+        <div class="flex items-center justify-center gap-1.5 mt-1.5">
+          <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-accent px-2 py-0.5 rounded" style="background: var(--color-accent-wash)">
+            {totalSamples()} samples
+          </span>
+          <span class="text-[11px] {totalSamples() >= 5 ? 'text-muted' : 'text-warning'}">
+            across {formatGroups().length} format{formatGroups().length !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
 
       <!-- Format summary cards -->
-      <div class="flex flex-col gap-2">
+      <div class="flex flex-col gap-1.5 flex-1 overflow-y-auto">
         {#each FORMAT_STEPS as step, i}
           {@const text = formatSamples[step.format]}
           {@const count = text ? countSamples(text) : 0}
-          <div class="card-flat flex items-center justify-between px-4 py-3">
-            <div class="flex items-center gap-2.5">
+          <div
+            class="flex items-center justify-between px-3.5 py-2.5 bg-surface border border-border rounded-[10px] transition-all duration-150 hover:shadow-sm"
+            style={count > 0 ? 'border-left: 3px solid var(--color-accent)' : ''}
+          >
+            <div class="flex items-center gap-2">
               <span class="text-xs font-medium text-foreground">{step.label}</span>
               {#if scrapeInfoMap[step.format]}
-                <span class="text-micro text-muted">{scrapeInfoMap[step.format]}</span>
+                <span class="text-[9px] text-muted">{scrapeInfoMap[step.format]}</span>
               {/if}
             </div>
-            {#if count > 0}
-              <div class="flex items-center gap-3">
-                <span class="text-xs text-accent font-medium">{count} samples</span>
+            <div class="flex items-center gap-2">
+              {#if count > 0}
+                <span class="text-[11px] text-accent font-semibold">{count}</span>
                 <button
                   onclick={() => goBackToStep(i)}
-                  class="btn-ghost text-[11px]"
+                  class="btn-ghost !text-[11px] !py-1 !px-2"
                 >
                   Edit
                 </button>
-              </div>
-            {:else}
-              <div class="flex items-center gap-3">
-                <span class="text-[11px] text-muted/50 italic">skipped</span>
+              {:else}
+                <span class="text-[10px] text-muted/50 italic">skipped</span>
                 <button
                   onclick={() => goBackToStep(i)}
-                  class="btn-ghost text-[11px]"
+                  class="btn-ghost !text-[11px] !py-1 !px-2"
                 >
                   Add
                 </button>
-              </div>
-            {/if}
+              {/if}
+            </div>
           </div>
         {/each}
       </div>
 
       {#if error}
-        <p class="text-[11px] text-error text-center">{error}</p>
+        <p class="text-[11px] text-error text-center mt-3">{error}</p>
       {/if}
 
+      <!-- Accent thread divider -->
+      <div class="divider-thread my-4"></div>
+
       <!-- Extract CTA -->
-      <div class="flex flex-col items-center gap-3 pt-2">
+      <div class="flex flex-col items-center gap-2.5">
         <button
           onclick={handleExtract}
           disabled={totalSamples() < 5}
-          class="btn-primary w-full py-2.5 text-sm"
+          class="w-full py-3 text-[13px] font-semibold text-white bg-accent rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover hover:-translate-y-px relative overflow-hidden"
+          style="box-shadow: 0 2px 8px var(--color-accent-glow)"
         >
           Extract Voice Profile
         </button>
 
         {#if totalSamples() < 5}
-          <p class="text-[11px] text-muted text-center leading-relaxed">
+          <p class="text-[10px] text-muted text-center leading-relaxed">
             Need at least 5 samples. Go back and add more to any format.
           </p>
         {/if}
 
         <button
-          onclick={() => { viewState = "inputMethod"; }}
+          onclick={resetPasteFlow}
           class="btn-ghost text-[11px]"
         >
           Start over

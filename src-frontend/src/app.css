@@ -953,6 +953,16 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A847E' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
   }
 
+  /* Toggle knob — dark surfaces need dark knob */
+  .toggle::after {
+    background: #2B2725;
+  }
+
+  /* Ghost button hover — use light foreground overlay */
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(232,227,221,0.06);
+  }
+
   /* Idle loom weft drift */
   @keyframes idle-weft-drift {
     0%   { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }

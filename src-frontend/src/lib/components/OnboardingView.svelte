@@ -1,6 +1,6 @@
 <script lang="ts">
   import { emit } from "@tauri-apps/api/event";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     saveProfileEdit,
     getSettings,
@@ -43,6 +43,7 @@
   let otpLoading = $state(false);
   let otpMessage = $state("");
   let resendCooldown = $state(0);
+  let cooldownInterval: ReturnType<typeof setInterval> | null = null;
 
   // Guest checkout state
   let guestEmail = $state("");
@@ -103,6 +104,61 @@
 
   // Error display
   let error = $state("");
+
+  // --- Draft persistence ---
+  const STORAGE_KEY = "noren:onboarding_draft";
+
+  type OnboardingDraft = {
+    step: Step;
+    guidedAnswers: string[];
+    currentQuestion: number;
+    pairChoices: string[];
+    currentPair: number;
+    formatSamples: Record<string, string>;
+    currentFormatStep: number;
+    currentInput: string;
+    currentAnswer: string;
+    manualProfile: string;
+    scrapeInfoMap: Record<string, string>;
+  };
+
+  function saveDraft() {
+    try {
+      const draft: OnboardingDraft = {
+        step, guidedAnswers, currentQuestion, pairChoices, currentPair,
+        formatSamples, currentFormatStep, currentInput, currentAnswer,
+        manualProfile, scrapeInfoMap,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+    } catch {}
+  }
+
+  function loadDraft(): boolean {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const d: OnboardingDraft = JSON.parse(raw);
+      // Only restore if user was mid-flow (not on welcome/auth screens)
+      const resumable: Step[] = ["input-method", "paste", "review", "guided", "guided-pairs", "manual"];
+      if (!resumable.includes(d.step)) return false;
+      step = d.step;
+      guidedAnswers = d.guidedAnswers || [];
+      currentQuestion = d.currentQuestion || 0;
+      pairChoices = d.pairChoices || [];
+      currentPair = d.currentPair || 0;
+      formatSamples = d.formatSamples || {};
+      currentFormatStep = d.currentFormatStep || 0;
+      currentInput = d.currentInput || "";
+      currentAnswer = d.currentAnswer || "";
+      manualProfile = d.manualProfile || "";
+      scrapeInfoMap = d.scrapeInfoMap || {};
+      return true;
+    } catch { return false; }
+  }
+
+  function clearDraft() {
+    localStorage.removeItem(STORAGE_KEY);
+  }
 
   // --- Guided session questions ---
   const questions = [
@@ -194,6 +250,21 @@
       isLoggedIn = settings.noren_pro_logged_in;
       if (isLoggedIn) refreshSubscription();
     }).catch(() => {});
+    // Restore in-progress draft
+    loadDraft();
+  });
+
+  onDestroy(() => {
+    if (cooldownInterval) clearInterval(cooldownInterval);
+  });
+
+  // Auto-save draft on any relevant state change
+  $effect(() => {
+    // Touch all reactive deps so this runs on any change
+    void [step, guidedAnswers, currentQuestion, pairChoices, currentPair,
+      formatSamples, currentFormatStep, currentInput, currentAnswer,
+      manualProfile, scrapeInfoMap];
+    saveDraft();
   });
 
   // --- Auth + entitlement gate ---
@@ -207,8 +278,15 @@
     if (canExtract()) {
       if (path === "guided") {
         step = "guided";
-        currentQuestion = 0;
-        guidedAnswers = [];
+        if (guidedAnswers.filter(Boolean).length === 0) {
+          currentQuestion = 0;
+          currentAnswer = "";
+        } else {
+          // Resume where they left off
+          const nextEmpty = guidedAnswers.findIndex((a, i) => !a && i < questions.length);
+          currentQuestion = nextEmpty >= 0 ? nextEmpty : Math.min(guidedAnswers.filter(Boolean).length, questions.length - 1);
+          currentAnswer = guidedAnswers[currentQuestion] || "";
+        }
       } else {
         step = "input-method";
       }
@@ -248,10 +326,14 @@
   }
 
   function startResendCooldown() {
+    if (cooldownInterval) clearInterval(cooldownInterval);
     resendCooldown = 60;
-    const interval = setInterval(() => {
+    cooldownInterval = setInterval(() => {
       resendCooldown--;
-      if (resendCooldown <= 0) clearInterval(interval);
+      if (resendCooldown <= 0) {
+        clearInterval(cooldownInterval!);
+        cooldownInterval = null;
+      }
     }, 1000);
   }
 
@@ -407,8 +489,10 @@
       pendingCoupon = "";
       if (pendingPath === "guided") {
         step = "guided";
-        currentQuestion = 0;
-        guidedAnswers = [];
+        if (guidedAnswers.filter(Boolean).length === 0) {
+          currentQuestion = 0;
+          currentAnswer = "";
+        }
       } else {
         step = "input-method";
       }
@@ -510,8 +594,10 @@
   function continueAfterPayment() {
     if (pendingPath === "guided") {
       step = "guided";
-      currentQuestion = 0;
-      guidedAnswers = [];
+      if (guidedAnswers.filter(Boolean).length === 0) {
+        currentQuestion = 0;
+        currentAnswer = "";
+      }
     } else {
       step = "input-method";
     }
@@ -545,7 +631,14 @@
   function sampleCount(text: string): number {
     const t = text.trim();
     if (!t) return 0;
-    return t.split(/\n\s*\n/).filter((s) => s.trim()).length;
+    // Match engine logic: split on === or --- separators
+    if (/^===.*$/m.test(t)) {
+      return t.split(/^===.*$/m).map(s => s.trim()).filter(s => s.length > 0).length;
+    }
+    if (/\n---\n/.test(t)) {
+      return t.split(/\n---\n/).map(s => s.trim()).filter(s => s.length > 0).length;
+    }
+    return 1;
   }
 
   function totalSamples(): number {
@@ -570,8 +663,9 @@
   }
 
   function startPasteFlow() {
-    formatSamples = {};
-    scrapeInfoMap = {};
+    if (Object.keys(formatSamples).length === 0) {
+      scrapeInfoMap = {};
+    }
     enterFormatStep(0);
     step = "paste";
   }
@@ -666,6 +760,7 @@
     if (groups.length === 0 || totalSamples() < 5) return;
     startExtractionQueue(groups);
     step = "done";
+    clearDraft();
   }
 
   function handleGuidedExtraction() {
@@ -682,22 +777,42 @@
     };
 
     startExtractionQueue([{
-      samples: guidedAnswers.join("\n\n").trim(),
+      samples: guidedAnswers.filter(Boolean).join("\n\n").trim(),
       format: "general",
       calibration,
     }]);
     step = "done";
+    clearDraft();
+  }
+
+  function saveCurrentGuidedAnswer() {
+    if (currentAnswer.trim()) {
+      guidedAnswers[currentQuestion] = currentAnswer.trim();
+      guidedAnswers = [...guidedAnswers];
+    }
   }
 
   function submitGuidedAnswer() {
     if (!currentAnswer.trim()) return;
-    guidedAnswers = [...guidedAnswers, currentAnswer.trim()];
-    currentAnswer = "";
+    saveCurrentGuidedAnswer();
     if (currentQuestion < questions.length - 1) {
       currentQuestion++;
+      currentAnswer = guidedAnswers[currentQuestion] || "";
     } else {
+      currentAnswer = "";
       step = "guided-pairs";
       currentPair = 0;
+    }
+  }
+
+  function prevGuidedQuestion() {
+    saveCurrentGuidedAnswer();
+    if (currentQuestion > 0) {
+      currentQuestion--;
+      currentAnswer = guidedAnswers[currentQuestion] || "";
+    } else {
+      // Go back to welcome but keep answers so user can resume
+      step = "welcome";
     }
   }
 
@@ -724,6 +839,7 @@
     try {
       await saveProfileEdit({ coreIdentity: manualProfile.trim() });
       step = "done";
+    clearDraft();
     } catch (e) {
       error = friendlyError(e);
     } finally {
@@ -771,15 +887,15 @@
             padding: 16px 18px;
             background: var(--color-accent);
             color: white;
-            box-shadow: 0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12);
+            box-shadow: 0 2px 8px var(--color-accent-glow), 0 8px 24px var(--color-accent-glow);
           "
-          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(196,74,47,0.25), 0 12px 32px rgba(196,74,47,0.18)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px var(--color-accent-glow), 0 12px 32px var(--color-accent-glow)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.boxShadow = '0 2px 8px var(--color-accent-glow), 0 8px 24px var(--color-accent-glow)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           <!-- Thread texture overlay -->
-          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.02) 11px, rgba(255,255,255,0.02) 12px)"></div>
+          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, var(--color-accent-wash) 11px, var(--color-accent-wash) 12px)"></div>
 
-          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.15); margin-top:1px">
+          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:var(--color-accent-wash); margin-top:1px">
             <svg class="w-[17px] h-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M15 4V2M15 16v-2M8 9h10M8 5h2m-2 8h2m4 6l-6-6 6-6"/>
             </svg>
@@ -830,7 +946,7 @@
             Already have an account? Sign in
           </button>
           <button
-            onclick={onComplete}
+            onclick={() => { clearDraft(); onComplete(); }}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
             style="font-size:10px; padding:4px"
           >
@@ -1017,14 +1133,14 @@
             padding: 16px 18px;
             background: var(--color-accent);
             color: white;
-            box-shadow: 0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12);
+            box-shadow: 0 2px 8px var(--color-accent-glow), 0 8px 24px var(--color-accent-glow);
           "
-          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(196,74,47,0.25), 0 12px 32px rgba(196,74,47,0.18)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(196,74,47,0.2), 0 8px 24px rgba(196,74,47,0.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px var(--color-accent-glow), 0 12px 32px var(--color-accent-glow)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.boxShadow = '0 2px 8px var(--color-accent-glow), 0 8px 24px var(--color-accent-glow)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.02) 11px, rgba(255,255,255,0.02) 12px)"></div>
+          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, var(--color-accent-wash) 11px, var(--color-accent-wash) 12px)"></div>
 
-          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:rgba(255,255,255,0.15); margin-top:1px">
+          <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:34px; height:34px; background:var(--color-accent-wash); margin-top:1px">
             <svg class="w-[17px] h-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
@@ -1241,7 +1357,7 @@
     <!-- Payment confirmed -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
       <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
-        <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background: rgba(45,122,79,0.1)">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center bg-signal/10">
           <svg class="w-6 h-6 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
           </svg>
@@ -1296,7 +1412,7 @@
           </div>
           <div class="flex-1 min-w-0">
             <div style="font-size:13px; font-weight:600; line-height:1.3">Upload a file</div>
-            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">.txt or .md with writing samples separated by blank lines</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">.txt or .md with writing samples separated by === or ---</div>
           </div>
         </button>
 
@@ -1401,26 +1517,32 @@
   {:else if step === "paste"}
     <!-- Step-by-step format wizard -->
     {@const fmtStep = FORMAT_STEPS[currentFormatStep]}
-    <div class="flex-1 flex flex-col gap-3 p-4 -m-4">
-      <!-- Progress dots -->
-      <div class="flex items-center justify-center gap-1.5">
-        {#each FORMAT_STEPS as _, i}
-          <div
-            class="w-1.5 h-1.5 rounded-full transition-colors
-              {i === currentFormatStep
-                ? 'bg-accent'
-                : i < currentFormatStep || formatSamples[FORMAT_STEPS[i].format]
-                  ? 'bg-accent/50'
-                  : 'bg-border'}"
-          ></div>
-        {/each}
-        <span class="text-[9px] text-muted ml-1.5">{currentFormatStep + 1}/{FORMAT_STEPS.length}</span>
+    <div class="flex-1 flex flex-col px-4 pt-4 pb-3 -m-4" style="animation: view-enter 0.35s ease-out both">
+      <!-- Progress bar -->
+      <div class="flex items-center gap-2.5 mb-4">
+        <div class="flex gap-[3px] flex-1">
+          {#each FORMAT_STEPS as _, i}
+            <div
+              class="flex-1 h-[3px] rounded-full transition-all duration-300
+                {i < currentFormatStep || (i !== currentFormatStep && formatSamples[FORMAT_STEPS[i].format])
+                  ? 'bg-accent'
+                  : i === currentFormatStep
+                    ? 'bg-accent'
+                    : 'bg-border'}"
+              style={i === currentFormatStep ? 'box-shadow: 0 0 6px var(--color-accent-glow)' : ''}
+            ></div>
+          {/each}
+        </div>
+        <span class="text-[10px] text-muted shrink-0 tabular-nums">{currentFormatStep + 1} / {FORMAT_STEPS.length}</span>
       </div>
 
       <!-- Step header -->
-      <div>
-        <p class="text-xs font-medium text-foreground uppercase tracking-wide font-heading italic">{fmtStep.label}</p>
-        <p class="text-[10px] text-muted mt-0.5">
+      <div class="mb-3.5">
+        <h3 class="text-[15px] font-heading italic font-normal text-foreground flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent shrink-0"></span>
+          {fmtStep.label}
+        </h3>
+        <p class="text-[11px] text-muted mt-1 leading-relaxed pl-3.5">
           {canScrapeStep
             ? fmtStep.format === "twitter"
               ? "Fetch by username, or paste tweets below."
@@ -1429,101 +1551,97 @@
         </p>
       </div>
 
-      <!-- Unified input container -->
-      <div class="flex-1 flex flex-col border border-border rounded-lg bg-surface overflow-hidden focus-within:border-secondary transition-colors">
-
-        <!-- Import bar (scrapable formats only) -->
-        {#if canScrapeStep}
-          <div class="px-3 py-2 bg-tint/50 border-b border-border flex items-center gap-2">
-            {#if fmtStep.format === "twitter"}
-              <input
-                type="text"
-                bind:value={scrapeHandle}
-                placeholder="@username or profile link"
-                disabled={isScraping}
-                class="flex-1 text-xs bg-transparent text-foreground placeholder-muted focus:outline-none disabled:opacity-50"
-                onkeydown={(e) => { if (e.key === "Enter") handleScrapeTwitter(); }}
-              />
-            {:else}
-              <input
-                type="url"
-                bind:value={scrapeUrl}
-                placeholder="Blog URL or RSS feed"
-                disabled={isScraping}
-                class="flex-1 text-xs bg-transparent text-foreground placeholder-muted focus:outline-none disabled:opacity-50"
-                onkeydown={(e) => { if (e.key === "Enter") handleScrapeBlog(); }}
-              />
-            {/if}
-            <button
-              onclick={fmtStep.format === "twitter" ? handleScrapeTwitter : handleScrapeBlog}
-              disabled={isScraping || (fmtStep.format === "twitter" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
-              class="shrink-0 px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer
-                {isScraping || (fmtStep.format === 'twitter' ? !scrapeHandle.trim() : !scrapeUrl.trim())
-                  ? 'text-muted cursor-not-allowed opacity-50'
-                  : 'bg-surface border border-border text-foreground hover:border-secondary'}"
-            >
-              {isScraping
-                ? "Fetching..."
-                : fmtStep.format === "twitter" ? "Fetch tweets" : "Fetch posts"}
-            </button>
-          </div>
-
-          <!-- Scrape feedback -->
-          {#if isScraping}
-            <div class="px-3 py-1.5 border-b border-border flex items-center gap-1.5">
-              <LoadingSpinner />
-              <span class="text-[10px] text-muted">
-                {fmtStep.format === "twitter"
-                  ? `Fetching tweets from @${scrapeHandle.replace(/^@/, "")}...`
-                  : "Fetching posts..."}
-              </span>
-            </div>
-          {:else if scrapeError}
-            <div class="px-3 py-1.5 border-b border-border">
-              <p class="text-[10px] text-error">{scrapeError}</p>
-            </div>
-          {:else if scrapeInfoMap[fmtStep.format]}
-            <div class="px-3 py-1.5 border-b border-border bg-signal/5 flex items-center gap-1.5">
-              <svg class="w-3 h-3 text-signal shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span class="text-[10px] text-signal">{scrapeInfoMap[fmtStep.format]}</span>
-            </div>
+      <!-- Scrape section (scrapable formats only) -->
+      {#if canScrapeStep}
+        <div class="flex items-center gap-2 mb-3">
+          {#if fmtStep.format === "twitter"}
+            <input
+              type="text"
+              bind:value={scrapeHandle}
+              placeholder="@username or profile link"
+              disabled={isScraping}
+              class="input-field flex-1 !py-[7px] !text-xs"
+              onkeydown={(e) => { if (e.key === "Enter") handleScrapeTwitter(); }}
+            />
+          {:else}
+            <input
+              type="url"
+              bind:value={scrapeUrl}
+              placeholder="Blog URL or RSS feed"
+              disabled={isScraping}
+              class="input-field flex-1 !py-[7px] !text-xs"
+              onkeydown={(e) => { if (e.key === "Enter") handleScrapeBlog(); }}
+            />
           {/if}
-        {/if}
+          <button
+            onclick={fmtStep.format === "twitter" ? handleScrapeTwitter : handleScrapeBlog}
+            disabled={isScraping || (fmtStep.format === "twitter" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
+            class="btn-outline shrink-0 !text-[11px]"
+          >
+            {isScraping
+              ? "Fetching..."
+              : fmtStep.format === "twitter" ? "Fetch tweets" : "Fetch posts"}
+          </button>
+        </div>
 
-        <!-- Textarea -->
+        <!-- Scrape feedback -->
+        {#if isScraping}
+          <div class="flex items-center gap-1.5 mb-3">
+            <LoadingSpinner />
+            <span class="text-[11px] text-muted">
+              {fmtStep.format === "twitter"
+                ? `Fetching tweets from @${scrapeHandle.replace(/^@/, "")}...`
+                : "Fetching posts..."}
+            </span>
+          </div>
+        {:else if scrapeError}
+          <p class="text-[11px] text-error mb-3">{scrapeError}</p>
+        {:else if scrapeInfoMap[fmtStep.format]}
+          <div class="flex items-center gap-1.5 mb-3">
+            <svg class="w-3.5 h-3.5 text-signal shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span class="text-[11px] text-signal">{scrapeInfoMap[fmtStep.format]}</span>
+          </div>
+        {/if}
+      {/if}
+
+      <!-- Textarea -->
+      <div class="flex-1 flex flex-col bg-background border border-border rounded-[10px] p-0.5 min-h-0 transition-colors focus-within:border-secondary" style="box-shadow: var(--shadow-inset)">
         <textarea
           bind:value={currentInput}
-          class="flex-1 p-3 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[200px]"
+          class="flex-1 px-3 py-2.5 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[160px]"
           placeholder={canScrapeStep
-            ? `Or paste your ${fmtStep.label.toLowerCase()} here, separated by blank lines...`
-            : `Paste your ${fmtStep.label.toLowerCase()} here, separated by blank lines...`}
+            ? `Or paste your ${fmtStep.label.toLowerCase()} here. Use === or --- on its own line between samples.`
+            : `Paste your ${fmtStep.label.toLowerCase()} here. Use === or --- on its own line between samples.`}
         ></textarea>
       </div>
 
       {#if currentInput.trim()}
-        <p class="text-[10px] text-muted text-right">~{sampleCount(currentInput)} samples</p>
+        <div class="flex items-center justify-end gap-1 pt-1.5 pb-0.5">
+          <span class="text-[11px] text-accent font-medium">~{sampleCount(currentInput)}</span>
+          <span class="text-[11px] text-muted">samples detected</span>
+        </div>
       {/if}
 
-      <!-- Navigation buttons -->
-      <div class="flex gap-2">
+      <!-- Navigation -->
+      <div class="flex items-center gap-2 pt-2 mt-2 border-t border-border">
         <button
           onclick={prevFormatStep}
-          class="px-3 py-2 text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
+          class="btn-ghost"
         >
           Back
         </button>
         <div class="flex-1"></div>
         <button
           onclick={skipFormatStep}
-          class="px-3 py-2 text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
+          class="btn-ghost"
         >
           Skip
         </button>
         <button
           onclick={nextFormatStep}
-          class="px-4 py-2 text-[11px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer rounded-md"
+          class="btn-primary"
         >
           {currentFormatStep === FORMAT_STEPS.length - 1 ? "Review" : "Next"}
         </button>
@@ -1532,158 +1650,192 @@
 
   {:else if step === "review"}
     <!-- Review collected samples -->
-    <div class="flex-1 flex flex-col gap-4 p-4 -m-4">
-      <div class="text-center">
-        <p class="text-sm font-medium text-foreground font-heading italic">Ready to extract</p>
+    <div class="flex-1 flex flex-col px-4 pt-5 pb-4 -m-4 animate-fade-in-up" style="animation-duration: 0.4s">
+      <div class="text-center mb-5">
+        <h3 class="text-heading text-foreground">Review samples</h3>
+        <div class="flex items-center justify-center gap-1.5 mt-1.5">
+          <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-accent px-2 py-0.5 rounded" style="background: var(--color-accent-wash)">
+            {totalSamples()} samples
+          </span>
+          <span class="text-[11px] {totalSamples() >= 5 ? 'text-muted' : 'text-warning'}">
+            across {formatGroups().length} format{formatGroups().length !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
 
-      <!-- Sample summary -->
-      <div class="space-y-1.5">
+      <!-- Format summary cards -->
+      <div class="flex flex-col gap-1.5 flex-1 overflow-y-auto">
         {#each FORMAT_STEPS as fmtItem, i}
           {@const text = formatSamples[fmtItem.format]}
           {@const count = text ? sampleCount(text) : 0}
-          <div class="flex items-center justify-between px-3 py-2 bg-surface border border-border rounded-md">
-            <span class="text-xs text-foreground">{fmtItem.label}</span>
-            {#if count > 0}
-              <div class="flex items-center gap-2">
-                {#if scrapeInfoMap[fmtItem.format]}
-                  <span class="text-[10px] text-muted">{scrapeInfoMap[fmtItem.format]}</span>
-                  <span class="text-[10px] text-secondary/30">|</span>
-                {/if}
-                <span class="text-[10px] text-secondary">{count} samples</span>
+          <div
+            class="flex items-center justify-between px-3.5 py-2.5 bg-surface border border-border rounded-[10px] transition-all duration-150 hover:shadow-sm"
+            style={count > 0 ? 'border-left: 3px solid var(--color-accent)' : ''}
+          >
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-medium text-foreground">{fmtItem.label}</span>
+              {#if scrapeInfoMap[fmtItem.format]}
+                <span class="text-[9px] text-muted">{scrapeInfoMap[fmtItem.format]}</span>
+              {/if}
+            </div>
+            <div class="flex items-center gap-2">
+              {#if count > 0}
+                <span class="text-[11px] text-accent font-semibold">{count}</span>
                 <button
                   onclick={() => goBackToFormatStep(i)}
-                  class="text-[9px] text-muted hover:text-secondary transition-colors cursor-pointer"
+                  class="btn-ghost !text-[11px] !py-1 !px-2"
                 >
                   Edit
                 </button>
-              </div>
-            {:else}
-              <div class="flex items-center gap-2">
-                <span class="text-[10px] text-muted">skipped</span>
+              {:else}
+                <span class="text-[10px] text-muted/50 italic">skipped</span>
                 <button
                   onclick={() => goBackToFormatStep(i)}
-                  class="text-[9px] text-muted hover:text-secondary transition-colors cursor-pointer"
+                  class="btn-ghost !text-[11px] !py-1 !px-2"
                 >
                   Add
                 </button>
-              </div>
-            {/if}
+              {/if}
+            </div>
           </div>
         {/each}
       </div>
 
-      <p class="text-xs text-center {totalSamples() >= 5 ? 'text-secondary' : 'text-error'}">
-        {totalSamples()} samples across {formatGroups().length} format{formatGroups().length !== 1 ? "s" : ""}
-      </p>
-
       {#if error}
-        <p class="text-[10px] text-error text-center">{error}</p>
+        <p class="text-[11px] text-error text-center mt-3">{error}</p>
       {/if}
 
-      <!-- Extract button -->
-      <button
-        onclick={handleStartExtraction}
-        disabled={totalSamples() < 5}
-        class="w-full py-2.5 px-4 text-sm font-semibold tracking-wide transition-colors cursor-pointer rounded-md
-          {totalSamples() < 5
-            ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-accent text-white hover:bg-accent-hover'}"
-      >
-        Extract Voice Profile
-      </button>
+      <!-- Accent thread divider -->
+      <div class="divider-thread my-4"></div>
 
-      {#if totalSamples() < 5}
-        <p class="text-[10px] text-muted text-center">
-          Need at least 5 samples. Go back and add more to any format.
-        </p>
-      {/if}
+      <!-- Extract CTA -->
+      <div class="flex flex-col items-center gap-2.5">
+        <button
+          onclick={handleStartExtraction}
+          disabled={totalSamples() < 5}
+          class="w-full py-3 text-[13px] font-semibold text-white bg-accent rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover hover:-translate-y-px relative overflow-hidden"
+          style="box-shadow: 0 2px 8px var(--color-accent-glow)"
+        >
+          Extract Voice Profile
+        </button>
 
-      <button
-        onclick={() => { step = "input-method"; }}
-        class="text-[10px] text-muted hover:text-secondary transition-colors cursor-pointer text-center"
-      >
-        Start over
-      </button>
+        {#if totalSamples() < 5}
+          <p class="text-[10px] text-muted text-center leading-relaxed">
+            Need at least 5 samples. Go back and add more to any format.
+          </p>
+        {/if}
+
+        <button
+          onclick={() => { formatSamples = {}; scrapeInfoMap = {}; currentFormatStep = 0; currentInput = ""; step = "input-method"; }}
+          class="btn-ghost text-[11px]"
+        >
+          Start over
+        </button>
+      </div>
     </div>
 
   {:else if step === "guided"}
     <!-- Guided questions -->
-    <div class="flex-1 flex flex-col gap-4">
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] text-muted uppercase tracking-wide">
-          Question {currentQuestion + 1} of {questions.length}
-        </span>
-        <div class="flex gap-0.5">
+    <div class="flex-1 flex flex-col px-4 pt-4 pb-3 -m-4" style="animation: view-enter 0.35s ease-out both">
+      <!-- Progress bar -->
+      <div class="flex items-center gap-2.5 mb-4">
+        <div class="flex gap-[3px] flex-1">
           {#each questions as _, i}
-            <div class="w-4 h-1 rounded-full {i < guidedAnswers.length ? 'bg-primary' : i === currentQuestion ? 'bg-secondary' : 'bg-border'}"></div>
+            <div
+              class="flex-1 h-[3px] rounded-full transition-all duration-300
+                {i < guidedAnswers.length
+                  ? 'bg-accent'
+                  : i === currentQuestion
+                    ? 'bg-accent'
+                    : 'bg-border'}"
+              style={i === currentQuestion ? 'box-shadow: 0 0 6px var(--color-accent-glow)' : ''}
+            ></div>
           {/each}
         </div>
+        <span class="text-[10px] text-muted shrink-0 tabular-nums">{currentQuestion + 1} / {questions.length}</span>
       </div>
 
-      <div class="card-flat">
-        <p class="text-sm font-medium text-foreground leading-relaxed">
+      <!-- Question card -->
+      <div class="card-flat p-3.5 mb-3.5">
+        <h3 class="text-[15px] font-heading italic font-normal text-foreground flex items-start gap-2 leading-snug">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent shrink-0 mt-1.5"></span>
           {questions[currentQuestion].prompt}
-        </p>
-        <p class="text-[10px] text-muted mt-1">
+        </h3>
+        <p class="text-[11px] text-muted mt-1.5 pl-3.5 leading-relaxed">
           {questions[currentQuestion].hint}
         </p>
       </div>
 
-      <textarea
-        bind:value={currentAnswer}
-        onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) submitGuidedAnswer(); }}
-        class="flex-1 p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none placeholder-muted rounded-md focus:outline-none focus:border-secondary"
-        placeholder="Type your answer..."
-      ></textarea>
+      <!-- Textarea -->
+      <div class="flex-1 flex flex-col bg-background border border-border rounded-[10px] p-0.5 min-h-0 transition-colors focus-within:border-secondary" style="box-shadow: var(--shadow-inset)">
+        <textarea
+          bind:value={currentAnswer}
+          onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) submitGuidedAnswer(); }}
+          class="flex-1 px-3 py-2.5 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[160px]"
+          placeholder="Type your answer..."
+        ></textarea>
+      </div>
 
-      <button
-        onclick={submitGuidedAnswer}
-        disabled={!currentAnswer.trim()}
-        class="w-full py-2.5 px-4 text-sm font-semibold transition-colors cursor-pointer rounded-md
-          {!currentAnswer.trim()
-            ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-            : 'bg-accent text-white hover:bg-accent-hover'}"
-      >
-        {currentQuestion < questions.length - 1 ? "Next" : "Continue to calibration"}
-      </button>
-
-      <button
-        onclick={() => { step = "welcome"; guidedAnswers = []; currentQuestion = 0; }}
-        class="text-xs text-muted hover:text-foreground text-center cursor-pointer"
-      >
-        &larr; Back
-      </button>
+      <!-- Navigation -->
+      <div class="flex items-center gap-2 pt-2 mt-2 border-t border-border">
+        <button
+          onclick={prevGuidedQuestion}
+          class="btn-ghost"
+        >
+          Back
+        </button>
+        <div class="flex-1"></div>
+        <button
+          onclick={submitGuidedAnswer}
+          disabled={!currentAnswer.trim()}
+          class="btn-primary"
+        >
+          {currentQuestion < questions.length - 1 ? "Next" : "Continue"}
+        </button>
+      </div>
     </div>
 
   {:else if step === "guided-pairs"}
     <!-- Calibration pairs -->
-    <div class="flex-1 flex flex-col gap-4">
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] text-muted uppercase tracking-wide">
-          Calibration {currentPair + 1} of {pairs.length}
-        </span>
-        <div class="flex gap-0.5">
+    <div class="flex-1 flex flex-col px-4 pt-4 pb-3 -m-4" style="animation: view-enter 0.35s ease-out both">
+      <!-- Progress bar -->
+      <div class="flex items-center gap-2.5 mb-4">
+        <div class="flex gap-[3px] flex-1">
           {#each pairs as _, i}
-            <div class="w-4 h-1 rounded-full {i < pairChoices.length ? 'bg-primary' : i === currentPair ? 'bg-secondary' : 'bg-border'}"></div>
+            <div
+              class="flex-1 h-[3px] rounded-full transition-all duration-300
+                {i < pairChoices.length
+                  ? 'bg-accent'
+                  : i === currentPair
+                    ? 'bg-accent'
+                    : 'bg-border'}"
+              style={i === currentPair ? 'box-shadow: 0 0 6px var(--color-accent-glow)' : ''}
+            ></div>
           {/each}
         </div>
+        <span class="text-[10px] text-muted shrink-0 tabular-nums">{currentPair + 1} / {pairs.length}</span>
       </div>
 
-      <p class="text-xs font-medium text-foreground">
-        {pairs[currentPair].question}
-      </p>
+      <!-- Question -->
+      <div class="mb-3.5">
+        <h3 class="text-[15px] font-heading italic font-normal text-foreground flex items-start gap-2 leading-snug">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent shrink-0 mt-1.5"></span>
+          {pairs[currentPair].question}
+        </h3>
+        <p class="text-[11px] text-muted mt-1 pl-3.5 leading-relaxed">Pick which sounds more like you.</p>
+      </div>
 
-      <div class="flex flex-col gap-2 flex-1">
+      <!-- Choice cards -->
+      <div class="flex flex-col gap-2.5 flex-1">
         <button
           onclick={() => choosePair("a")}
-          class="flex-1 p-3 text-xs text-left leading-relaxed border border-border bg-surface text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer"
+          class="flex-1 p-3.5 text-xs text-left leading-[1.65] bg-surface border border-border text-foreground rounded-[10px] cursor-pointer transition-all duration-150 hover:border-accent/30 hover:shadow-sm"
         >
           {pairs[currentPair].a}
         </button>
         <button
           onclick={() => choosePair("b")}
-          class="flex-1 p-3 text-xs text-left leading-relaxed border border-border bg-surface text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer"
+          class="flex-1 p-3.5 text-xs text-left leading-[1.65] bg-surface border border-border text-foreground rounded-[10px] cursor-pointer transition-all duration-150 hover:border-accent/30 hover:shadow-sm"
         >
           {pairs[currentPair].b}
         </button>
@@ -1694,7 +1846,7 @@
     <!-- Done -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
       <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
-        <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background: rgba(45,122,79,0.1)">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center bg-signal/10">
           <svg class="w-6 h-6 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
           </svg>
@@ -1747,7 +1899,7 @@
         {/if}
 
         <button
-          onclick={onComplete}
+          onclick={() => { clearDraft(); onComplete(); }}
           class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-xl"
           style="background: var(--color-accent); color: white"
           onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}

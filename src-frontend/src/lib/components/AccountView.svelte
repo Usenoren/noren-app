@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import {
     getSettings,
     setInferenceMode,
@@ -44,6 +45,7 @@
   let otpLoading = $state(false);
   let otpMessage = $state("");
   let resendCooldown = $state(0);
+  let cooldownInterval: ReturnType<typeof setInterval> | null = null;
   let showResendSetup = $state(false);
   let resendSetupLoading = $state(false);
   let resendSetupMessage = $state("");
@@ -55,6 +57,10 @@
   let deleteCode = $state("");
   let deleteStep = $state<"confirm" | "code">("confirm");
   let deleteLoading = $state(false);
+
+  onDestroy(() => {
+    if (cooldownInterval) clearInterval(cooldownInterval);
+  });
 
   $effect(() => {
     loadAccount();
@@ -147,10 +153,14 @@
   }
 
   function startResendCooldown() {
+    if (cooldownInterval) clearInterval(cooldownInterval);
     resendCooldown = 60;
-    const interval = setInterval(() => {
+    cooldownInterval = setInterval(() => {
       resendCooldown--;
-      if (resendCooldown <= 0) clearInterval(interval);
+      if (resendCooldown <= 0) {
+        clearInterval(cooldownInterval!);
+        cooldownInterval = null;
+      }
     }, 1000);
   }
 

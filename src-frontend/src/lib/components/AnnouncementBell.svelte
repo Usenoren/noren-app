@@ -163,7 +163,7 @@
   }
   .prose-compact :global(code) {
     font-size: 0.85em;
-    background: rgba(255,255,255,0.05);
+    background: var(--color-code-bg);
     padding: 0.1em 0.3em;
     border-radius: 3px;
   }

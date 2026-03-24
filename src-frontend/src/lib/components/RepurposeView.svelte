@@ -1,4 +1,8 @@
 <script lang="ts">
+  // AUDIT TAG: Dead code. Nav item commented out in MainShell.svelte:41,
+  // import on MainShell.svelte:21 still present. Feature gated behind false.
+  // CTO decision needed: clear or keep. See audit 2026-03-24.
+
   import { repurpose, listFormats, type RepurposeFormatResult } from "$lib/api/tauri";
 
   // Flip to true when ready to ship
