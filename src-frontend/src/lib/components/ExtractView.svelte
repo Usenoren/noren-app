@@ -90,8 +90,9 @@
   ];
 
   let currentStep = $state(0);
-  let formatSamples: Record<string, string> = $state({});
-  let currentInput = $state("");
+  let formatSamples: Record<string, string[]> = $state({});
+  let bulkPasteOpen = $state(false);
+  let bulkPasteText = $state("");
 
   // Scrape state
   const SCRAPABLE_FORMATS = ["twitter", "longform"];
@@ -109,7 +110,7 @@
   function saveExtractDraft() {
     try {
       localStorage.setItem(EXTRACT_DRAFT_KEY, JSON.stringify({
-        viewState, currentStep, formatSamples, currentInput, scrapeInfoMap,
+        viewState, currentStep, formatSamples, scrapeInfoMap,
       }));
     } catch {}
   }
@@ -123,9 +124,14 @@
       if (!resumable.includes(d.viewState)) return false;
       viewState = d.viewState;
       currentStep = d.currentStep || 0;
-      formatSamples = d.formatSamples || {};
-      currentInput = d.currentInput || "";
       scrapeInfoMap = d.scrapeInfoMap || {};
+      // Migrate old string format to string[]
+      const loaded = d.formatSamples || {};
+      const migrated: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(loaded)) {
+        migrated[k] = typeof v === "string" ? (v.trim() ? [v] : []) : (v as string[]);
+      }
+      formatSamples = migrated;
       return true;
     } catch { return false; }
   }
@@ -155,9 +161,9 @@
     checkAccess();
   });
 
-  // Auto-save draft
+  // Auto-save draft on navigation (not on every keystroke)
   $effect(() => {
-    void [viewState, currentStep, formatSamples, currentInput, scrapeInfoMap];
+    void [viewState, currentStep, scrapeInfoMap];
     saveExtractDraft();
   });
 
@@ -363,14 +369,24 @@
 
   // --- Sample input ---
 
+  function currentSamples(): string[] {
+    return formatSamples[FORMAT_STEPS[currentStep].format] || [];
+  }
+
   function enterStep(stepIndex: number) {
     currentStep = stepIndex;
-    currentInput = formatSamples[FORMAT_STEPS[stepIndex].format] || "";
+    bulkPasteOpen = false;
+    bulkPasteText = "";
     resetScrapeState();
+    // Ensure at least one card exists
+    const fmt = FORMAT_STEPS[stepIndex].format;
+    if (!formatSamples[fmt] || formatSamples[fmt].length === 0) {
+      formatSamples[fmt] = [""];
+      formatSamples = { ...formatSamples };
+    }
   }
 
   function startPasteFlow() {
-    // Only reset if no existing samples (preserve draft)
     if (Object.keys(formatSamples).length === 0) {
       scrapeInfoMap = {};
     }
@@ -379,10 +395,7 @@
   }
 
   function nextStep() {
-    if (currentInput.trim()) {
-      formatSamples[FORMAT_STEPS[currentStep].format] = currentInput.trim();
-    }
-
+    saveExtractDraft();
     if (currentStep < FORMAT_STEPS.length - 1) {
       enterStep(currentStep + 1);
     } else {
@@ -399,14 +412,10 @@
   }
 
   function prevStep() {
-    if (currentInput.trim()) {
-      formatSamples[FORMAT_STEPS[currentStep].format] = currentInput.trim();
-    }
-
+    saveExtractDraft();
     if (currentStep > 0) {
       enterStep(currentStep - 1);
     } else {
-      // Go back to entry screen but keep samples
       viewState = "inputMethod";
     }
   }
@@ -415,7 +424,8 @@
     formatSamples = {};
     scrapeInfoMap = {};
     currentStep = 0;
-    currentInput = "";
+    bulkPasteOpen = false;
+    bulkPasteText = "";
     viewState = "inputMethod";
   }
 
@@ -424,30 +434,51 @@
     viewState = "pasteStep";
   }
 
-  function countSamples(text: string): number {
-    if (!text.trim()) return 0;
-    // Match engine logic: split on === or --- separators
-    if (/^===.*$/m.test(text)) {
-      return text.split(/^===.*$/m).map(s => s.trim()).filter(s => s.length > 0).length;
-    }
-    if (/\n---\n/.test(text)) {
-      return text.split(/\n---\n/).map(s => s.trim()).filter(s => s.length > 0).length;
-    }
-    // No separators found — treat entire text as 1 sample
-    return 1;
+  // Card operations
+  function addSample() {
+    const fmt = FORMAT_STEPS[currentStep].format;
+    if (!formatSamples[fmt]) formatSamples[fmt] = [];
+    formatSamples[fmt] = [...formatSamples[fmt], ""];
+  }
+
+  function removeSample(index: number) {
+    const fmt = FORMAT_STEPS[currentStep].format;
+    formatSamples[fmt] = formatSamples[fmt].filter((_, i) => i !== index);
+    if (formatSamples[fmt].length === 0) formatSamples[fmt] = [""];
+    formatSamples = { ...formatSamples };
+  }
+
+  function updateSample(index: number, value: string) {
+    const fmt = FORMAT_STEPS[currentStep].format;
+    formatSamples[fmt][index] = value;
+  }
+
+  function handleBulkPaste() {
+    if (!bulkPasteText.trim()) return;
+    const items = bulkPasteText.split(/\n\s*\n\s*\n/).map(s => s.trim()).filter(s => s.length > 0);
+    const fmt = FORMAT_STEPS[currentStep].format;
+    const existing = (formatSamples[fmt] || []).filter(s => s.trim());
+    formatSamples[fmt] = [...existing, ...items];
+    formatSamples = { ...formatSamples };
+    bulkPasteOpen = false;
+    bulkPasteText = "";
+  }
+
+  function sampleCount(format: string): number {
+    return (formatSamples[format] || []).filter(s => s.trim()).length;
   }
 
   function totalSamples(): number {
-    return Object.values(formatSamples).reduce(
-      (sum, text) => sum + countSamples(text),
-      0,
-    );
+    return Object.keys(formatSamples).reduce((sum, fmt) => sum + sampleCount(fmt), 0);
   }
 
   function formatGroups(): FormatGroup[] {
     return Object.entries(formatSamples)
-      .filter(([_, text]) => text.trim())
-      .map(([format, samples]) => ({ format, samples }));
+      .filter(([fmt]) => sampleCount(fmt) > 0)
+      .map(([format, arr]) => ({
+        format,
+        samples: arr.filter(s => s.trim()).join("\n\n===\n\n"),
+      }));
   }
 
   // --- Scraping ---
@@ -473,8 +504,9 @@
 
     try {
       const result = await scrapeTwitter(handle);
-      formatSamples[targetFormat] = result.format_group.samples;
-      if (currentStep === targetStep) currentInput = result.format_group.samples;
+      const items = result.format_group.samples.split(/\n\n===\n\n/).map(s => s.trim()).filter(s => s.length > 0);
+      formatSamples[targetFormat] = items;
+      formatSamples = { ...formatSamples };
       scrapeInfoMap["twitter"] = `Fetched ${result.meta.total_kept} tweets`;
     } catch (e) {
       if (currentStep === targetStep) scrapeError = friendlyError(e);
@@ -497,8 +529,9 @@
 
     try {
       const result = await scrapeBlog(url);
-      formatSamples[targetFormat] = result.format_group.samples;
-      if (currentStep === targetStep) currentInput = result.format_group.samples;
+      const items = result.format_group.samples.split(/\n\n===\n\n/).map(s => s.trim()).filter(s => s.length > 0);
+      formatSamples[targetFormat] = items;
+      formatSamples = { ...formatSamples };
       const label = result.meta.source_type === "rss" ? "posts" : "article";
       scrapeInfoMap["longform"] = `Fetched ${result.meta.total_kept} ${label}`;
     } catch (e) {
@@ -806,7 +839,7 @@
           {#each FORMAT_STEPS as _, i}
             <div
               class="flex-1 h-[3px] rounded-full transition-all duration-300
-                {i < currentStep || (i !== currentStep && formatSamples[FORMAT_STEPS[i].format])
+                {i < currentStep || (i !== currentStep && sampleCount(FORMAT_STEPS[i].format) > 0)
                   ? 'bg-accent'
                   : i === currentStep
                     ? 'bg-accent'
@@ -888,22 +921,71 @@
         {/if}
       {/if}
 
-      <!-- Textarea -->
-      <div class="flex-1 flex flex-col bg-background border border-border rounded-[10px] p-0.5 min-h-0 transition-colors focus-within:border-secondary" style="box-shadow: var(--shadow-inset)">
-        <textarea
-          bind:value={currentInput}
-          class="flex-1 px-3 py-2.5 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[160px]"
-          placeholder={canScrape
-            ? `Or paste your ${step.label.toLowerCase()} here. Use === or --- on its own line between samples.`
-            : `Paste your ${step.label.toLowerCase()} here. Use === or --- on its own line between samples.`}
-        ></textarea>
-      </div>
-
-      {#if currentInput.trim()}
-        <div class="flex items-center justify-end gap-1 pt-1.5 pb-0.5">
-          <span class="text-[11px] text-accent font-medium">~{countSamples(currentInput)}</span>
-          <span class="text-[11px] text-muted">samples detected</span>
+      <!-- Sample cards or bulk paste -->
+      {#if bulkPasteOpen}
+        <div class="flex-1 flex flex-col gap-2 min-h-0">
+          <div class="flex-1 flex flex-col bg-background border border-border rounded-[10px] p-0.5 min-h-0 transition-colors focus-within:border-secondary" style="box-shadow: var(--shadow-inset)">
+            <textarea
+              bind:value={bulkPasteText}
+              class="flex-1 px-3 py-2.5 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none min-h-[180px]"
+              placeholder="Paste all samples here. Hit Enter twice between samples."
+            ></textarea>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick={() => { bulkPasteOpen = false; bulkPasteText = ""; }} class="btn-ghost">Cancel</button>
+            <div class="flex-1"></div>
+            <button onclick={handleBulkPaste} disabled={!bulkPasteText.trim()} class="btn-primary">Split into cards</button>
+          </div>
         </div>
+      {:else}
+        <div class="flex-1 flex flex-col gap-2 overflow-y-auto min-h-0">
+          {#each currentSamples() as sample, i}
+            <div class="relative bg-background border border-border rounded-[10px] p-0.5 shrink-0 transition-colors focus-within:border-secondary group" style="box-shadow: var(--shadow-inset)">
+              <div class="flex items-center justify-between px-2.5 pt-1.5">
+                <span class="text-[9px] font-semibold text-muted uppercase tracking-[0.5px]">Sample {i + 1}</span>
+                {#if currentSamples().length > 1}
+                  <button
+                    onclick={() => removeSample(i)}
+                    class="w-[18px] h-[18px] flex items-center justify-center bg-transparent border-none text-muted rounded cursor-pointer opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg>
+                  </button>
+                {/if}
+              </div>
+              <textarea
+                value={sample}
+                oninput={(e) => updateSample(i, e.currentTarget.value)}
+                onblur={() => saveExtractDraft()}
+                class="w-full px-2.5 py-1.5 text-xs leading-relaxed bg-transparent text-foreground resize-none placeholder-muted focus:outline-none"
+                style="min-height: 64px; field-sizing: content;"
+                placeholder={i === 0 ? `Paste a ${step.label.toLowerCase()} sample...` : "Another sample..."}
+              ></textarea>
+            </div>
+          {/each}
+
+          <!-- Add buttons -->
+          <button
+            onclick={addSample}
+            class="w-full py-2.5 flex items-center justify-center gap-1.5 text-[11px] text-muted bg-transparent rounded-[10px] cursor-pointer transition-all duration-150 shrink-0 hover:text-accent hover:bg-accent-wash"
+            style="border: 1px dashed var(--color-border)"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 2v8M2 6h8"/></svg>
+            Add another sample
+          </button>
+          <button
+            onclick={() => { bulkPasteOpen = true; }}
+            class="text-[10px] text-muted hover:text-secondary transition-colors cursor-pointer text-center shrink-0"
+          >
+            Bulk paste
+          </button>
+        </div>
+
+        {#if sampleCount(step.format) > 0}
+          <div class="flex items-center justify-end gap-1 pt-1.5 pb-0.5 shrink-0">
+            <span class="text-[11px] text-accent font-medium">{sampleCount(step.format)}</span>
+            <span class="text-[11px] text-muted">sample{sampleCount(step.format) !== 1 ? 's' : ''}</span>
+          </div>
+        {/if}
       {/if}
 
       <!-- Navigation -->
@@ -948,8 +1030,7 @@
       <!-- Format summary cards -->
       <div class="flex flex-col gap-1.5 flex-1 overflow-y-auto">
         {#each FORMAT_STEPS as step, i}
-          {@const text = formatSamples[step.format]}
-          {@const count = text ? countSamples(text) : 0}
+          {@const count = sampleCount(step.format)}
           <div
             class="flex items-center justify-between px-3.5 py-2.5 bg-surface border border-border rounded-[10px] transition-all duration-150 hover:shadow-sm"
             style={count > 0 ? 'border-left: 3px solid var(--color-accent)' : ''}
