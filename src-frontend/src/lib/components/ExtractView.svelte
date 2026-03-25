@@ -68,7 +68,7 @@
       format: "email",
       label: "Emails",
       guidance:
-        "Paste 2-3 full email threads. The kind you write most, not one-liners.",
+        "Go to your Sent folder. Find 2-3 emails where you actually wrote something substantial, not quick replies.",
     },
     {
       format: "longform",
@@ -910,7 +910,18 @@
             </span>
           </div>
         {:else if scrapeError}
-          <p class="text-[11px] text-error mb-3">{scrapeError}</p>
+          <div class="flex gap-2 items-start mb-3 px-3 py-2.5 rounded-lg" style="background: rgba(184,134,11,0.06); border-left: 2px solid var(--color-warning)">
+            <svg class="w-3.5 h-3.5 text-warning shrink-0 mt-px" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M8 5v3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              <circle cx="8" cy="11" r="0.6" fill="currentColor"/>
+            </svg>
+            <div class="text-[11px] leading-relaxed text-muted">
+              <span class="text-foreground font-medium">Couldn't pull articles from that site.</span>
+              Some sites block automated access.
+              <span class="block mt-0.5 text-secondary font-medium">Paste your posts below instead.</span>
+            </div>
+          </div>
         {:else if scrapeInfoMap[step.format]}
           <div class="flex items-center gap-1.5 mb-3">
             <svg class="w-3.5 h-3.5 text-signal shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
