@@ -652,6 +652,10 @@ export async function scrapeBlog(url: string): Promise<ScrapeResponse> {
   return invoke("scrape_blog", { url });
 }
 
+export async function scrapeReddit(username: string): Promise<ScrapeResponse> {
+  return invoke("scrape_reddit", { username });
+}
+
 // ── Announcements ──────────────────────────────────────────────
 
 export interface Announcement {

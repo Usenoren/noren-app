@@ -219,6 +219,7 @@ fn main() {
             commands::repurpose,
             commands::scrape_twitter,
             commands::scrape_blog,
+            commands::scrape_reddit,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

@@ -21,6 +21,7 @@
     setInferenceMode,
     scrapeTwitter,
     scrapeBlog,
+    scrapeReddit,
     type FormatGroup,
   } from "$lib/api/tauri";
   import { open } from "@tauri-apps/plugin-shell";
@@ -73,8 +74,9 @@
     { format: "twitter", label: "Tweets / Social", guidance: "Paste 10-20 tweets or social posts. Copy from your Twitter/X archive or timeline." },
     { format: "email", label: "Emails", guidance: "Go to your Sent folder. Find 2-3 emails where you actually wrote something substantial, not quick replies." },
     { format: "longform", label: "Long-form", guidance: "Blog posts, essays, articles, newsletter issues. Even one long piece helps." },
-    { format: "slack", label: "Slack / Chat", guidance: "Paste longer Slack messages or chat threads. Skip quick replies." },
-    { format: "linkedin", label: "LinkedIn", guidance: "Posts, comments, or articles from LinkedIn." },
+    { format: "slack", label: "Slack / Chat", guidance: "In Slack, search from:me and grab your longer messages. Discord, WhatsApp, or iMessage work too. Skip one-liners." },
+    { format: "linkedin", label: "LinkedIn", guidance: "Go to your profile, click Activity, filter by Posts. Paste your longer posts here." },
+    { format: "reddit", label: "Reddit", guidance: "Fetch by username, or paste your posts and comments below." },
   ];
   let currentFormatStep = $state(0);
   let formatSamples = $state<Record<string, string[]>>({});
@@ -82,7 +84,7 @@
   let bulkPasteText = $state("");
 
   // Scrape state
-  const SCRAPABLE_FORMATS = ["twitter", "longform"];
+  const SCRAPABLE_FORMATS = ["twitter", "longform", "reddit"];
   let scrapeHandle = $state("");
   let scrapeUrl = $state("");
   let isScraping = $state(false);
@@ -783,6 +785,26 @@
       formatSamples = { ...formatSamples };
       const label = result.meta.source_type === "rss" ? "posts" : "article";
       scrapeInfoMap["longform"] = `Fetched ${result.meta.total_kept} ${label}`;
+    } catch (e) {
+      if (currentFormatStep === targetStep) scrapeError = friendlyError(e);
+    } finally {
+      isScraping = false;
+    }
+  }
+
+  async function handleScrapeReddit() {
+    const handle = scrapeHandle.trim();
+    if (!handle) { scrapeError = "Enter a Reddit username or profile link."; return; }
+    const targetStep = currentFormatStep;
+    const targetFormat = FORMAT_STEPS[targetStep].format;
+    scrapeError = "";
+    isScraping = true;
+    try {
+      const result = await scrapeReddit(handle);
+      const items = result.format_group.samples.split(/\n\n===\n\n/).map(s => s.trim()).filter(s => s.length > 0);
+      formatSamples[targetFormat] = items;
+      formatSamples = { ...formatSamples };
+      scrapeInfoMap["reddit"] = `Fetched ${result.meta.total_kept} posts`;
     } catch (e) {
       if (currentFormatStep === targetStep) scrapeError = friendlyError(e);
     } finally {
@@ -1583,7 +1605,9 @@
           {canScrapeStep
             ? fmtStep.format === "twitter"
               ? "Fetch by username, or paste tweets below."
-              : "Import from a blog URL, or paste articles below."
+              : fmtStep.format === "reddit"
+                ? "Fetch by username, or paste posts below."
+                : "Import from a blog URL, or paste articles below."
             : fmtStep.guidance}
         </p>
       </div>
@@ -1591,14 +1615,14 @@
       <!-- Scrape section (scrapable formats only) -->
       {#if canScrapeStep}
         <div class="flex items-center gap-2 mb-3">
-          {#if fmtStep.format === "twitter"}
+          {#if fmtStep.format === "twitter" || fmtStep.format === "reddit"}
             <input
               type="text"
               bind:value={scrapeHandle}
-              placeholder="@username or profile link"
+              placeholder={fmtStep.format === "twitter" ? "@username or profile link" : "u/username or profile link"}
               disabled={isScraping}
               class="input-field flex-1 !py-[7px] !text-xs"
-              onkeydown={(e) => { if (e.key === "Enter") handleScrapeTwitter(); }}
+              onkeydown={(e) => { if (e.key === "Enter") { fmtStep.format === "twitter" ? handleScrapeTwitter() : handleScrapeReddit(); } }}
             />
           {:else}
             <input
@@ -1611,13 +1635,13 @@
             />
           {/if}
           <button
-            onclick={fmtStep.format === "twitter" ? handleScrapeTwitter : handleScrapeBlog}
-            disabled={isScraping || (fmtStep.format === "twitter" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
+            onclick={fmtStep.format === "twitter" ? handleScrapeTwitter : fmtStep.format === "reddit" ? handleScrapeReddit : handleScrapeBlog}
+            disabled={isScraping || (fmtStep.format === "twitter" || fmtStep.format === "reddit" ? !scrapeHandle.trim() : !scrapeUrl.trim())}
             class="btn-outline shrink-0 !text-[11px]"
           >
             {isScraping
               ? "Fetching..."
-              : fmtStep.format === "twitter" ? "Fetch tweets" : "Fetch posts"}
+              : fmtStep.format === "twitter" ? "Fetch tweets" : fmtStep.format === "reddit" ? "Fetch posts" : "Fetch posts"}
           </button>
         </div>
 
@@ -1628,7 +1652,9 @@
             <span class="text-[11px] text-muted">
               {fmtStep.format === "twitter"
                 ? `Fetching tweets from @${scrapeHandle.replace(/^@/, "")}...`
-                : "Fetching posts..."}
+                : fmtStep.format === "reddit"
+                  ? `Fetching posts from u/${scrapeHandle.replace(/^u\//, "")}...`
+                  : "Fetching posts..."}
             </span>
           </div>
         {:else if scrapeError}
