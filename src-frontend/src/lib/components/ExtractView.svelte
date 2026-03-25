@@ -458,6 +458,7 @@
   function updateSample(index: number, value: string) {
     const fmt = FORMAT_STEPS[currentStep].format;
     formatSamples[fmt][index] = value;
+    formatSamples = { ...formatSamples };
   }
 
   function handleBulkPaste() {

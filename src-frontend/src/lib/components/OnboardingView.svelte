@@ -729,6 +729,7 @@
   function updateFormatSample(index: number, value: string) {
     const fmt = FORMAT_STEPS[currentFormatStep].format;
     formatSamples[fmt][index] = value;
+    formatSamples = { ...formatSamples };
   }
 
   function handleFormatBulkPaste() {

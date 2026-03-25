@@ -8,7 +8,6 @@
   import { getIsExtracting } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
-  import NorenMark from "./NorenMark.svelte";
   import { toastError } from "$lib/stores/toast.svelte";
   import loomIdleUrl from "../../assets/loom-idle.png";
 
