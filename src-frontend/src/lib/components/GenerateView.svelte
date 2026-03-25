@@ -319,7 +319,7 @@
       <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 55% 45% at 50% 40%, var(--color-primary-muted), transparent 70%)"></div>
 
       <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-        <img src={loomIdleUrl} alt="" class="w-[130px] opacity-30 dark:opacity-50" />
+        <img src={loomIdleUrl} alt="" class="w-[130px] opacity-60 dark:opacity-50 dark:invert" />
 
         <div class="text-center max-w-[280px]">
           <h2 class="font-heading text-[32px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
@@ -478,7 +478,7 @@
     <div class="flex-1 min-h-0 overflow-y-auto px-4">
       {#if phase === "idle" && !comparison && !output}
         <div class="h-full flex flex-col items-center justify-center gap-5">
-          <img src={loomIdleUrl} alt="" class="w-[170px] opacity-30 dark:opacity-50" />
+          <img src={loomIdleUrl} alt="" class="w-[170px] opacity-60 dark:opacity-50 dark:invert" />
           <div class="flex flex-col items-center gap-1.5">
             <p class="text-display text-foreground/75">Ready to weave</p>
             <p class="text-xs text-muted">Your voice is loaded and ready</p>

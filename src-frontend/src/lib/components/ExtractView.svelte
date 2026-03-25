@@ -809,7 +809,7 @@
     <!-- Provide writing samples -->
     <div class="flex-1 flex flex-col items-center justify-center -m-4 overflow-hidden">
       <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-        <img src={loomIdleUrl} alt="" class="w-[120px] opacity-30 dark:opacity-50" />
+        <img src={loomIdleUrl} alt="" class="w-[120px] opacity-60 dark:opacity-50 dark:invert" />
 
         <div class="text-center max-w-[260px]">
           <h2 class="font-heading text-[21px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
