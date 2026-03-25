@@ -297,7 +297,7 @@
     }
   }
 
-  async function handleDeleteChat(id: string, e: MouseEvent) {
+  async function handleDeleteChat(id: string, e: MouseEvent | KeyboardEvent) {
     e.stopPropagation();
     try {
       await deleteChat(id);

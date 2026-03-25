@@ -350,7 +350,7 @@
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner />
     </div>
-  {:else if settings.noren_pro_logged_in && proStatus}
+  {:else if settings && settings.noren_pro_logged_in && proStatus}
     <!-- Logged-in state -->
     <div class="flex flex-col gap-5 max-w-sm">
       <!-- Account card -->
