@@ -33,6 +33,7 @@
   } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import loomIdleUrl from "../../assets/loom-idle.png";
 
   // --- View state machine ---
   type ViewState =
@@ -808,27 +809,7 @@
     <!-- Provide writing samples -->
     <div class="flex-1 flex flex-col items-center justify-center -m-4 overflow-hidden">
       <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-        <!-- Extraction emblem: thread panels with weaving weft -->
-        <svg class="w-[96px] h-[72px]" viewBox="0 0 96 72" fill="none">
-          <line x1="12" y1="20" x2="84" y2="20" stroke="var(--color-border)" stroke-width="0.75" opacity="0.4"/>
-          <line x1="8" y1="32" x2="88" y2="32" stroke="var(--color-border)" stroke-width="0.75" opacity="0.3"/>
-          <line x1="12" y1="44" x2="84" y2="44" stroke="var(--color-border)" stroke-width="0.75" opacity="0.4"/>
-          <path d="M16 26 C28 22, 36 30, 48 26 C60 22, 68 30, 80 26" stroke="var(--color-accent)" stroke-width="1.5" fill="none" opacity="0.25" stroke-linecap="round">
-            <animate attributeName="d" dur="6s" repeatCount="indefinite" values="M16 26 C28 22, 36 30, 48 26 C60 22, 68 30, 80 26;M16 28 C28 32, 36 24, 48 28 C60 32, 68 24, 80 28;M16 26 C28 22, 36 30, 48 26 C60 22, 68 30, 80 26"/>
-          </path>
-          <g style="animation: panel-sway 5s ease-in-out infinite; transform-origin: 32px 12px">
-            <rect x="28" y="14" width="8" height="40" rx="1" stroke="var(--color-primary)" stroke-width="0.6" fill="var(--color-tint)" opacity="0.25"/>
-          </g>
-          <g style="animation: panel-sway 5s 0.7s ease-in-out infinite; transform-origin: 48px 12px">
-            <rect x="44" y="12" width="8" height="46" rx="1" stroke="var(--color-primary)" stroke-width="0.6" fill="var(--color-tint)" opacity="0.3"/>
-          </g>
-          <g style="animation: panel-sway 5s 1.4s ease-in-out infinite; transform-origin: 64px 12px">
-            <rect x="60" y="16" width="8" height="36" rx="1" stroke="var(--color-primary)" stroke-width="0.6" fill="var(--color-tint)" opacity="0.25"/>
-          </g>
-          <circle cx="48" cy="32" r="2" fill="var(--color-accent)" opacity="0.3">
-            <animate attributeName="opacity" dur="2.5s" repeatCount="indefinite" values="0.2;0.4;0.2"/>
-          </circle>
-        </svg>
+        <img src={loomIdleUrl} alt="" class="w-[120px] opacity-30 dark:opacity-50" />
 
         <div class="text-center max-w-[260px]">
           <h2 class="font-heading text-[21px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">

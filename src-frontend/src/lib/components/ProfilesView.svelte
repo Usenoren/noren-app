@@ -35,6 +35,7 @@
   import { marked } from "marked";
   import DOMPurify from "dompurify";
   import LoadingSpinner from "./LoadingSpinner.svelte";
+  import loomIdleUrl from "../../assets/loom-idle.png";
 
   marked.setOptions({ breaks: true });
 
@@ -391,29 +392,7 @@
       <!-- Empty state: no profile -->
       <div class="flex-1 flex flex-col items-center justify-center -m-4 overflow-hidden">
         <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-          <!-- Noren curtain — rod with hanging panels -->
-          <svg class="w-[130px] h-[88px]" viewBox="0 0 130 88" fill="none">
-            <!-- Rod -->
-            <line x1="10" y1="8" x2="120" y2="8" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" opacity="0.25"/>
-            <!-- End caps -->
-            <circle cx="10" cy="8" r="2.5" fill="var(--color-primary)" opacity="0.18"/>
-            <circle cx="120" cy="8" r="2.5" fill="var(--color-primary)" opacity="0.18"/>
-
-            <!-- Panel 1 -->
-            <g style="animation: panel-sway 5s ease-in-out infinite; transform-origin: 30px 8px">
-              <rect x="18" y="8" width="24" height="56" rx="1.5" stroke="var(--color-border)" stroke-width="0.75" fill="var(--color-tint)" opacity="0.2"/>
-            </g>
-
-            <!-- Panel 2 -->
-            <g style="animation: panel-sway 5s 0.8s ease-in-out infinite; transform-origin: 65px 8px">
-              <rect x="53" y="8" width="24" height="62" rx="1.5" stroke="var(--color-border)" stroke-width="0.75" fill="var(--color-tint)" opacity="0.2"/>
-            </g>
-
-            <!-- Panel 3 -->
-            <g style="animation: panel-sway 5s 1.6s ease-in-out infinite; transform-origin: 100px 8px">
-              <rect x="88" y="8" width="24" height="52" rx="1.5" stroke="var(--color-border)" stroke-width="0.75" fill="var(--color-tint)" opacity="0.2"/>
-            </g>
-          </svg>
+          <img src={loomIdleUrl} alt="" class="w-[130px] opacity-30 dark:opacity-50" />
 
           <div class="text-center max-w-[260px]">
             <h2 class="font-heading text-[21px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">

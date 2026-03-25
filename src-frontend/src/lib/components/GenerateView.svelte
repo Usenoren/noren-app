@@ -319,29 +319,7 @@
       <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 55% 45% at 50% 40%, var(--color-primary-muted), transparent 70%)"></div>
 
       <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-        <svg class="w-[120px] h-[68px]" viewBox="0 0 120 68" fill="none">
-          <line x1="18" y1="10" x2="102" y2="10" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" opacity="0.2"/>
-          {#each [
-            { x: 36, delay: 0.15 },
-            { x: 52, delay: 0.28 },
-            { x: 68, delay: 0.41 },
-            { x: 84, delay: 0.54 },
-          ] as thread, i}
-            <line
-              x1={thread.x} y1="10" x2={thread.x} y2="64"
-              stroke="var(--color-secondary)" stroke-width="1" stroke-linecap="round"
-              stroke-dasharray="54" stroke-dashoffset="54"
-              opacity={0.2 + (i % 2) * 0.15}
-              style="animation: warp-appear 0.7s {thread.delay}s ease-out forwards"
-            />
-          {/each}
-          <path
-            d="M26 36 C40 31, 50 40, 60 35 C70 30, 80 38, 94 33"
-            stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round"
-            stroke-dasharray="80" stroke-dashoffset="80"
-            style="animation: weft-weave 1s 0.9s ease-out forwards"
-          />
-        </svg>
+        <img src={loomIdleUrl} alt="" class="w-[130px] opacity-30 dark:opacity-50" />
 
         <div class="text-center max-w-[280px]">
           <h2 class="font-heading text-[32px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
@@ -500,7 +478,7 @@
     <div class="flex-1 min-h-0 overflow-y-auto px-4">
       {#if phase === "idle" && !comparison && !output}
         <div class="h-full flex flex-col items-center justify-center gap-5">
-          <img src={loomIdleUrl} alt="" class="w-[170px] opacity-50" />
+          <img src={loomIdleUrl} alt="" class="w-[170px] opacity-30 dark:opacity-50" />
           <div class="flex flex-col items-center gap-1.5">
             <p class="text-display text-foreground/75">Ready to weave</p>
             <p class="text-xs text-muted">Your voice is loaded and ready</p>
