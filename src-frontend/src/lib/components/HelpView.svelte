@@ -192,7 +192,7 @@
     <!-- About -->
     <div class="h-px bg-border opacity-50 mb-4"></div>
     <div class="flex items-center justify-between">
-      <span class="text-[11px] text-muted opacity-50">Noren v0.2.0</span>
+      <span class="text-[11px] text-muted opacity-50">Noren v0.3.0</span>
       <a href="https://usenoren.ai" target="_blank" class="text-[11px] text-muted opacity-50 hover:opacity-80 transition-opacity">usenoren.ai</a>
     </div>
   </div>
