@@ -137,14 +137,16 @@
         <div class="flex-1 h-px bg-gradient-to-r from-border to-transparent"></div>
       </div>
       <table class="w-full">
-        <tr class="border-b border-border">
-          <td class="py-2.5 text-[12.5px] text-foreground">Open Noren</td>
-          <td class="py-2.5 text-right"><kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">&#8984;</kbd> <kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">K</kbd></td>
-        </tr>
-        <tr>
-          <td class="py-2.5 text-[12.5px] text-foreground">Submit prompt</td>
-          <td class="py-2.5 text-right"><kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">&#8984;</kbd> <kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">&#9166;</kbd></td>
-        </tr>
+        <tbody>
+          <tr class="border-b border-border">
+            <td class="py-2.5 text-[12.5px] text-foreground">Open Noren</td>
+            <td class="py-2.5 text-right"><kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">&#8984;</kbd> <kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">K</kbd></td>
+          </tr>
+          <tr>
+            <td class="py-2.5 text-[12.5px] text-foreground">Submit prompt</td>
+            <td class="py-2.5 text-right"><kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">&#8984;</kbd> <kbd class="inline-block px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-surface border border-border rounded shadow-[0_1px_0_var(--color-border)]">&#9166;</kbd></td>
+          </tr>
+        </tbody>
       </table>
     </section>
 
