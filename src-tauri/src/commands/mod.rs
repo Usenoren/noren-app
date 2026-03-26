@@ -9,6 +9,7 @@ pub mod profiles;
 pub mod repurpose;
 pub mod scrape;
 pub mod settings;
+pub mod support;
 pub mod sync;
 
 pub use announcements::*;
@@ -22,4 +23,5 @@ pub use profiles::*;
 pub use repurpose::*;
 pub use scrape::*;
 pub use settings::*;
+pub use support::*;
 pub use sync::*;

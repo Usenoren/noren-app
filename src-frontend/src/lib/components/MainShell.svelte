@@ -24,13 +24,14 @@
   import ProfilesView from "./ProfilesView.svelte";
   import ExtractView from "./ExtractView.svelte";
   import AccountView from "./AccountView.svelte";
+  import HelpView from "./HelpView.svelte";
   import OnboardingView from "./OnboardingView.svelte";
   import NorenMark from "./NorenMark.svelte";
   import AnnouncementBell from "./AnnouncementBell.svelte";
   import ToastContainer from "./ToastContainer.svelte";
   import { toastWarning } from "$lib/stores/toast.svelte";
 
-  type View = "generate" | "repurpose" | "chat" | "profiles" | "extract" | "account" | "settings" | "onboarding";
+  type View = "generate" | "repurpose" | "chat" | "profiles" | "extract" | "account" | "settings" | "help" | "onboarding";
   let view: View = $state("generate");
   let hasPermissions = $state(true);
   let needsOnboarding = $state(false);
@@ -44,6 +45,7 @@
     { id: "extract", label: "Extract", icon: "wand" },
     { id: "account", label: "Account", icon: "badge" },
     { id: "settings", label: "Settings", icon: "gear" },
+    { id: "help", label: "Help", icon: "help" },
   ];
 
   onMount(() => {
@@ -56,7 +58,7 @@
 
     listen<string>("navigate", (event) => {
       const target = event.payload as View;
-      if (["generate", "repurpose", "chat", "profiles", "extract", "account", "settings"].includes(target)) {
+      if (["generate", "repurpose", "chat", "profiles", "extract", "account", "settings", "help"].includes(target)) {
         view = target;
       }
     }).then((fn) => cleanups.push(fn));
@@ -173,6 +175,10 @@
                 <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
                 </svg>
+              {:else if item.icon === "help"}
+                <svg class="shrink-0" style="width:17px;height:17px;color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"/>
+                </svg>
               {/if}
               <span class="font-heading italic text-[8px] font-normal tracking-normal" style="color:{view === item.id ? 'var(--color-accent)' : 'var(--color-muted)'}">
                 {item.label}
@@ -275,6 +281,8 @@
             <ExtractView />
           {:else if view === "account"}
             <AccountView />
+          {:else if view === "help"}
+            <HelpView />
           {:else}
             <SettingsView />
           {/if}

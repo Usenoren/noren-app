@@ -656,6 +656,12 @@ export async function scrapeReddit(username: string): Promise<ScrapeResponse> {
   return invoke("scrape_reddit", { username });
 }
 
+// ── Support ────────────────────────────────────────────────────
+
+export async function sendSupportMessage(message: string): Promise<void> {
+  return invoke("send_support_message", { message });
+}
+
 // ── Announcements ──────────────────────────────────────────────
 
 export interface Announcement {

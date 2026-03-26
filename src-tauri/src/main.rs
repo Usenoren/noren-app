@@ -220,6 +220,7 @@ fn main() {
             commands::scrape_twitter,
             commands::scrape_blog,
             commands::scrape_reddit,
+            commands::send_support_message,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
