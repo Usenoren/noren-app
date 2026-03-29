@@ -20,6 +20,7 @@
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { friendlyError } from "$lib/utils/errors";
+  import { PALETTES, getTheme, setAndPersistTheme, type PaletteId } from "$lib/stores/theme.svelte";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   function focusOnMount(node: HTMLElement) {
@@ -405,6 +406,38 @@
       <LoadingSpinner />
     </div>
   {:else}
+    <!-- Appearance / Theme Picker -->
+    <div class="card-flat p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="section-label">Appearance</span>
+      </div>
+      <div class="grid grid-cols-4 gap-2">
+        {#each PALETTES as palette}
+          {@const isActive = getTheme() === palette.id}
+          <button
+            class="flex flex-col items-center gap-1.5 p-1.5 rounded-lg border cursor-pointer transition-all duration-200"
+            style="
+              border-color: {isActive ? 'var(--color-accent)' : 'var(--color-border)'};
+              background: {isActive ? 'var(--color-accent-wash)' : 'transparent'};
+              box-shadow: {isActive ? '0 0 10px rgba(122,51,64,0.15)' : 'none'};
+            "
+            onclick={() => setAndPersistTheme(palette.id)}
+          >
+            <div
+              class="w-full rounded-md overflow-hidden"
+              style="height: 42px; background: {palette.bg}; position: relative;"
+            >
+              <div style="height: 8px; background: {palette.surface}; border-bottom: 1px solid {palette.border};"></div>
+              <div style="margin: 5px 8px; height: 16px; background: {palette.surface}; border: 1px solid {palette.border}; border-left: 2px solid {palette.accent}; border-radius: 3px;"></div>
+            </div>
+            <span class="text-[10px] text-muted font-medium" style="font-family: 'JetBrains Mono', monospace;">
+              {palette.name}{palette.id === 'kon' ? ' *' : ''}
+            </span>
+          </button>
+        {/each}
+      </div>
+    </div>
+
     <!-- Keyboard Shortcut -->
     <div class="card-flat p-4">
       <div class="flex items-center justify-between mb-3">

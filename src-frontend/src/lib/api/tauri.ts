@@ -27,6 +27,7 @@ export interface SettingsInfo {
   hotkey: string;
   server_url: string | null;
   debug_mode: boolean;
+  theme: string;
 }
 
 export interface NorenProStatus {
@@ -261,6 +262,10 @@ export async function getThinkingSettings(): Promise<{ enabled: boolean; budget:
 
 export async function setThinkingSettings(enabled: boolean, budget: number): Promise<void> {
   return invoke("set_thinking_settings", { enabled, budget });
+}
+
+export async function setTheme(theme: string): Promise<void> {
+  return invoke("set_theme", { theme });
 }
 
 // --- Google OAuth ---

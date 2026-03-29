@@ -213,6 +213,7 @@ fn main() {
             commands::list_custom_models,
             commands::get_thinking_settings,
             commands::set_thinking_settings,
+            commands::set_theme,
             commands::chat_send,
             commands::chat_send_stream,
             commands::save_chat,

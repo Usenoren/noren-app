@@ -240,10 +240,17 @@ pub struct Config {
     /// Last seen announcement timestamp (ISO 8601) — tracks read state locally
     #[serde(rename = "lastSeenAnnouncementTs", skip_serializing_if = "Option::is_none")]
     pub last_seen_announcement_ts: Option<String>,
+    /// Curated palette theme ID (e.g. "kon", "charcoal", "classic")
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_thinking_budget() -> u32 {
     10000
+}
+
+pub fn default_theme() -> String {
+    "kon".to_string()
 }
 
 impl Default for Config {
@@ -260,6 +267,7 @@ impl Default for Config {
             thinking_budget: default_thinking_budget(),
             debug_mode: false,
             last_seen_announcement_ts: None,
+            theme: default_theme(),
         }
     }
 }

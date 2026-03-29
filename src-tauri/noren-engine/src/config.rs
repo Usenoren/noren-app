@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::types::{Config, InferenceMode, ProviderConfig};
+use crate::types::{default_theme, Config, InferenceMode, ProviderConfig};
 
 const CONFIG_DIR_NAME: &str = ".noren";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -42,6 +42,7 @@ pub fn load_config(overrides: Option<ConfigOverrides>) -> Config {
         thinking_budget: file_config.thinking_budget.unwrap_or(10000),
         debug_mode: file_config.debug_mode.unwrap_or(false),
         last_seen_announcement_ts: file_config.last_seen_announcement_ts,
+        theme: file_config.theme.unwrap_or_else(default_theme),
     }
 }
 
@@ -59,6 +60,7 @@ struct PartialConfig {
     thinking_budget: Option<u32>,
     debug_mode: Option<bool>,
     last_seen_announcement_ts: Option<String>,
+    theme: Option<String>,
 }
 
 fn config_dir() -> PathBuf {
@@ -164,6 +166,10 @@ fn load_file_config() -> PartialConfig {
             .and_then(|v| v.as_bool()),
         last_seen_announcement_ts: json
             .get("lastSeenAnnouncementTs")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        theme: json
+            .get("theme")
             .and_then(|v| v.as_str())
             .map(String::from),
     }

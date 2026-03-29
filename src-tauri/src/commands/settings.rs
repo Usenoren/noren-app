@@ -12,6 +12,7 @@ pub struct SettingsInfo {
     pub hotkey: String,
     pub server_url: Option<String>,
     pub debug_mode: bool,
+    pub theme: String,
 }
 
 #[tauri::command]
@@ -38,6 +39,7 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
         hotkey: config.hotkey.clone(),
         server_url: config.server_url.clone(),
         debug_mode: config.debug_mode,
+        theme: config.theme.clone(),
     }
 }
 
@@ -99,6 +101,22 @@ pub fn update_model(
     config.provider.model = model;
     save_config_file(&config)?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_theme(
+    state: State<'_, AppState>,
+    theme: String,
+) -> Result<(), String> {
+    const VALID: &[&str] = &[
+        "kon", "charcoal", "classic", "sumi", "washi", "matcha", "kumo", "yoru",
+    ];
+    if !VALID.contains(&theme.as_str()) {
+        return Err(format!("Unknown theme: {}", theme));
+    }
+    let mut config = state.config.lock().unwrap();
+    config.theme = theme;
+    save_config_file(&config)
 }
 
 #[tauri::command]
@@ -1049,6 +1067,7 @@ pub fn save_config_file(config: &noren_engine::Config) -> Result<(), String> {
         "extendedThinking": config.extended_thinking,
         "thinkingBudget": config.thinking_budget,
         "debugMode": config.debug_mode,
+        "theme": config.theme,
     });
 
     if let Some(ref url) = config.server_url {

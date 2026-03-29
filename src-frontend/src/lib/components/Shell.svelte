@@ -2,6 +2,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
   import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
+  import { syncThemeFromConfig } from "$lib/stores/theme.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import GenerateView from "./GenerateView.svelte";
   import SettingsView from "./SettingsView.svelte";
@@ -62,6 +63,8 @@
       hasPermissions = ok;
     });
 
+    // Sync theme from persisted config
+    syncThemeFromConfig();
     // Check profile status and API key availability
     Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
       hasProfile = profile.exists;

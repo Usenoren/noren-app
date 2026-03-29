@@ -2,6 +2,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
+  import { syncThemeFromConfig } from "$lib/stores/theme.svelte";
   import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
   import { isRefreshAvailable } from "$lib/stores/patches.svelte";
   import {
@@ -74,6 +75,7 @@
       hasPermissions = ok;
     });
 
+    syncThemeFromConfig();
     Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
       if (!profile.exists) {
         needsOnboarding = true;

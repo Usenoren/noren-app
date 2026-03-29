@@ -86,7 +86,7 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.04;
+  opacity: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 128px 128px;
 }
@@ -898,82 +898,345 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 
 /* ============================================================
-   DARK MODE — Automatic macOS theme matching
-   Inverts the indigo depth: deep ink backgrounds, light text
+   CURATED PALETTE SYSTEM
+   8 hand-crafted themes. Kon (navy) is default.
+   Each [data-theme] block defines ALL color variables.
+   [data-theme-mode] handles shared dark/light component behavior.
    ============================================================ */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: #141211;
-    --color-surface: #1E1B19;
-    --color-border: #302C28;
-    --color-foreground: #E8E3DD;
-    --color-muted: #8A847E;
-    --color-primary: #5A9AC2;
-    --color-primary-hover: #6DAAD0;
-    --color-primary-muted: rgba(90, 154, 194, 0.15);
-    --color-accent: #B06058;
-    --color-accent-hover: #98514A;
-    --color-secondary: #6B9BB5;
-    --color-tint: #1A2430;
-    --color-signal: #3D9B65;
-    --color-warning: #D4A017;
-    --color-error: #E05B3C;
+/* --- New variable: send button color (Matcha overrides) --- */
+:root { --color-send: var(--color-accent); }
 
-    --shadow-card: 0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.16);
-    --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.20);
-    --shadow-popup: 0 4px 12px rgba(0,0,0,0.20), 0 16px 48px rgba(0,0,0,0.28);
-    --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.24);
-    --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.12);
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.08);
-
-    --color-code-bg: rgba(107, 155, 181, 0.10);
-    --color-code-block-bg: rgba(107, 155, 181, 0.08);
-    --color-selection-bg: rgba(107, 155, 181, 0.3);
-
-    --color-shimmer: rgba(107, 155, 181, 0.08);
-    --color-shimmer-peak: rgba(107, 155, 181, 0.15);
-    --color-shimmer-chat: rgba(107, 155, 181, 0.06);
-    --color-shimmer-chat-peak: rgba(107, 155, 181, 0.12);
-    --color-loom-pulse: rgba(176, 96, 88, 0.45);
-
-    --color-warm-surface: #1A1816;
-    --color-bg-rail: #191715;
-    --color-accent-wash: rgba(176, 96, 88, 0.08);
-    --color-accent-glow: rgba(176, 96, 88, 0.15);
-  }
-
-  /* Grain texture — softer on dark */
-  body::before {
-    opacity: 0.03;
-  }
-
-  /* Select chevron in dark muted color */
-  select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A847E' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
-  }
-
-  /* Toggle knob — dark surfaces need dark knob */
-  .toggle::after {
-    background: #2B2725;
-  }
-
-  /* Ghost button hover — use light foreground overlay */
-  .btn-ghost:hover:not(:disabled) {
-    background: rgba(232,227,221,0.06);
-  }
-
-  /* Idle loom weft drift */
-  @keyframes idle-weft-drift {
-    0%   { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }
-    50%  { d: path("M10 38 C26 42, 40 33, 54 38 C68 43, 76 34, 92 37"); }
-    100% { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }
-  }
-  @keyframes idle-weft-ghost-drift {
-    0%   { d: path("M10 42 C28 38, 42 46, 56 41 C70 36, 80 43, 92 40"); }
-    50%  { d: path("M10 40 C26 44, 40 37, 54 42 C68 47, 78 39, 92 42"); }
-    100% { d: path("M10 42 C28 38, 42 46, 56 41 C70 36, 80 43, 92 40"); }
-  }
-  .idle-weft { animation: idle-weft-drift 8s ease-in-out infinite; }
-  .idle-weft-ghost { animation: idle-weft-ghost-drift 10s ease-in-out infinite; }
+/* --- Kon (default) — Website navy with grain --- */
+html[data-theme="kon"] {
+  --color-background: #1E3148;
+  --color-surface: #253A52;
+  --color-border: #2A4560;
+  --color-foreground: #E8EDF2;
+  --color-muted: #94A1B6;
+  --color-primary: #7AAFC8;
+  --color-primary-hover: #8DBFD6;
+  --color-primary-muted: rgba(122, 175, 200, 0.15);
+  --color-accent: #B06058;
+  --color-accent-hover: #98514A;
+  --color-secondary: #6B9BB5;
+  --color-tint: #1A2C40;
+  --color-signal: #3D9B65;
+  --color-warning: #D4A017;
+  --color-error: #E05B3C;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.16);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.20);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.20), 0 16px 48px rgba(0,0,0,0.28);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.24);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.08);
+  --color-code-bg: rgba(107, 155, 181, 0.10);
+  --color-code-block-bg: rgba(107, 155, 181, 0.08);
+  --color-selection-bg: rgba(107, 155, 181, 0.3);
+  --color-shimmer: rgba(107, 155, 181, 0.08);
+  --color-shimmer-peak: rgba(107, 155, 181, 0.15);
+  --color-shimmer-chat: rgba(107, 155, 181, 0.06);
+  --color-shimmer-chat-peak: rgba(107, 155, 181, 0.12);
+  --color-loom-pulse: rgba(176, 96, 88, 0.45);
+  --color-warm-surface: #223850;
+  --color-bg-rail: #1A2D42;
+  --color-accent-wash: rgba(176, 96, 88, 0.08);
+  --color-accent-glow: rgba(176, 96, 88, 0.15);
 }
+html[data-theme="kon"] body::before { opacity: 0.04; }
+
+/* --- Charcoal — Current warm dark --- */
+html[data-theme="charcoal"] {
+  --color-background: #141211;
+  --color-surface: #1E1B19;
+  --color-border: #302C28;
+  --color-foreground: #E8E3DD;
+  --color-muted: #8A847E;
+  --color-primary: #5A9AC2;
+  --color-primary-hover: #6DAAD0;
+  --color-primary-muted: rgba(90, 154, 194, 0.15);
+  --color-accent: #B06058;
+  --color-accent-hover: #98514A;
+  --color-secondary: #6B9BB5;
+  --color-tint: #1A2430;
+  --color-signal: #3D9B65;
+  --color-warning: #D4A017;
+  --color-error: #E05B3C;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.16);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.20);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.20), 0 16px 48px rgba(0,0,0,0.28);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.24);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.08);
+  --color-code-bg: rgba(107, 155, 181, 0.10);
+  --color-code-block-bg: rgba(107, 155, 181, 0.08);
+  --color-selection-bg: rgba(107, 155, 181, 0.3);
+  --color-shimmer: rgba(107, 155, 181, 0.08);
+  --color-shimmer-peak: rgba(107, 155, 181, 0.15);
+  --color-shimmer-chat: rgba(107, 155, 181, 0.06);
+  --color-shimmer-chat-peak: rgba(107, 155, 181, 0.12);
+  --color-loom-pulse: rgba(176, 96, 88, 0.45);
+  --color-warm-surface: #1A1816;
+  --color-bg-rail: #191715;
+  --color-accent-wash: rgba(176, 96, 88, 0.08);
+  --color-accent-glow: rgba(176, 96, 88, 0.15);
+}
+
+/* --- Classic — Warm cream (current light mode) --- */
+/* @theme block already defines these as defaults, but explicit for completeness */
+html[data-theme="classic"] {
+  --color-background: #F6F1EB;
+  --color-surface: #FFFDF9;
+  --color-border: #D4CFC9;
+  --color-foreground: #2B2725;
+  --color-muted: #7A746E;
+  --color-primary: #1E3148;
+  --color-primary-hover: #162538;
+  --color-primary-muted: rgba(30, 49, 72, 0.10);
+  --color-accent: #7A3340;
+  --color-accent-hover: #652B35;
+  --color-secondary: #3B6B8A;
+  --color-tint: #E8EDF2;
+  --color-signal: #2D7A4F;
+  --color-warning: #B8860B;
+  --color-error: #C23B2A;
+  --shadow-card: 0 1px 3px rgba(30,49,72,0.04), 0 4px 16px rgba(30,49,72,0.06), 0 12px 40px rgba(30,49,72,0.03);
+  --shadow-card-hover: 0 2px 4px rgba(30,49,72,0.04), 0 8px 24px rgba(30,49,72,0.08), 0 20px 60px rgba(30,49,72,0.06);
+  --shadow-popup: 0 4px 12px rgba(30,49,72,0.08), 0 16px 48px rgba(30,49,72,0.12), 0 32px 80px rgba(30,49,72,0.08);
+  --shadow-dropdown: 0 2px 8px rgba(30,49,72,0.06), 0 8px 24px rgba(30,49,72,0.10);
+  --shadow-inset: inset 0 1px 2px rgba(30,49,72,0.04);
+  --shadow-sm: 0 1px 2px rgba(30,49,72,0.04), 0 2px 6px rgba(30,49,72,0.04);
+  --color-code-bg: rgba(30, 49, 72, 0.06);
+  --color-code-block-bg: rgba(30, 49, 72, 0.05);
+  --color-selection-bg: rgba(59, 107, 138, 0.2);
+  --color-shimmer: rgba(59, 107, 138, 0.10);
+  --color-shimmer-peak: rgba(59, 107, 138, 0.18);
+  --color-shimmer-chat: rgba(59, 107, 138, 0.08);
+  --color-shimmer-chat-peak: rgba(59, 107, 138, 0.14);
+  --color-loom-pulse: rgba(122, 51, 64, 0.45);
+  --color-warm-surface: #FAFAF8;
+  --color-bg-rail: #E2DCD4;
+  --color-accent-wash: rgba(122, 51, 64, 0.06);
+  --color-accent-glow: rgba(122, 51, 64, 0.12);
+}
+
+/* --- Sumi — Pure ink black --- */
+html[data-theme="sumi"] {
+  --color-background: #0C0B0A;
+  --color-surface: #141312;
+  --color-border: #222120;
+  --color-foreground: #D4D0CA;
+  --color-muted: #6B6660;
+  --color-primary: #5A9AC2;
+  --color-primary-hover: #6DAAD0;
+  --color-primary-muted: rgba(90, 154, 194, 0.15);
+  --color-accent: #B06058;
+  --color-accent-hover: #98514A;
+  --color-secondary: #6B9BB5;
+  --color-tint: #161514;
+  --color-signal: #3D9B65;
+  --color-warning: #D4A017;
+  --color-error: #E05B3C;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.20), 0 4px 16px rgba(0,0,0,0.24);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.20), 0 8px 24px rgba(0,0,0,0.30);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.28), 0 16px 48px rgba(0,0,0,0.36);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.24), 0 8px 24px rgba(0,0,0,0.32);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.16);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.12);
+  --color-code-bg: rgba(107, 155, 181, 0.08);
+  --color-code-block-bg: rgba(107, 155, 181, 0.06);
+  --color-selection-bg: rgba(107, 155, 181, 0.25);
+  --color-shimmer: rgba(107, 155, 181, 0.06);
+  --color-shimmer-peak: rgba(107, 155, 181, 0.12);
+  --color-shimmer-chat: rgba(107, 155, 181, 0.05);
+  --color-shimmer-chat-peak: rgba(107, 155, 181, 0.10);
+  --color-loom-pulse: rgba(176, 96, 88, 0.45);
+  --color-warm-surface: #121110;
+  --color-bg-rail: #100F0E;
+  --color-accent-wash: rgba(176, 96, 88, 0.08);
+  --color-accent-glow: rgba(176, 96, 88, 0.18);
+}
+
+/* --- Washi — Clean paper white --- */
+html[data-theme="washi"] {
+  --color-background: #FAFAF7;
+  --color-surface: #FFFFFF;
+  --color-border: #E5E2DD;
+  --color-foreground: #1A1918;
+  --color-muted: #8A8580;
+  --color-primary: #1E3148;
+  --color-primary-hover: #162538;
+  --color-primary-muted: rgba(30, 49, 72, 0.10);
+  --color-accent: #7A3340;
+  --color-accent-hover: #652B35;
+  --color-secondary: #3B6B8A;
+  --color-tint: #F0EDE8;
+  --color-signal: #2D7A4F;
+  --color-warning: #B8860B;
+  --color-error: #C23B2A;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.06);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.08), 0 16px 48px rgba(0,0,0,0.10);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
+  --color-code-bg: rgba(30, 49, 72, 0.05);
+  --color-code-block-bg: rgba(30, 49, 72, 0.04);
+  --color-selection-bg: rgba(59, 107, 138, 0.18);
+  --color-shimmer: rgba(59, 107, 138, 0.08);
+  --color-shimmer-peak: rgba(59, 107, 138, 0.16);
+  --color-shimmer-chat: rgba(59, 107, 138, 0.06);
+  --color-shimmer-chat-peak: rgba(59, 107, 138, 0.12);
+  --color-loom-pulse: rgba(122, 51, 64, 0.40);
+  --color-warm-surface: #F8F8F5;
+  --color-bg-rail: #F0EDE8;
+  --color-accent-wash: rgba(122, 51, 64, 0.05);
+  --color-accent-glow: rgba(122, 51, 64, 0.10);
+}
+
+/* --- Matcha — Deep forest --- */
+html[data-theme="matcha"] {
+  --color-background: #141E17;
+  --color-surface: #1A2820;
+  --color-border: #263830;
+  --color-foreground: #D8E4DC;
+  --color-muted: #7A9080;
+  --color-primary: #6AAA80;
+  --color-primary-hover: #7DBB92;
+  --color-primary-muted: rgba(106, 170, 128, 0.15);
+  --color-accent: #B06058;
+  --color-accent-hover: #98514A;
+  --color-secondary: #6B9BB5;
+  --color-tint: #182620;
+  --color-signal: #4A9B60;
+  --color-warning: #D4A017;
+  --color-error: #E05B3C;
+  --color-send: #5A7A60;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.18);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.14), 0 8px 24px rgba(0,0,0,0.22);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.22), 0 16px 48px rgba(0,0,0,0.30);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.26);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.14);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.10);
+  --color-code-bg: rgba(90, 122, 96, 0.12);
+  --color-code-block-bg: rgba(90, 122, 96, 0.08);
+  --color-selection-bg: rgba(90, 122, 96, 0.25);
+  --color-shimmer: rgba(90, 122, 96, 0.08);
+  --color-shimmer-peak: rgba(90, 122, 96, 0.15);
+  --color-shimmer-chat: rgba(90, 122, 96, 0.06);
+  --color-shimmer-chat-peak: rgba(90, 122, 96, 0.12);
+  --color-loom-pulse: rgba(176, 96, 88, 0.40);
+  --color-warm-surface: #182420;
+  --color-bg-rail: #121C16;
+  --color-accent-wash: rgba(176, 96, 88, 0.08);
+  --color-accent-glow: rgba(90, 122, 96, 0.15);
+}
+
+/* --- Kumo — Soft cloud gray --- */
+html[data-theme="kumo"] {
+  --color-background: #E8E6E2;
+  --color-surface: #F2F0ED;
+  --color-border: #D0CEC9;
+  --color-foreground: #2B2925;
+  --color-muted: #7A7872;
+  --color-primary: #1E3148;
+  --color-primary-hover: #162538;
+  --color-primary-muted: rgba(30, 49, 72, 0.10);
+  --color-accent: #7A3340;
+  --color-accent-hover: #652B35;
+  --color-secondary: #3B6B8A;
+  --color-tint: #DFDDD8;
+  --color-signal: #2D7A4F;
+  --color-warning: #B8860B;
+  --color-error: #C23B2A;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.05);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.05), 0 8px 20px rgba(0,0,0,0.08);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.10), 0 16px 48px rgba(0,0,0,0.12);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.10);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.04);
+  --color-code-bg: rgba(30, 49, 72, 0.06);
+  --color-code-block-bg: rgba(30, 49, 72, 0.04);
+  --color-selection-bg: rgba(59, 107, 138, 0.18);
+  --color-shimmer: rgba(59, 107, 138, 0.08);
+  --color-shimmer-peak: rgba(59, 107, 138, 0.16);
+  --color-shimmer-chat: rgba(59, 107, 138, 0.06);
+  --color-shimmer-chat-peak: rgba(59, 107, 138, 0.12);
+  --color-loom-pulse: rgba(122, 51, 64, 0.40);
+  --color-warm-surface: #ECEAE6;
+  --color-bg-rail: #DCDAD6;
+  --color-accent-wash: rgba(122, 51, 64, 0.05);
+  --color-accent-glow: rgba(122, 51, 64, 0.10);
+}
+
+/* --- Yoru — Midnight blue-black --- */
+html[data-theme="yoru"] {
+  --color-background: #0D1117;
+  --color-surface: #151B24;
+  --color-border: #21283B;
+  --color-foreground: #D6DCE8;
+  --color-muted: #6B7A90;
+  --color-primary: #5A9AC2;
+  --color-primary-hover: #6DAAD0;
+  --color-primary-muted: rgba(90, 154, 194, 0.15);
+  --color-accent: #B06058;
+  --color-accent-hover: #98514A;
+  --color-secondary: #6B9BB5;
+  --color-tint: #141A24;
+  --color-signal: #3D9B65;
+  --color-warning: #D4A017;
+  --color-error: #E05B3C;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.16), 0 4px 16px rgba(0,0,0,0.20);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.24);
+  --shadow-popup: 0 4px 12px rgba(0,0,0,0.24), 0 16px 48px rgba(0,0,0,0.32);
+  --shadow-dropdown: 0 2px 8px rgba(0,0,0,0.20), 0 8px 24px rgba(0,0,0,0.28);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.14);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.10);
+  --color-code-bg: rgba(107, 155, 181, 0.10);
+  --color-code-block-bg: rgba(107, 155, 181, 0.08);
+  --color-selection-bg: rgba(107, 155, 181, 0.28);
+  --color-shimmer: rgba(107, 155, 181, 0.07);
+  --color-shimmer-peak: rgba(107, 155, 181, 0.14);
+  --color-shimmer-chat: rgba(107, 155, 181, 0.05);
+  --color-shimmer-chat-peak: rgba(107, 155, 181, 0.11);
+  --color-loom-pulse: rgba(176, 96, 88, 0.45);
+  --color-warm-surface: #121820;
+  --color-bg-rail: #0F141C;
+  --color-accent-wash: rgba(176, 96, 88, 0.08);
+  --color-accent-glow: rgba(176, 96, 88, 0.15);
+}
+
+/* --- Dark mode shared component overrides --- */
+html[data-theme-mode="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A847E' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+}
+html[data-theme-mode="dark"] .toggle::after {
+  background: #2B2725;
+}
+html[data-theme-mode="dark"] .btn-ghost:hover:not(:disabled) {
+  background: rgba(232,227,221,0.06);
+}
+
+/* Loom idle images: invert in dark, dim in light */
+html[data-theme-mode="dark"] .loom-idle-img {
+  opacity: 0.5;
+  filter: brightness(1) invert(1);
+}
+html[data-theme-mode="light"] .loom-idle-img {
+  opacity: 0.8;
+  filter: brightness(0.5);
+}
+
+/* Idle loom weft drift (theme-independent) */
+@keyframes idle-weft-drift {
+  0%   { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }
+  50%  { d: path("M10 38 C26 42, 40 33, 54 38 C68 43, 76 34, 92 37"); }
+  100% { d: path("M10 36 C24 31, 38 40, 52 35 C66 30, 78 38, 92 34"); }
+}
+@keyframes idle-weft-ghost-drift {
+  0%   { d: path("M10 42 C28 38, 42 46, 56 41 C70 36, 80 43, 92 40"); }
+  50%  { d: path("M10 40 C26 44, 40 37, 54 42 C68 47, 78 39, 92 42"); }
+  100% { d: path("M10 42 C28 38, 42 46, 56 41 C70 36, 80 43, 92 40"); }
+}
+.idle-weft { animation: idle-weft-drift 8s ease-in-out infinite; }
+.idle-weft-ghost { animation: idle-weft-ghost-drift 10s ease-in-out infinite; }

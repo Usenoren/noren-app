@@ -29,13 +29,14 @@
   import { canExtract, refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { startQueue as startExtractionQueue } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
+  import { PALETTES, getTheme, setAndPersistTheme, type PaletteId } from "$lib/stores/theme.svelte";
   import LoadingSpinner from "./LoadingSpinner.svelte";
   import NorenMark from "./NorenMark.svelte";
 
   // Events
   let { onComplete }: { onComplete: () => void } = $props();
 
-  type Step = "welcome" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
+  type Step = "welcome" | "palette" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
   let step: Step = $state("welcome");
   let pendingPath: "paste" | "guided" = $state("paste");
 
@@ -941,7 +942,7 @@
 
         <!-- Primary card: Extract my voice -->
         <button
-          onclick={() => checkAndProceed("paste")}
+          onclick={() => { pendingPath = "paste"; step = "palette"; }}
           class="relative overflow-hidden rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
           style="
             padding: 16px 18px;
@@ -968,7 +969,7 @@
 
         <!-- Secondary card: Guided interview -->
         <button
-          onclick={() => checkAndProceed("guided")}
+          onclick={() => { pendingPath = "guided"; step = "palette"; }}
           class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="
             padding: 16px 18px;
@@ -1014,6 +1015,51 @@
           </button>
         </div>
       </div>
+    </div>
+
+  {:else if step === "palette"}
+    <!-- Palette selection -->
+    <div class="flex-1 flex flex-col items-center justify-center gap-6" style="padding: 32px 24px">
+      <div class="text-center">
+        <h2 class="font-heading italic font-normal text-foreground" style="font-size: 22px">Pick your workspace</h2>
+        <p class="text-muted mt-1.5" style="font-size: 11px">You can change this anytime in Settings</p>
+      </div>
+
+      <div class="grid grid-cols-4 gap-2.5 w-full" style="max-width: 420px">
+        {#each PALETTES as palette}
+          {@const isActive = getTheme() === palette.id}
+          <button
+            class="flex flex-col items-center gap-1.5 p-1.5 rounded-lg border cursor-pointer transition-all duration-200"
+            style="
+              border-color: {isActive ? 'var(--color-accent)' : 'var(--color-border)'};
+              background: {isActive ? 'var(--color-accent-wash)' : 'transparent'};
+              box-shadow: {isActive ? '0 0 10px rgba(122,51,64,0.15)' : 'none'};
+            "
+            onclick={() => setAndPersistTheme(palette.id)}
+          >
+            <div
+              class="w-full rounded-md overflow-hidden"
+              style="height: 48px; background: {palette.bg}; position: relative;"
+            >
+              <div style="height: 9px; background: {palette.surface}; border-bottom: 1px solid {palette.border};"></div>
+              <div style="margin: 6px 8px; height: 18px; background: {palette.surface}; border: 1px solid {palette.border}; border-left: 2px solid {palette.accent}; border-radius: 3px;"></div>
+            </div>
+            <span class="text-[10px] text-muted font-medium" style="font-family: 'JetBrains Mono', monospace;">
+              {palette.name}{palette.id === 'kon' ? ' *' : ''}
+            </span>
+          </button>
+        {/each}
+      </div>
+
+      <button
+        onclick={() => checkAndProceed(pendingPath)}
+        class="px-8 py-2.5 rounded-xl text-sm font-medium cursor-pointer border-none transition-colors"
+        style="background: var(--color-accent); color: white; box-shadow: 0 0 12px var(--color-accent-glow);"
+        onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; }}
+        onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; }}
+      >
+        Continue
+      </button>
     </div>
 
   {:else if step === "auth"}

@@ -602,7 +602,7 @@
       <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 55% 45% at 50% 40%, var(--color-primary-muted), transparent 70%)"></div>
 
       <div class="relative flex flex-col items-center gap-8 animate-fade-in-up" style="animation-duration: 0.6s">
-        <img src={loomIdleUrl} alt="" class="w-[130px] opacity-80 brightness-50 dark:opacity-50 dark:brightness-100 dark:invert" />
+        <img src={loomIdleUrl} alt="" class="w-[130px] loom-idle-img" />
 
         <div class="text-center max-w-[280px]">
           <h2 class="font-heading text-[32px] italic font-normal text-foreground leading-snug tracking-[-0.3px]">
