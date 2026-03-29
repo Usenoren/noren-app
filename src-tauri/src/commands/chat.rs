@@ -48,19 +48,14 @@ fn chats_dir() -> std::path::PathBuf {
     dir
 }
 
-/// Build a chat-specific system prompt from the voice profile.
-fn build_chat_system_prompt(core_identity: &str, context_layer: Option<&str>) -> String {
+/// Build a chat system prompt. No voice enforcement, just helpful assistant
+/// with optional context about the user's domain.
+fn build_chat_system_prompt(context_layer: Option<&str>) -> String {
     let mut prompt = String::from(
-        "You are a helpful writing assistant. Be conversational and helpful.",
+        "You are a helpful assistant. Be conversational, clear, and concise.",
     );
-    if !core_identity.is_empty() {
-        prompt.push_str(
-            " Write in the user's voice and style as described in their profile:\n\n",
-        );
-        prompt.push_str(core_identity);
-    }
     if let Some(ctx) = context_layer {
-        prompt.push_str("\n\nAdditional context for this format:\n");
+        prompt.push_str("\n\nContext about the user's work:\n");
         prompt.push_str(ctx);
     }
     prompt
@@ -79,12 +74,12 @@ pub async fn chat_send(
 ) -> Result<GenerateResult, String> {
     let config = state.config.lock().unwrap().clone();
 
-    // Load local profile for voice-aware system prompt
-    let (core_identity, contexts) = noren_engine::load_profile(&config.profile_dir)
+    // Load context layer only (no voice profile for chat)
+    let (_, contexts) = noren_engine::load_profile(&config.profile_dir)
         .unwrap_or_else(|_| (String::new(), std::collections::HashMap::new()));
 
     let context_layer = contexts.get(&format);
-    let system_prompt = build_chat_system_prompt(&core_identity, context_layer.map(String::as_str));
+    let system_prompt = build_chat_system_prompt(context_layer.map(String::as_str));
 
     // Build full message array: system prompt + conversation history
     let mut llm_messages = vec![noren_engine::LlmMessage {
@@ -209,10 +204,10 @@ pub async fn chat_send_stream(
 ) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
 
-    let (core_identity, contexts) = noren_engine::load_profile(&config.profile_dir)
+    let (_, contexts) = noren_engine::load_profile(&config.profile_dir)
         .unwrap_or_else(|_| (String::new(), std::collections::HashMap::new()));
     let context_layer = contexts.get(&format);
-    let system_prompt = build_chat_system_prompt(&core_identity, context_layer.map(String::as_str));
+    let system_prompt = build_chat_system_prompt(context_layer.map(String::as_str));
 
     let mut llm_messages = vec![noren_engine::LlmMessage {
         role: noren_engine::Role::System,

@@ -117,7 +117,7 @@
     try {
       conversations = await listChats();
     } catch {
-      // Ignore — history just won't show
+      // Ignore
     }
   }
 
@@ -239,7 +239,6 @@
     isLoading = true;
     scrollToBottom();
 
-    // Ensure conversation ID exists before sending (needed for server-side chat sync)
     if (!conversationId) {
       conversationId = generateId();
       conversationCreatedAt = nowISO();
@@ -263,7 +262,6 @@
       totalTokens += result.input_tokens + result.output_tokens;
       scrollToBottom();
 
-      // Auto-save after each successful exchange
       await persistChat();
     } catch (e) {
       error = friendlyError(e);
@@ -301,7 +299,7 @@
     e.stopPropagation();
     try {
       await deleteChat(id);
-      syncDeleteChat(id).catch(() => toastInfo("Chat deletion not synced to server")); // fire-and-forget server sync
+      syncDeleteChat(id).catch(() => toastInfo("Chat deletion not synced to server"));
       if (conversationId === id) {
         handleNewChat();
       }
@@ -317,80 +315,58 @@
       handleSend();
     }
   }
-
-  function autoResize(e: Event) {
-    const textarea = e.target as HTMLTextAreaElement;
-    textarea.style.height = "auto";
-    textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
-  }
 </script>
 
-<div class="flex flex-col h-full animate-fade-in-up">
-  <!-- Header -->
-  <div class="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
-    <button
-      onclick={handleNewChat}
-      class="px-2.5 py-1 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
-    >
-      New Chat
-    </button>
+<div class="c-root">
+  <!-- Toolbar -->
+  <div class="c-toolbar">
+    <span class="c-toolbar-title">Converse</span>
 
-    <div class="relative">
+    <button class="c-toolbar-pill" onclick={handleNewChat}>+ New</button>
+
+    <div class="c-history-wrap">
       <button
+        class="c-toolbar-pill"
+        class:active={showHistory}
         onclick={() => { showHistory = !showHistory; }}
-        class="px-2.5 py-1 text-xs border transition-colors cursor-pointer rounded-md
-          {showHistory
-            ? 'border-secondary text-foreground'
-            : 'border-border text-muted hover:border-secondary hover:text-foreground'}"
       >
-        <span class="inline-flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          History
-          {#if conversations.length > 0}
-            <span class="text-[10px] text-secondary">{conversations.length}</span>
-          {/if}
-        </span>
+        <svg class="pill-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        History
+        {#if conversations.length > 0}
+          <span class="pill-badge">{conversations.length}</span>
+        {/if}
       </button>
 
       {#if showHistory}
-        <!-- Invisible backdrop to close dropdown on click-outside -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div class="fixed inset-0 z-10" onclick={() => { showHistory = false; }}></div>
+        <div class="c-history-backdrop" onclick={() => { showHistory = false; }}></div>
 
-        <div
-          class="absolute top-full left-0 mt-1 z-20 w-72 max-h-80 overflow-y-auto bg-background border border-border rounded-lg"
-          style="box-shadow: var(--shadow-dropdown)"
-        >
+        <div class="c-history-dropdown">
           {#if conversations.length === 0}
-            <p class="p-3 text-xs text-muted text-center">No previous chats</p>
+            <p class="c-history-empty">No previous chats</p>
           {:else}
             {#each conversations as conv}
               <button
+                class="c-history-item"
+                class:active={conversationId === conv.id}
                 onclick={() => handleLoadChat(conv.id)}
-                class="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-tint transition-colors cursor-pointer border-b border-border last:border-b-0 group
-                  {conversationId === conv.id ? 'bg-primary/5' : ''}"
               >
-                <div class="flex-1 min-w-0">
-                  <p class="text-xs text-foreground truncate">{conv.title}</p>
-                  <p class="text-[10px] text-muted mt-0.5">
+                <div class="c-history-info">
+                  <div class="c-history-title">{conv.title}</div>
+                  <div class="c-history-meta">
                     {relativeTime(conv.updated_at)} · {conv.message_count} messages
-                  </p>
+                  </div>
                 </div>
                 <span
                   role="button"
                   tabindex="-1"
+                  class="c-history-delete"
                   onclick={(e) => handleDeleteChat(conv.id, e)}
                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDeleteChat(conv.id, e); } }}
-                  class="shrink-0 text-muted hover:text-error opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity cursor-pointer p-0.5"
-                  aria-label="Delete conversation"
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </span>
+                >&times;</span>
               </button>
             {/each}
           {/if}
@@ -398,97 +374,66 @@
       {/if}
     </div>
 
-    <select
-      bind:value={format}
-      class="px-2 py-1 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-    >
+    <select bind:value={format} class="c-toolbar-select">
       {#each formats as fmt}
         <option value={fmt}>{fmt}</option>
       {/each}
     </select>
 
+    <div class="c-toolbar-spacer"></div>
+
     {#if totalTokens > 0}
-      <span class="text-[10px] text-muted ml-auto">{totalTokens} tokens</span>
+      <span class="c-toolbar-tokens">{totalTokens.toLocaleString()} tokens</span>
     {/if}
   </div>
 
-  <!-- No API key banner (F5) -->
+  <!-- API key nudge -->
   {#if noApiKey}
-    <div class="flex items-center gap-2 mx-4 mt-3 p-2 bg-tint border border-warning/20 rounded-lg">
-      <p class="flex-1 text-[10px] text-muted leading-relaxed">
+    <div class="c-nudge">
+      <p>
         Set up your API key in Settings to start chatting.
-        <button
-          onclick={() => emit("navigate", "settings")}
-          class="text-secondary font-medium cursor-pointer hover:text-foreground"
-        >Go to Settings</button>
-      </p>
-    </div>
-  {/if}
-
-  <!-- No profile nudge (F4) -->
-  {#if !hasProfile && !noApiKey}
-    <div class="flex items-center gap-2 mx-4 mt-3 p-2 bg-tint border border-secondary/20 rounded-lg">
-      <p class="flex-1 text-[10px] text-muted leading-relaxed">
-        Chat is using default voice. Create a profile for voice-matched responses.
-        <button
-          onclick={() => emit("navigate", "profiles")}
-          class="text-secondary font-medium cursor-pointer hover:text-foreground"
-        >Go to Profiles</button>
-        <span class="text-border mx-0.5">|</span>
-        <button
-          onclick={() => emit("navigate", "extract")}
-          class="text-secondary font-medium cursor-pointer hover:text-foreground"
-        >Extract one</button>
+        <button onclick={() => emit("navigate", "settings")} class="c-nudge-link">Go to Settings</button>
       </p>
     </div>
   {/if}
 
   <!-- Messages -->
-  <div
-    bind:this={messagesContainer}
-    class="flex-1 min-h-0 overflow-y-auto px-4 py-4"
-  >
+  <div class="c-messages" bind:this={messagesContainer}>
     {#if messages.length === 0}
-      <div class="flex flex-col items-center justify-center h-full gap-3">
-        <img src={loomIdleUrl} alt="" class="w-[120px] opacity-80 brightness-50 dark:opacity-50 dark:brightness-100 dark:invert" />
-        <div class="text-center">
-          <p class="font-heading italic text-lg text-foreground/60">Your voice, in conversation</p>
-          <p class="text-[11px] text-muted mt-1">Noren responds in your writing style.</p>
-        </div>
+      <div class="c-empty">
+        <img src={loomIdleUrl} alt="" class="c-empty-img" />
+        <div class="c-empty-title">Your space to think</div>
+        <div class="c-empty-sub">Brainstorm, explore, plan. No voice enforcement.</div>
       </div>
     {:else}
-      <div class="flex flex-col gap-3 max-w-2xl mx-auto">
+      <div class="c-messages-inner">
         {#each messages as msg, i}
           {#if msg.role === "user"}
-            <div class="flex justify-end animate-fade-in-up group/usr">
-              <div class="max-w-[80%]">
-                <div class="px-3.5 py-2.5 bg-accent/10 border border-accent/15 text-foreground rounded-2xl rounded-br-md selectable">
-                  <p class="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+            <div class="c-msg c-msg-user">
+              <div class="c-msg-wrap">
+                <div class="c-bubble c-bubble-user">
+                  <p class="c-bubble-text">{msg.content}</p>
                 </div>
-                <div class="flex items-center justify-end gap-1 mt-1 mr-1 h-5 opacity-0 group-hover/usr:opacity-100 transition-opacity">
+                <div class="c-msg-actions c-msg-actions-right">
                   <button
+                    class="c-msg-action"
                     onclick={() => handleEditMessage(i)}
-                    class="px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground cursor-pointer rounded transition-colors"
                     disabled={isLoading}
-                  >
-                    Edit
-                  </button>
+                  >Edit</button>
                 </div>
               </div>
             </div>
           {:else}
-            <div class="flex justify-start animate-weave-in group/msg">
-              <div class="max-w-[80%]">
-                <div class="px-3.5 py-2.5 bg-surface border border-border chat-stitch-border text-foreground rounded-2xl rounded-bl-md selectable animate-weave-shimmer">
-                  <div class="text-sm leading-relaxed prose-chat">{@html renderMarkdown(msg.content)}</div>
+            <div class="c-msg c-msg-assistant">
+              <div class="c-msg-wrap">
+                <div class="c-bubble c-bubble-assistant">
+                  <div class="c-prose">{@html renderMarkdown(msg.content)}</div>
                 </div>
-                <div class="flex items-center gap-1 mt-1 ml-1 h-5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                <div class="c-msg-actions c-msg-actions-left">
                   <button
+                    class="c-msg-action"
                     onclick={() => handleCopyMessage(msg.content, i)}
-                    class="px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground cursor-pointer rounded transition-colors"
-                  >
-                    {copiedIndex === i ? "Copied" : "Copy"}
-                  </button>
+                  >{copiedIndex === i ? "Copied" : "Copy"}</button>
                 </div>
               </div>
             </div>
@@ -496,11 +441,12 @@
         {/each}
 
         {#if isLoading}
-          <div class="flex justify-start animate-fade-in-up">
-            <div class="px-3.5 py-2.5 bg-surface border border-border rounded-2xl rounded-bl-md">
-              <span class="inline-flex items-center gap-2 text-sm text-muted animate-breathe">
-                <LoadingSpinner /> Thinking
-              </span>
+          <div class="c-msg c-msg-assistant">
+            <div class="c-msg-wrap">
+              <div class="c-loading-bubble">
+                <LoadingSpinner />
+                Thinking
+              </div>
             </div>
           </div>
         {/if}
@@ -510,77 +456,534 @@
 
   <!-- Error -->
   {#if error}
-    <div class="mx-4 mb-2 p-2.5 bg-tint border border-border rounded-lg text-xs text-muted leading-relaxed">
-      {error}
+    <div class="c-error">
+      <span class="c-error-text">{error}</span>
+      <button class="c-error-dismiss" onclick={() => { error = ""; }}>Dismiss</button>
     </div>
   {/if}
 
-  <!-- Input -->
-  <div class="px-4 py-3 border-t border-border shrink-0">
-    {#if editSnapshot}
-      <div class="flex items-center justify-between max-w-2xl mx-auto mb-2">
-        <span class="text-[10px] text-secondary font-medium uppercase tracking-wide">Editing message</span>
-        <button
-          onclick={handleCancelEdit}
-          class="text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    {/if}
-    <div class="max-w-2xl mx-auto">
-      <!-- Attachment chips -->
+  <!-- Input bar -->
+  <div class="c-input-bar">
+    <div class="c-input-inner">
+      {#if editSnapshot}
+        <div class="c-edit-banner">
+          <span class="c-edit-label">Editing message</span>
+          <button class="c-edit-cancel" onclick={handleCancelEdit}>Cancel</button>
+        </div>
+      {/if}
+
       {#if attachedFiles.length > 0}
-        <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
+        <div class="c-attachment-chips">
           {#each attachedFiles as file, i}
-            <div class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-tint border border-border rounded text-[10px] text-secondary">
-              <span class="max-w-[120px] truncate">{file.name}</span>
-              <button
-                onclick={() => removeAttachment(i)}
-                class="text-muted hover:text-error cursor-pointer ml-0.5"
-                aria-label="Remove attachment"
-              >&times;</button>
+            <div class="c-chip">
+              <span class="c-chip-name">{file.name}</span>
+              <button class="c-chip-remove" onclick={() => removeAttachment(i)}>&times;</button>
             </div>
           {/each}
         </div>
       {/if}
 
-      <div class="flex items-end gap-2">
+      <div class="c-input-row">
         <button
+          class="c-toolbar-pill c-attach-btn"
           onclick={handleAttachFile}
-          class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 text-muted hover:text-foreground border border-border hover:border-secondary"
-          title="Attach a file (PDF, text, etc.)"
           disabled={attachedFiles.length >= 3 || isLoading || noApiKey}
-          aria-label="Attach file"
+          title="Attach a file (PDF, text, etc.)"
         >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
           </svg>
         </button>
         <textarea
           bind:value={input}
           onkeydown={handleKeydown}
-          oninput={autoResize}
-          class="flex-1 p-3 text-sm border border-border resize-none bg-surface text-foreground placeholder-muted rounded-xl focus:outline-none focus:border-secondary"
+          class="c-input-textarea"
           rows={1}
-          placeholder={noApiKey ? "API key required..." : "What do you want to say?"}
+          placeholder={noApiKey ? "API key required..." : "What do you want to explore?"}
           disabled={isLoading || noApiKey}
         ></textarea>
         <button
+          class="c-send-btn"
           onclick={handleSend}
           disabled={!input.trim() || isLoading || noApiKey}
-          class="p-2.5 rounded-xl transition-colors cursor-pointer shrink-0
-            {!input.trim() || isLoading || noApiKey
-              ? 'bg-surface text-muted border border-border cursor-not-allowed opacity-50'
-              : 'bg-accent text-white hover:bg-accent-hover'}"
-          aria-label="Send"
+          title="Send (Cmd+Enter)"
         >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
           </svg>
         </button>
       </div>
+      <div class="c-input-hint">Cmd+Enter to send</div>
     </div>
-    <p class="text-[10px] text-muted text-center mt-1.5">Cmd+Enter to send</p>
   </div>
 </div>
+
+<style>
+  /* ====== ROOT ====== */
+  .c-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* ====== TOOLBAR ====== */
+  .c-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .c-toolbar-title {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-size: 17px;
+    color: var(--color-foreground);
+    opacity: 0.7;
+  }
+  .c-toolbar-pill {
+    padding: 5px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 150ms ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .c-toolbar-pill:hover { border-color: var(--color-muted); color: var(--color-foreground); }
+  .c-toolbar-pill.active { border-color: var(--color-secondary); color: var(--color-foreground); }
+  .c-toolbar-pill:disabled { opacity: 0.4; cursor: not-allowed; }
+  .c-toolbar-pill .pill-icon { width: 12px; height: 12px; opacity: 0.7; }
+  .c-toolbar-pill .pill-badge { font-size: 9px; color: var(--color-secondary); font-weight: 600; }
+  .c-toolbar-select {
+    padding: 5px 10px;
+    padding-right: 26px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 150ms ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 10px 6px;
+  }
+  .c-toolbar-select:hover { border-color: var(--color-muted); color: var(--color-foreground); }
+  .c-toolbar-select option { background: var(--color-surface); color: var(--color-foreground); }
+  .c-toolbar-spacer { flex: 1; }
+  .c-toolbar-tokens { font-size: 10px; color: var(--color-muted); opacity: 0.7; }
+
+  /* ====== HISTORY DROPDOWN ====== */
+  .c-history-wrap { position: relative; }
+  .c-history-backdrop { position: fixed; inset: 0; z-index: 10; }
+  .c-history-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    width: 280px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    animation: c-dropIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes c-dropIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .c-history-empty {
+    padding: 12px;
+    font-size: 11px;
+    color: var(--color-muted);
+    text-align: center;
+  }
+  .c-history-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 150ms ease;
+    width: 100%;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+    color: inherit;
+  }
+  .c-history-item:last-child { border-bottom: none; }
+  .c-history-item:hover { background: var(--color-tint); }
+  .c-history-item.active { background: rgba(122,51,64,0.06); }
+  .c-history-info { flex: 1; min-width: 0; }
+  .c-history-title {
+    font-size: 12px;
+    color: var(--color-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+  }
+  .c-history-meta { font-size: 10px; color: var(--color-muted); margin-top: 2px; }
+  .c-history-delete {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--color-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, color 150ms ease;
+    padding: 2px;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .c-history-item:hover .c-history-delete { opacity: 0.6; }
+  .c-history-delete:hover { color: var(--color-error); opacity: 1; }
+
+  /* ====== NUDGE ====== */
+  .c-nudge {
+    margin: 12px 24px 0;
+    padding: 8px 12px;
+    background: var(--color-tint);
+    border: 1px solid rgba(255,180,50,0.15);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--color-muted);
+    line-height: 1.5;
+    flex-shrink: 0;
+  }
+  .c-nudge-link {
+    background: none;
+    border: none;
+    color: var(--color-secondary);
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    padding: 0;
+    transition: color 150ms ease;
+  }
+  .c-nudge-link:hover { color: var(--color-foreground); }
+
+  /* ====== MESSAGES ====== */
+  .c-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px 24px;
+  }
+  .c-messages-inner {
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Empty state */
+  .c-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 8px;
+    animation: c-fadeDown 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes c-fadeDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .c-empty-img { width: 80px; opacity: 0.4; filter: invert(1); }
+  .c-empty-title {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--color-foreground);
+    opacity: 0.6;
+  }
+  .c-empty-sub { font-size: 11px; color: var(--color-muted); opacity: 0.7; }
+
+  /* Message bubbles */
+  .c-msg { display: flex; }
+  .c-msg-user { justify-content: flex-end; }
+  .c-msg-assistant { justify-content: flex-start; }
+  .c-msg-wrap { max-width: 75%; }
+
+  .c-bubble {
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.65;
+    border-radius: 14px;
+  }
+  .c-bubble-user {
+    background: rgba(122, 51, 64, 0.12);
+    border: 1px solid rgba(122, 51, 64, 0.18);
+    border-bottom-right-radius: 4px;
+    color: var(--color-foreground);
+  }
+  .c-bubble-text { white-space: pre-wrap; margin: 0; }
+  .c-bubble-assistant {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-bottom-left-radius: 4px;
+    color: var(--color-foreground);
+  }
+
+  /* Hover actions */
+  .c-msg-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-top: 4px;
+    height: 18px;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .c-msg-actions-right { justify-content: flex-end; padding-right: 4px; }
+  .c-msg-actions-left { justify-content: flex-start; padding-left: 4px; }
+  .c-msg-wrap:hover .c-msg-actions { opacity: 1; }
+  .c-msg-action {
+    background: none;
+    border: none;
+    font-size: 10px;
+    color: var(--color-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: inherit;
+    transition: color 150ms ease;
+  }
+  .c-msg-action:hover { color: var(--color-foreground); }
+  .c-msg-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Markdown prose */
+  .c-prose :global(p) { margin: 0 0 8px 0; }
+  .c-prose :global(p:last-child) { margin-bottom: 0; }
+  .c-prose :global(strong) { font-weight: 600; color: var(--color-foreground); }
+  .c-prose :global(em) { font-style: italic; }
+  .c-prose :global(code) {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 11.5px;
+    background: rgba(255,255,255,0.05);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .c-prose :global(ul), .c-prose :global(ol) { margin: 6px 0; padding-left: 18px; }
+  .c-prose :global(li) { margin-bottom: 3px; }
+  .c-prose :global(pre) {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  .c-prose :global(pre code) {
+    background: none;
+    padding: 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+
+  /* Loading state */
+  .c-loading-bubble {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    border-bottom-left-radius: 4px;
+    font-size: 12px;
+    color: var(--color-muted);
+    animation: c-breathe 2s ease-in-out infinite;
+  }
+  @keyframes c-breathe {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  /* ====== ERROR ====== */
+  .c-error {
+    margin: 0 24px 8px;
+    padding: 10px 14px;
+    background: var(--color-tint);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--color-muted);
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .c-error-text { flex: 1; }
+  .c-error-dismiss {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-foreground);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 150ms ease;
+  }
+  .c-error-dismiss:hover { border-color: var(--color-secondary); }
+
+  /* ====== INPUT BAR ====== */
+  .c-input-bar {
+    flex-shrink: 0;
+    border-top: 1px solid var(--color-border);
+    padding: 12px 24px;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .c-input-inner {
+    width: 100%;
+    max-width: 780px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .c-edit-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .c-edit-label {
+    font-size: 10px;
+    color: var(--color-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .c-edit-cancel {
+    font-size: 10px;
+    color: var(--color-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 150ms ease;
+  }
+  .c-edit-cancel:hover { color: var(--color-foreground); }
+  .c-attachment-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .c-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: var(--color-tint);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--color-secondary);
+  }
+  .c-chip-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .c-chip-remove {
+    background: none;
+    border: none;
+    color: var(--color-muted);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    margin-left: 2px;
+    transition: color 150ms ease;
+  }
+  .c-chip-remove:hover { color: var(--color-error); }
+  .c-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .c-attach-btn { padding: 9px 10px; }
+  .c-input-textarea {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--color-foreground);
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    resize: none;
+    outline: none;
+    transition: border-color 150ms ease;
+    line-height: 1.5;
+    field-sizing: content;
+    min-height: 38px;
+    max-height: 120px;
+  }
+  .c-input-textarea::placeholder { color: var(--color-muted); }
+  .c-input-textarea:focus { border-color: var(--color-secondary); }
+  .c-input-textarea:disabled { opacity: 0.5; }
+  .c-send-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms ease;
+    background: var(--color-accent);
+    color: white;
+  }
+  .c-send-btn svg { width: 15px; height: 15px; }
+  .c-send-btn:hover { background: var(--color-accent-hover); }
+  .c-send-btn:disabled {
+    background: var(--color-surface);
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .c-input-hint {
+    font-size: 10px;
+    color: var(--color-muted);
+    text-align: center;
+    margin-top: 6px;
+    opacity: 0.6;
+  }
+</style>

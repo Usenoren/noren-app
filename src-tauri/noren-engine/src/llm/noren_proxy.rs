@@ -40,6 +40,9 @@ struct ServerComposedRequest {
     /// Generation mode: "generate" (default) or "adapt"
     #[serde(skip_serializing_if = "Option::is_none")]
     generation_mode: Option<String>,
+    /// Quick action: "rewrite", "fix", etc. Triggers fast-tier routing on server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quick_action: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     context: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -146,6 +149,7 @@ impl NorenProxyClient {
         level: &str,
         pipeline: Option<&str>,
         generation_mode: Option<&str>,
+        quick_action: Option<&str>,
         context: Option<&str>,
         attachments: Option<&[String]>,
         options: &LlmOptions,
@@ -158,6 +162,7 @@ impl NorenProxyClient {
             level: level.to_string(),
             mode: pipeline.map(|s| s.to_string()),
             generation_mode: generation_mode.map(|s| s.to_string()),
+            quick_action: quick_action.map(|s| s.to_string()),
             context: context.map(|s| s.to_string()),
             attachments: attachments.map(|a| a.to_vec()),
             temperature: options.temperature,

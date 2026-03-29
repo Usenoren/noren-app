@@ -11,7 +11,7 @@ mod native_messaging;
 mod tray;
 mod window;
 
-use std::sync::Mutex;
+use std::sync::{atomic::AtomicBool, Mutex};
 
 use tauri::Manager;
 
@@ -26,6 +26,7 @@ pub struct ContextState {
 pub struct AppState {
     pub config: Mutex<noren_engine::Config>,
     pub encryption_key: [u8; 32],
+    pub cancel_generation: AtomicBool,
 }
 
 // --- Tauri commands ---
@@ -129,6 +130,7 @@ fn main() {
         .manage(AppState {
             config: Mutex::new(config),
             encryption_key,
+            cancel_generation: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             get_context_text,
@@ -138,6 +140,7 @@ fn main() {
             request_permissions,
             commands::generate,
             commands::generate_stream,
+            commands::cancel_generation,
             commands::list_formats,
             commands::get_config,
             commands::get_settings,
@@ -154,6 +157,12 @@ fn main() {
             commands::start_extraction,
             commands::start_extraction_multi,
             commands::generate_comparison,
+            commands::rewrite_selection,
+            commands::save_generation,
+            commands::list_generations,
+            commands::load_generation,
+            commands::load_latest_generation,
+            commands::delete_generation,
             commands::get_noren_pro_status,
             commands::noren_pro_login,
             commands::noren_pro_signup,

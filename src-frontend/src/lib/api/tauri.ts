@@ -63,6 +63,68 @@ export async function generateStream(params: {
   return invoke("generate_stream", params);
 }
 
+export async function cancelGeneration(): Promise<void> {
+  return invoke("cancel_generation");
+}
+
+export async function rewriteSelection(params: {
+  instruction: string;
+  selection_text: string;
+  full_text: string;
+  format: string;
+}): Promise<GenerateResult> {
+  return invoke("rewrite_selection", params);
+}
+
+// --- Generations ---
+
+export interface GenerationEdit {
+  timestamp: string;
+  instruction: string;
+  before_text: string;
+  after_text: string;
+}
+
+export interface Generation {
+  id: string;
+  timestamp: string;
+  format: string;
+  prompt: string;
+  mode: string;
+  output: GenerateResult;
+  edits: GenerationEdit[];
+}
+
+export interface GenerationSummary {
+  id: string;
+  timestamp: string;
+  format: string;
+  prompt: string;
+  mode: string;
+  token_count: number;
+  is_edited: boolean;
+}
+
+export async function saveGeneration(generation: Generation): Promise<void> {
+  return invoke("save_generation", { generation });
+}
+
+export async function listGenerations(): Promise<GenerationSummary[]> {
+  return invoke("list_generations");
+}
+
+export async function loadGeneration(id: string): Promise<Generation> {
+  return invoke("load_generation", { id });
+}
+
+export async function loadLatestGeneration(): Promise<Generation | null> {
+  return invoke("load_latest_generation");
+}
+
+export async function deleteGeneration(id: string): Promise<void> {
+  return invoke("delete_generation", { id });
+}
+
 export async function getContextText(): Promise<string | null> {
   return invoke("get_context_text");
 }

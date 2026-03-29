@@ -132,8 +132,9 @@
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto">
       <!-- Source format -->
       <div class="flex items-center gap-3 mb-3 shrink-0">
-        <label class="text-xs text-muted font-medium w-12">From</label>
+        <label for="source-format" class="text-xs text-muted font-medium w-12">From</label>
         <select
+          id="source-format"
           bind:value={sourceFormat}
           class="px-3 py-1.5 text-sm border border-border bg-surface text-foreground rounded-lg focus:outline-none focus:border-secondary"
         >
@@ -153,7 +154,7 @@
 
       <!-- Target formats -->
       <div class="mt-4 shrink-0">
-        <label class="text-xs text-muted font-medium mb-2 block">Target formats</label>
+        <span class="text-xs text-muted font-medium mb-2 block">Target formats</span>
         <div class="flex flex-col gap-2">
           {#each FORMAT_FAMILIES as family}
             {@const visibleFormats = family.formats.filter((f) => f !== sourceFormat)}

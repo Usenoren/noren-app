@@ -1707,6 +1707,7 @@
                   <button
                     onclick={() => removeFormatSample(i)}
                     class="w-[18px] h-[18px] flex items-center justify-center bg-transparent border-none text-muted rounded cursor-pointer opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+                    aria-label="Remove sample {i + 1}"
                   >
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg>
                   </button>

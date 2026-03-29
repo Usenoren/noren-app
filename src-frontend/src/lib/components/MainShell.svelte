@@ -268,7 +268,7 @@
           </div>
         {/if}
 
-        <div class="flex-1 min-h-0 max-w-3xl mx-auto w-full">
+        <div class="flex-1 min-h-0 {view === 'generate' || view === 'chat' ? 'w-full' : 'max-w-3xl mx-auto w-full'}">
           {#if view === "generate"}
             <GenerateView />
           {:else if view === "repurpose"}

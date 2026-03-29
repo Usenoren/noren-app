@@ -35,16 +35,16 @@ fn resolve_context_format<'a>(
     None
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct GenerateResult {
     pub text: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip)]
     pub voice_check: Option<VoiceCheckResult>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip)]
     pub routed_model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip)]
     pub route_reason: Option<String>,
 }
 
@@ -66,6 +66,7 @@ pub async fn generate(
     pipeline: Option<String>,
     context: Option<String>,
     attachments: Option<Vec<String>>,
+    quick_action: Option<String>,
 ) -> Result<GenerateResult, String> {
     let config = state.config.lock().unwrap().clone();
     let mode = mode.as_deref().unwrap_or("generate");
@@ -75,10 +76,8 @@ pub async fn generate(
     };
 
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-        // --- Pro path: server loads profile + composes prompt ---
-        generate_pro(&config, &prompt, &format, &level, mode, &pipeline, context.as_deref(), attachments.as_deref()).await
+        generate_pro(&config, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref()).await
     } else {
-        // --- BYOK path: client loads profile + composes prompt locally ---
         generate_byok(&config, state.encryption_key, &prompt, &format, &level, mode, &pipeline, context.as_deref(), attachments.as_deref()).await
     }
 }
@@ -92,6 +91,7 @@ async fn generate_pro(
     level: &str,
     mode: &str,
     pipeline: &noren_engine::GenerationPipeline,
+    quick_action: Option<&str>,
     context: Option<&str>,
     attachments: Option<&[String]>,
 ) -> Result<GenerateResult, String> {
@@ -135,6 +135,7 @@ async fn generate_pro(
             level,
             Some(pipeline_str),
             generation_mode,
+            quick_action,
             context,
             attachments,
             &options,
@@ -373,6 +374,7 @@ pub async fn generate_comparison(
         None,
         context.clone(),
         attachments.clone(),
+        None,
     )
     .await?;
 
@@ -515,12 +517,14 @@ pub async fn generate_stream(
     attachments: Option<Vec<String>>,
 ) -> Result<(), String> {
     eprintln!("[generate_stream] called: prompt={:?} format={}", &prompt[..prompt.len().min(30)], format);
+    // Reset cancellation flag at start
+    state.cancel_generation.store(false, std::sync::atomic::Ordering::Relaxed);
     let config = state.config.lock().unwrap().clone();
 
     if config.inference_mode != noren_engine::InferenceMode::NorenPro {
         // BYOK: fall back to blocking generate, emit done event
         let result = generate(
-            state, prompt, format, level, mode, None, context, attachments,
+            state, prompt, format, level, mode, None, context, attachments, None,
         )
         .await?;
         let _ = window.emit(
@@ -585,6 +589,12 @@ pub async fn generate_stream(
     let mut buffer = String::new();
 
     while let Some(chunk) = stream.next().await {
+        // Check cancellation flag
+        if state.cancel_generation.load(std::sync::atomic::Ordering::Relaxed) {
+            state.cancel_generation.store(false, std::sync::atomic::Ordering::Relaxed);
+            let _ = window.emit("gen:error", serde_json::json!({"type": "error", "message": "Generation cancelled"}));
+            return Ok(());
+        }
         let chunk = chunk.map_err(|e| e.to_string())?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -633,6 +643,14 @@ pub async fn generate_stream(
     Ok(())
 }
 
+/// Cancel an in-progress generation. Sets a flag the streaming loop checks.
+#[tauri::command]
+pub fn cancel_generation(state: State<'_, AppState>) {
+    state
+        .cancel_generation
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[tauri::command]
 pub fn list_formats(state: State<'_, AppState>) -> Vec<String> {
     let config = state.config.lock().unwrap();
@@ -642,4 +660,33 @@ pub fn list_formats(state: State<'_, AppState>) -> Vec<String> {
 #[tauri::command]
 pub fn get_config(state: State<'_, AppState>) -> noren_engine::Config {
     state.config.lock().unwrap().clone()
+}
+
+/// Rewrite a selected portion of text using voice-aware generation.
+/// Returns only the rewritten selection text.
+#[tauri::command]
+pub async fn rewrite_selection(
+    state: State<'_, AppState>,
+    instruction: String,
+    selection_text: String,
+    full_text: String,
+    format: String,
+) -> Result<GenerateResult, String> {
+    let prompt = format!(
+        "Rewrite this in my voice: {}\n\n{}",
+        instruction, selection_text
+    );
+
+    generate(
+        state,
+        prompt,
+        format,
+        "guided".to_string(),
+        Some("adapt".to_string()),
+        None,
+        Some(full_text),
+        None,
+        Some("rewrite".to_string()),
+    )
+    .await
 }
