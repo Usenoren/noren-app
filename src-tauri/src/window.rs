@@ -15,10 +15,14 @@ const MAIN_WIDTH: f64 = 900.0;
 const MAIN_HEIGHT: f64 = 650.0;
 
 /// Save the frontmost app's PID so inject can re-activate it later.
+/// Skips saving if the frontmost app is Noren itself.
 fn save_source_pid(app: &AppHandle) {
     if let Some(pid) = accessibility::get_frontmost_pid() {
-        if let Some(state) = app.try_state::<ContextState>() {
-            *state.source_pid.lock().unwrap() = Some(pid);
+        let own_pid = std::process::id() as i32;
+        if pid != own_pid {
+            if let Some(state) = app.try_state::<ContextState>() {
+                *state.source_pid.lock().unwrap() = Some(pid);
+            }
         }
     }
 }
@@ -114,6 +118,7 @@ fn apply_macos_transparency(window: &tauri::WebviewWindow) {
 // ── Main app window ────────────────────────────────────────
 
 pub fn show_main_window(app: &AppHandle) {
+    save_source_pid(app);
     if let Some(window) = app.get_webview_window(MAIN_LABEL) {
         show_existing(&window);
     } else {

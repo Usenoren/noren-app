@@ -46,9 +46,16 @@ fn inject_generated_text(
     let source_pid = state.source_pid.lock().unwrap().take();
     let source_app_name = state.source_app_name.lock().unwrap().take();
 
-    // Hide our popup
+    // Hide whichever window is showing
     if let Some(w) = app.get_webview_window("popup") {
-        let _ = w.hide();
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        }
+    }
+    if let Some(w) = app.get_webview_window("main-app") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        }
     }
 
     // IMPORTANT: Run injection on a background thread so the main thread can
