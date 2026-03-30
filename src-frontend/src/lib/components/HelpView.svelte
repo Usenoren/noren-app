@@ -101,7 +101,7 @@
         </div>
         <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
           <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">02</span>
-          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Chat:</strong> Your thinking space. Brainstorm, research, or outline what you want to write. Everything here carries over to Weave when you're ready.</p>
+          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Chat:</strong> Your thinking space. Brainstorm, research, or work through ideas before you write.</p>
         </div>
         <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
           <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">03</span>
