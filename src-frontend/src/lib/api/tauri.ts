@@ -70,8 +70,8 @@ export async function cancelGeneration(): Promise<void> {
 
 export async function rewriteSelection(params: {
   instruction: string;
-  selection_text: string;
-  full_text: string;
+  selectionText: string;
+  fullText: string;
   format: string;
 }): Promise<GenerateResult> {
   return invoke("rewrite_selection", params);

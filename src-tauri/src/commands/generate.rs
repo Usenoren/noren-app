@@ -611,6 +611,7 @@ pub async fn generate_stream(
 
             match serde_json::from_str::<StreamEvent>(json_str) {
                 Ok(event) => {
+                    let is_terminal = matches!(&event, StreamEvent::Done { .. } | StreamEvent::Error { .. });
                     let event_name = match &event {
                         StreamEvent::Delta { .. } => "gen:delta",
                         StreamEvent::Done { .. } => "gen:done",
@@ -619,6 +620,11 @@ pub async fn generate_stream(
                         StreamEvent::Error { .. } => "gen:error",
                     };
                     let _ = window.emit(event_name, &event);
+                    // Don't wait for SSE connection to close — return immediately
+                    // after done/error to unblock the frontend for follow-up requests.
+                    if is_terminal {
+                        return Ok(());
+                    }
                 }
                 Err(_) => {
                     // Try as raw JSON value for forward compatibility
@@ -633,6 +639,9 @@ pub async fn generate_stream(
                                 _ => continue,
                             };
                             let _ = window.emit(event_name, &val);
+                            if t == "done" || t == "error" {
+                                return Ok(());
+                            }
                         }
                     }
                 }

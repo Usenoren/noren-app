@@ -546,8 +546,8 @@
     try {
       const result = await rewriteSelection({
         instruction: instructionInput,
-        selection_text: selectedText,
-        full_text: editedText,
+        selectionText: selectedText,
+        fullText: editedText,
         format,
       });
       const before = editedText.substring(0, selectionStart);
