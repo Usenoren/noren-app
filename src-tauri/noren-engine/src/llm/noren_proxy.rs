@@ -49,6 +49,9 @@ struct ServerComposedRequest {
     attachments: Option<Vec<String>>,
     temperature: Option<f64>,
     max_tokens: Option<u32>,
+    /// If set, server auto-saves the generation for sync
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -153,6 +156,7 @@ impl NorenProxyClient {
         context: Option<&str>,
         attachments: Option<&[String]>,
         options: &LlmOptions,
+        generation_id: Option<&str>,
     ) -> Result<LlmResponse, EngineError> {
         let url = format!("{}/v1/generate/", self.server_url);
 
@@ -167,6 +171,7 @@ impl NorenProxyClient {
             attachments: attachments.map(|a| a.to_vec()),
             temperature: options.temperature,
             max_tokens: options.max_tokens,
+            generation_id: generation_id.map(|s| s.to_string()),
         };
 
         let resp = self
@@ -239,6 +244,7 @@ impl NorenProxyClient {
     pub async fn generate_server_composed_stream(
         &self,
         prompt: &str,
+        generation_id: Option<&str>,
         format: &str,
         level: &str,
         pipeline: Option<&str>,
@@ -265,6 +271,8 @@ impl NorenProxyClient {
             attachments: Option<Vec<String>>,
             temperature: Option<f64>,
             max_tokens: Option<u32>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            generation_id: Option<String>,
         }
 
         let req = StreamRequest {
@@ -278,6 +286,7 @@ impl NorenProxyClient {
             attachments: attachments.map(|a| a.to_vec()),
             temperature: options.temperature,
             max_tokens: options.max_tokens,
+            generation_id: generation_id.map(|s| s.to_string()),
         };
 
         let mut auth = format!("Bearer {}", self.auth_token);
