@@ -17,6 +17,7 @@
     dismiss as dismissExtraction,
     retry as retryExtraction,
     canRetry as canRetryExtraction,
+    isFirstCompletion,
   } from "$lib/stores/extraction.svelte";
   import GenerateView from "./GenerateView.svelte";
   import RepurposeView from "./RepurposeView.svelte";
@@ -103,9 +104,14 @@
     return () => cleanups.forEach((fn) => fn());
   });
 
-  function handleOnboardingComplete() {
+  function handleOnboardingComplete(targetView?: string) {
     needsOnboarding = false;
-    view = "generate";
+    const validViews: View[] = ["generate", "chat", "profiles", "extract", "account", "settings", "help"];
+    if (targetView && validViews.includes(targetView as View)) {
+      view = targetView as View;
+    } else {
+      view = "generate";
+    }
   }
 
   async function handleRequestPermissions() {
@@ -251,9 +257,17 @@
                 <svg class="w-3.5 h-3.5 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                <p class="text-xs font-medium text-foreground">Voice profile ready</p>
+                <p class="text-xs font-medium text-foreground">
+                  {isFirstCompletion() ? "Your voice profile is ready. Try your first generation." : "Voice profile ready"}
+                </p>
               </div>
-              <button onclick={dismissExtraction} class="text-[10px] text-muted hover:text-foreground cursor-pointer">Dismiss</button>
+              <div class="flex items-center gap-3">
+                {#if isFirstCompletion()}
+                  <button onclick={() => { view = "profiles"; dismissExtraction(); }} class="text-[10px] text-secondary font-medium hover:text-foreground cursor-pointer uppercase tracking-wide">View profile</button>
+                  <button onclick={() => { view = "generate"; dismissExtraction(); }} class="text-[10px] text-accent font-medium hover:text-foreground cursor-pointer uppercase tracking-wide">Try generating</button>
+                {/if}
+                <button onclick={dismissExtraction} class="text-[10px] text-muted hover:text-foreground cursor-pointer">Dismiss</button>
+              </div>
             </div>
           </div>
         {:else if getExtractionError()}

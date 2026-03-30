@@ -28,6 +28,7 @@ let totalFormats = $state(0);
 let progress = $state<ExtractionProgress | null>(null);
 let error = $state("");
 let done = $state(false);
+let firstCompletion = $state(false);
 
 let lastFormats: { samples: string; format: string; calibration?: object }[] = [];
 let initialized = false;
@@ -93,10 +94,11 @@ export async function startQueue(formats: { samples: string; format: string; cal
   isExtracting = false;
   if (!error) {
     done = true;
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      done = false;
-    }, 5000);
+    const isFirst = !localStorage.getItem("noren:first_extraction_seen");
+    firstCompletion = isFirst;
+    if (isFirst) {
+      localStorage.setItem("noren:first_extraction_seen", "1");
+    }
   }
 }
 
@@ -108,6 +110,7 @@ export function getTotalFormats(): number { return totalFormats; }
 export function getProgress(): ExtractionProgress | null { return progress; }
 export function getError(): string { return error; }
 export function isDone(): boolean { return done; }
+export function isFirstCompletion(): boolean { return firstCompletion; }
 
 export function canRetry(): boolean { return !!error && lastFormats.length > 0 && !isExtracting; }
 

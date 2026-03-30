@@ -34,7 +34,7 @@
   import NorenMark from "./NorenMark.svelte";
 
   // Events
-  let { onComplete }: { onComplete: () => void } = $props();
+  let { onComplete }: { onComplete: (targetView?: string) => void } = $props();
 
   type Step = "welcome" | "palette" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
   let step: Step = $state("welcome");
@@ -2012,70 +2012,150 @@
     </div>
 
   {:else if step === "done"}
-    <!-- Done -->
+    <!-- Done — two paths: extraction running or manual profile saved -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
-      <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
-        <div class="w-12 h-12 rounded-full flex items-center justify-center bg-signal/10">
-          <svg class="w-6 h-6 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <div class="text-center">
+      <div class="flex-1 flex flex-col items-center bg-surface relative overflow-hidden" style="padding: 36px 32px 32px">
+        <!-- Woven grid texture -->
+        <div class="pointer-events-none absolute inset-0" style="
+          background-image:
+            repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(30,49,72,0.018) 23px, rgba(30,49,72,0.018) 24px),
+            repeating-linear-gradient(90deg, transparent, transparent 23px, rgba(30,49,72,0.018) 23px, rgba(30,49,72,0.018) 24px);
+        "></div>
+        <!-- Top accent thread -->
+        <div class="absolute top-0 left-0 right-0 h-[2px]" style="background: linear-gradient(90deg, transparent, {manualProfile.trim() ? 'var(--color-signal)' : 'var(--color-accent)'} 30%, {manualProfile.trim() ? 'var(--color-signal)' : 'var(--color-accent)'} 70%, transparent); opacity: 0.25"></div>
+
+        <div class="relative z-[1] flex flex-col items-center w-full">
           {#if manualProfile.trim()}
-            <h2 class="text-display font-heading text-foreground" style="font-weight:600; font-style:italic">Profile saved</h2>
-            <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
+            <!-- Path B: Manual profile saved -->
+            <div class="w-12 h-12 rounded-full flex items-center justify-center bg-signal/10 relative mb-5">
+              <svg class="w-[22px] h-[22px] text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+              <div class="absolute -inset-1 rounded-full border border-signal/10"></div>
+            </div>
+
+            <h2 class="font-heading text-foreground text-center" style="font-size:22px; font-weight:600; font-style:italic; letter-spacing:-0.3px; margin-bottom:10px">Profile saved</h2>
+            <p class="text-muted text-center mx-auto" style="font-size:11.5px; line-height:1.7; max-width:300px; margin-bottom:24px">
               Good start. Noren will use your description to match your tone.
             </p>
+
+            <!-- Upsell card -->
+            <div class="w-full rounded-xl relative" style="padding:14px 16px; background:var(--color-tint); border:1px solid var(--color-border); margin-bottom:20px">
+              <div class="absolute left-0 top-[10px] bottom-[10px] w-[2px] rounded-sm" style="background:var(--color-secondary); opacity:0.3"></div>
+              <p class="text-secondary" style="font-size:11px; font-weight:600; margin-bottom:8px">Want a deeper profile?</p>
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-secondary" style="font-size:10px">+</span>
+                  <span class="text-muted" style="font-size:10px">AI extraction from your actual writing</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-secondary" style="font-size:10px">+</span>
+                  <span class="text-muted" style="font-size:10px">Format-specific voice contexts</span>
+                </div>
+              </div>
+              <div class="flex gap-2 items-center mt-2.5">
+                <button
+                  onclick={() => { pendingPath = "paste"; step = "paywall"; }}
+                  class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
+                  style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; letter-spacing:0.8px"
+                >
+                  Extraction $19
+                </button>
+                <span class="text-muted" style="font-size:10px">or</span>
+                <button
+                  onclick={() => { pendingPath = "paste"; step = "paywall"; }}
+                  class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
+                  style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; letter-spacing:0.8px"
+                >
+                  Pro $7/mo
+                </button>
+              </div>
+            </div>
           {:else}
-            <h2 class="text-display font-heading text-foreground" style="font-weight:600; font-style:italic">Extraction started</h2>
-            <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:240px">
-              Your voice profile is being built in the background. You can start writing right away.
+            <!-- Path A: Extraction running -->
+            <div class="relative mb-5">
+              <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full animate-breathe" style="background:radial-gradient(circle, var(--color-accent-wash) 0%, transparent 70%)"></div>
+              <div class="w-3 h-3 rounded-full relative" style="background:var(--color-accent)">
+                <div class="absolute -inset-2 rounded-full border-[1.5px] animate-pulse-ring" style="border-color:var(--color-accent)"></div>
+              </div>
+            </div>
+
+            <h2 class="font-heading text-foreground text-center" style="font-size:22px; font-weight:600; font-style:italic; letter-spacing:-0.3px; margin-bottom:10px">Your voice is being extracted</h2>
+            <p class="text-muted text-center mx-auto" style="font-size:11.5px; line-height:1.7; max-width:300px; margin-bottom:28px">
+              While your profile builds, start a conversation about what you want to write next. Brainstorm ideas, outline a piece, or develop thoughts for later.
             </p>
           {/if}
-        </div>
 
-        {#if manualProfile.trim()}
-          <div class="w-full max-w-[260px] rounded-xl p-3" style="background: var(--color-tint); border: 1px solid var(--color-border)">
-            <p class="text-secondary" style="font-size:10px; font-weight:500; margin-bottom:6px">Want a deeper profile?</p>
-            <div class="flex flex-col gap-1">
-              <div class="flex items-center gap-2">
-                <span class="text-secondary" style="font-size:10px">+</span>
-                <span class="text-muted" style="font-size:10px">AI extraction from your actual writing</span>
+          <!-- Capability cards (both paths) -->
+          <div class="flex items-center gap-2.5 w-full mb-3.5">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:2px; color:var(--color-muted)">What you can do</span>
+            <div class="flex-1 h-px" style="background:linear-gradient(90deg, var(--color-border), transparent)"></div>
+          </div>
+
+          <div class="flex flex-col gap-1.5 w-full mb-6">
+            <!-- Chat -->
+            <div class="flex gap-3 items-start rounded-[10px] bg-surface transition-all duration-200 hover:-translate-y-px" style="padding:11px 13px; border:1px solid var(--color-border)">
+              <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:30px; height:30px; background:var(--color-tint); border:1px solid var(--color-border); margin-top:1px">
+                <svg class="w-[14px] h-[14px] text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-secondary" style="font-size:10px">+</span>
-                <span class="text-muted" style="font-size:10px">Format-specific voice contexts</span>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--color-foreground); line-height:1.3; margin-bottom:2px">Chat</div>
+                <div style="font-size:10px; color:var(--color-muted); line-height:1.5">Brainstorm, research, develop ideas with context</div>
               </div>
             </div>
-            <div class="flex gap-2 items-center mt-2">
-              <button
-                onclick={() => { pendingPath = "paste"; step = "paywall"; }}
-                class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
-                style="font-size:10px; font-weight:500"
-              >
-                Extraction $19
-              </button>
-              <span class="text-muted" style="font-size:10px">or</span>
-              <button
-                onclick={() => { pendingPath = "paste"; step = "paywall"; }}
-                class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
-                style="font-size:10px; font-weight:500"
-              >
-                Pro $7/mo
-              </button>
+
+            <!-- ⌘K -->
+            <div class="flex gap-3 items-start rounded-[10px] bg-surface transition-all duration-200 hover:-translate-y-px" style="padding:11px 13px; border:1px solid var(--color-border)">
+              <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:30px; height:30px; background:var(--color-tint); border:1px solid var(--color-border); margin-top:1px">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; color:var(--color-secondary); letter-spacing:-0.5px">⌘K</span>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--color-foreground); line-height:1.3; margin-bottom:2px">⌘K Anywhere</div>
+                <div style="font-size:10px; color:var(--color-muted); line-height:1.5">Generate from any text field on your Mac</div>
+              </div>
+            </div>
+
+            <!-- Chrome Extension -->
+            <div class="flex gap-3 items-start rounded-[10px] bg-surface transition-all duration-200 hover:-translate-y-px" style="padding:11px 13px; border:1px solid var(--color-border)">
+              <div class="shrink-0 flex items-center justify-center rounded-lg" style="width:30px; height:30px; background:var(--color-tint); border:1px solid var(--color-border); margin-top:1px">
+                <svg class="w-[14px] h-[14px] text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
+                  <line x1="21.17" y1="8" x2="12" y2="8"/>
+                  <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
+                  <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
+                </svg>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--color-foreground); line-height:1.3; margin-bottom:2px">Chrome Extension</div>
+                <div style="font-size:10px; color:var(--color-muted); line-height:1.5">Reply, rewrite, and fix text in your browser</div>
+                <button
+                  onclick={() => open("https://usenoren.ai")}
+                  class="cursor-pointer bg-transparent border-none transition-colors hover:opacity-80"
+                  style="font-size:10px; font-weight:600; color:var(--color-accent); margin-top:3px; padding:0; display:inline-flex; align-items:center; gap:3px"
+                >
+                  Get it
+                  <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
-        {/if}
 
-        <button
-          onclick={() => { clearDraft(); onComplete(); }}
-          class="py-2.5 px-8 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-xl"
-          style="background: var(--color-accent); color: white"
-          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-        >
-          Start writing
-        </button>
+          <!-- Primary CTA -->
+          <button
+            onclick={() => { clearDraft(); onComplete(manualProfile.trim() ? "generate" : "chat"); }}
+            class="w-full relative overflow-hidden transition-all duration-200 cursor-pointer rounded-[10px]"
+            style="padding:13px 24px; background:var(--color-accent); color:white; border:none; font-size:13px; font-weight:600; box-shadow:0 2px 8px var(--color-accent-glow), 0 8px 24px var(--color-accent-glow)"
+            onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px var(--color-accent-glow), 0 12px 32px var(--color-accent-glow)'; }}
+            onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px var(--color-accent-glow), 0 8px 24px var(--color-accent-glow)'; }}
+          >
+            <div class="absolute inset-0 pointer-events-none" style="background-image:repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.04) 11px, rgba(255,255,255,0.04) 12px)"></div>
+            <span class="relative z-[1]">{manualProfile.trim() ? "Try your first generation" : "Start a conversation"}</span>
+          </button>
+        </div>
       </div>
     </div>
   {/if}

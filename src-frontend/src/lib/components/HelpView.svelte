@@ -69,13 +69,13 @@
     </div>
 
     <!-- Getting Started -->
-    <section class="mb-9">
-      <div class="flex items-center gap-2.5 mb-3.5">
-        <span class="font-heading italic text-sm text-accent">Getting started</span>
-        <div class="flex-1 h-px bg-gradient-to-r from-border to-transparent"></div>
-      </div>
-      <div class="flex flex-col gap-2">
-        {#if !hasProfile}
+    {#if !hasProfile}
+      <section class="mb-9">
+        <div class="flex items-center gap-2.5 mb-3.5">
+          <span class="font-heading italic text-sm text-accent">First step</span>
+          <div class="flex-1 h-px bg-gradient-to-r from-border to-transparent"></div>
+        </div>
+        <div class="flex flex-col gap-2">
           <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
             <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">01</span>
             <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Extract your voice.</strong> Paste 10+ writing samples across formats to build your voice profile.</p>
@@ -84,16 +84,33 @@
             <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">02</span>
             <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">No samples?</strong> Use the guided interview to capture your voice in 10 minutes.</p>
           </div>
-        {:else}
-          <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
-            <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">01</span>
-            <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Generate in your voice.</strong> Pick a format and write a prompt. Noren writes it as you.</p>
-          </div>
-          <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
-            <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">02</span>
-            <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Adapt mode.</strong> Paste content in the wrong voice. Switch to Adapt to rewrite it as yours.</p>
-          </div>
-        {/if}
+        </div>
+      </section>
+    {/if}
+
+    <!-- What you can do -->
+    <section class="mb-9">
+      <div class="flex items-center gap-2.5 mb-3.5">
+        <span class="font-heading italic text-sm text-accent">What you can do</span>
+        <div class="flex-1 h-px bg-gradient-to-r from-border to-transparent"></div>
+      </div>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
+          <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">01</span>
+          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Weave:</strong> Pick a format, type or paste your notes and ideas, and Noren turns them into polished output in your voice. Click edit to highlight any section and refine it with a note. Switch to Adapt to rewrite existing content.</p>
+        </div>
+        <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
+          <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">02</span>
+          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Chat:</strong> Your thinking space. Brainstorm, research, or outline what you want to write. Everything here carries over to Weave when you're ready.</p>
+        </div>
+        <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
+          <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">03</span>
+          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">⌘K Anywhere:</strong> Press ⌘K from any text field on your Mac (Telegram, Mail, Slack) and Noren generates in your voice without switching apps.</p>
+        </div>
+        <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
+          <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">04</span>
+          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Chrome Extension:</strong> Highlight text on any page to reply, rewrite, or fix it in your voice. Pro users get automatic profile sync.</p>
+        </div>
       </div>
     </section>
 
