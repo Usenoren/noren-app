@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateStream, generateComparison, cancelGeneration, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, saveGeneration, listGenerations, loadGeneration, loadLatestGeneration, deleteGeneration, rewriteSelection, type GenerateResult, type ComparisonResult, type FixSpan, type Generation, type GenerationSummary } from "$lib/api/tauri";
+  import { generate, generateStream, generateComparison, cancelGeneration, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, saveGeneration, listGenerations, loadGeneration, loadLatestGeneration, deleteGeneration, rewriteSelection, syncGenerationsFromServer, type GenerateResult, type ComparisonResult, type FixSpan, type Generation, type GenerationSummary } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
   import { isFree, canExtract } from "$lib/stores/subscription.svelte";
@@ -114,8 +114,10 @@
       }
     }).catch(() => {});
 
-    // Load all generations for history list
-    listGenerations().then((gens) => { allGenerations = gens; }).catch(() => {});
+    // Sync generations from server, then load history
+    syncGenerationsFromServer().catch(() => {}).finally(() => {
+      listGenerations().then((gens) => { allGenerations = gens; }).catch(() => {});
+    });
 
     const defaultFormats = ["general", "blog", "tweet", "thread", "email", "linkedin", "newsletter", "essay"];
 
@@ -163,8 +165,8 @@
   });
 
   // Save a generation to disk and reset version nav to just this piece
-  function persistGeneration(result: GenerateResult) {
-    const id = generateId();
+  function persistGeneration(result: GenerateResult, existingId?: string) {
+    const id = existingId || generateId();
     const ts = nowISO();
     currentVersionId = id;
     const gen: Generation = {
@@ -193,6 +195,7 @@
     error = "";
     output = null;
     savedPrompt = prompt.trim();
+    const pendingGenerationId = generateId();
     prompt = "";
     dismissedEmpty = true;
     promptCollapsed = false;
@@ -245,7 +248,7 @@
         output = result;
         editedText = streamedText;
         phase = "done";
-        persistGeneration(result);
+        persistGeneration(result, pendingGenerationId);
         weaveComplete = true;
         setTimeout(() => { weaveComplete = false; }, 1000);
       });
@@ -297,6 +300,7 @@
         mode: mode !== "generate" ? mode : undefined,
         context: contextText || undefined,
         attachments: attachmentContents,
+        generationId: pendingGenerationId,
       });
       const timeoutPromise = new Promise<void>((resolve) => {
         setTimeout(resolve, 300_000); // 5 min max
@@ -310,7 +314,7 @@
         output = result;
         editedText = streamedText;
         phase = "done";
-        persistGeneration(result);
+        persistGeneration(result, pendingGenerationId);
         weaveComplete = true;
         setTimeout(() => { weaveComplete = false; }, 1000);
       } else if (phase === "streaming") {

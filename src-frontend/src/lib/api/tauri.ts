@@ -60,6 +60,7 @@ export async function generateStream(params: {
   mode?: "generate" | "adapt";
   context?: string;
   attachments?: string[];
+  generationId?: string;
 }): Promise<void> {
   return invoke("generate_stream", params);
 }
@@ -657,6 +658,21 @@ export async function syncDeleteChat(id: string): Promise<void> {
 
 export async function syncChatsFromServer(): Promise<number> {
   return invoke("sync_chats_from_server");
+}
+
+export async function syncGenerationsFromServer(): Promise<number> {
+  return invoke("sync_generations_from_server");
+}
+
+export async function syncGenerationEdits(params: {
+  generationId: string;
+  edits: { timestamp: string; instruction: string; before_text: string; after_text: string }[];
+  editCount: number;
+  wasEdited: boolean;
+  timeToFirstEdit?: number;
+  output?: string;
+}): Promise<void> {
+  return invoke("sync_generation_edits", params);
 }
 
 // --- Repurpose ---

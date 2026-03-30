@@ -170,6 +170,8 @@ fn main() {
             commands::load_generation,
             commands::load_latest_generation,
             commands::delete_generation,
+            commands::sync_generations_from_server,
+            commands::sync_generation_edits,
             commands::get_noren_pro_status,
             commands::noren_pro_login,
             commands::noren_pro_signup,

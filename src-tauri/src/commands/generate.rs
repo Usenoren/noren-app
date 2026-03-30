@@ -76,7 +76,7 @@ pub async fn generate(
     };
 
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-        generate_pro(&config, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref()).await
+        generate_pro(&config, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref(), None).await
     } else {
         generate_byok(&config, state.encryption_key, &prompt, &format, &level, mode, &pipeline, context.as_deref(), attachments.as_deref()).await
     }
@@ -94,6 +94,7 @@ async fn generate_pro(
     quick_action: Option<&str>,
     context: Option<&str>,
     attachments: Option<&[String]>,
+    generation_id: Option<&str>,
 ) -> Result<GenerateResult, String> {
     let server_url = config
         .server_url
@@ -139,6 +140,7 @@ async fn generate_pro(
             context,
             attachments,
             &options,
+            generation_id,
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -515,6 +517,7 @@ pub async fn generate_stream(
     mode: Option<String>,
     context: Option<String>,
     attachments: Option<Vec<String>>,
+    generation_id: Option<String>,
 ) -> Result<(), String> {
     eprintln!("[generate_stream] called: prompt={:?} format={}", &prompt[..prompt.len().min(30)], format);
     // Reset cancellation flag at start
@@ -572,6 +575,7 @@ pub async fn generate_stream(
     let resp = client
         .generate_server_composed_stream(
             &prompt,
+            generation_id.as_deref(),
             &format,
             &level,
             Some(pipeline_str),
