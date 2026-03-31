@@ -9,7 +9,7 @@
   const FEATURE_ENABLED = false;
 
   const FORMAT_FAMILIES = [
-    { label: "Long-form", formats: ["blog", "article", "newsletter", "essay"] },
+    { label: "Long-form", formats: ["blog", "article", "newsletter", "essay", "longform"] },
     { label: "Social", formats: ["tweet", "twitter", "thread"] },
     { label: "Messaging", formats: ["email", "slack"] },
     { label: "Professional", formats: ["linkedin", "memo"] },
