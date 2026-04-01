@@ -382,7 +382,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-3 h-full p-4 overflow-hidden animate-fade-in-up">
+<div class="pv-page animate-fade-in-up">
   {#if !overview}
     <div class="flex items-center justify-center h-full">
       <LoadingSpinner />
@@ -486,7 +486,7 @@
     {/if}
   {:else if overview.is_server}
     <!-- Server profile — metadata only -->
-    <div class="flex flex-col gap-3 h-full">
+    <div class="flex flex-col gap-3 h-full pv-stagger">
       <div class="p-3 card-hero">
         <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
         <p class="text-[10px] text-muted mt-1">
@@ -618,6 +618,8 @@
       {/if}
     </div>
   {:else}
+    <!-- Local profile -->
+    <div class="flex flex-col gap-3 flex-1 min-h-0 pv-stagger">
     <!-- Tabs -->
     <div class="flex flex-wrap gap-1 shrink-0 border-b border-border">
       <button
@@ -799,32 +801,29 @@
         {error}
       </div>
     {/if}
+    </div>
   {/if}
 
   {#snippet livingTabContent()}
     <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
       <!-- Edit tracking toggle -->
-      <div class="p-3 bg-surface border border-border rounded-xl">
-        <div class="flex items-center justify-between">
+      <div class="card-flat" style="overflow: hidden;">
+        <div class="pv-setting-row">
           <div>
-            <span class="text-xs font-medium text-foreground font-heading italic">Edit tracking</span>
-            <p class="text-[10px] text-muted mt-0.5">Track edits to improve your profile over time.</p>
+            <div class="pv-setting-label">Edit tracking</div>
+            <div class="pv-setting-desc">Track edits to improve your profile over time</div>
+            {#if livingStatus?.enabled}
+              <div class="text-[10px] text-secondary" style="margin-top: 6px;">
+                {livingStatus.edit_count} edits tracked locally
+              </div>
+            {/if}
           </div>
           <button
             onclick={handleToggleLiving}
-            class="px-3 py-1 text-[10px] uppercase tracking-wide cursor-pointer rounded-md transition-colors
-              {livingStatus?.enabled
-                ? 'bg-secondary text-white font-medium'
-                : 'bg-surface text-muted border border-border hover:border-secondary'}"
-          >
-            {livingStatus?.enabled ? "On" : "Off"}
-          </button>
+            class="toggle {livingStatus?.enabled ? 'active' : ''}"
+            aria-label="Toggle edit tracking"
+          ></button>
         </div>
-        {#if livingStatus?.enabled}
-          <p class="text-[10px] text-secondary mt-2">
-            {livingStatus.edit_count} edits tracked locally
-          </p>
-        {/if}
       </div>
 
       {#if livingStatus?.enabled}
@@ -1122,3 +1121,43 @@
     </div>
   {/snippet}
 </div>
+
+<style>
+  .pv-page {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 2vw, 14px);
+    height: 100%;
+    padding: clamp(12px, 3vw, 20px);
+    overflow: hidden;
+  }
+
+  /* Staggered entry */
+  .pv-stagger > :global(*) {
+    animation: pv-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .pv-stagger > :global(*:nth-child(1)) { animation-delay: 0ms; }
+  .pv-stagger > :global(*:nth-child(2)) { animation-delay: 60ms; }
+  .pv-stagger > :global(*:nth-child(3)) { animation-delay: 120ms; }
+  .pv-stagger > :global(*:nth-child(4)) { animation-delay: 180ms; }
+  .pv-stagger > :global(*:nth-child(5)) { animation-delay: 240ms; }
+  .pv-stagger > :global(*:nth-child(6)) { animation-delay: 300ms; }
+  .pv-stagger > :global(*:nth-child(7)) { animation-delay: 360ms; }
+  .pv-stagger > :global(*:nth-child(8)) { animation-delay: 420ms; }
+
+  @keyframes pv-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Setting row (for toggle) */
+  .pv-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(12px, 2vw, 16px);
+    gap: 12px;
+  }
+  .pv-setting-label { font-size: 13px; font-weight: 600; }
+  .pv-setting-desc { font-size: 11px; color: var(--color-muted); margin-top: 2px; }
+</style>

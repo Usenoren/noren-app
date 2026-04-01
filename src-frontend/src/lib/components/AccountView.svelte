@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import {
     getSettings,
     setInferenceMode,
@@ -53,13 +53,25 @@
   let couponCode = $state("");
   let couponLoading = $state(false);
   let couponMessage = $state("");
-  let showDeleteConfirm = $state(false);
   let deleteCode = $state("");
   let deleteStep = $state<"confirm" | "code">("confirm");
   let deleteLoading = $state(false);
+  let dangerOpen = $state(false);
+  let usageAnimated = $state(false);
+
+  // Tier helpers — proStatus.tokens_limit is the source of truth for access.
+  // subscription.tier can lag behind (Stripe webhook delay, stale data).
+  let hasInferenceFromUsage = $derived(proStatus?.tokens_limit != null && proStatus.tokens_limit > 0);
+  let effectivelyPro = $derived((subscription?.tier === "pro") || hasInferenceFromUsage);
+  let effectivelyFree = $derived(!effectivelyPro);
+  let hasInference = $derived(effectivelyPro);
 
   onDestroy(() => {
     if (cooldownInterval) clearInterval(cooldownInterval);
+  });
+
+  onMount(() => {
+    setTimeout(() => { usageAnimated = true; }, 400);
   });
 
   $effect(() => {
@@ -80,7 +92,6 @@
             subscription = null;
           }
         } catch {
-          // Token is likely stale, auto-logout
           try {
             await norenProLogout();
             settings = await getSettings();
@@ -99,6 +110,7 @@
       error = friendlyError(e);
     }
     accountReady = true;
+    setTimeout(() => { usageAnimated = true; }, 400);
   }
 
   async function handleProAuth() {
@@ -264,17 +276,14 @@
       await loadAccount();
     } catch (e) {
       const msg = String(e);
-      // Parse "status:detail" format from Rust command
       const match = msg.match(/^(\d{3}):(.+)$/);
       if (match) {
         const status = parseInt(match[1]);
         const detail = match[2];
         if (status === 404) {
-          // Not a trial coupon, try as Stripe promo code
           couponMessage = "";
           await handleUpgrade("pro", code);
         } else {
-          // 400 (expired/limit), 409 (already redeemed)
           couponMessage = detail;
         }
       } else {
@@ -337,496 +346,739 @@
   function formatDate(iso: string): string {
     return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   }
+
+  function closeDangerZone() {
+    dangerOpen = false;
+    deleteStep = "confirm";
+    deleteCode = "";
+    error = "";
+  }
 </script>
 
-<div class="flex flex-col h-full overflow-y-auto animate-fade-in-up">
-  <!-- View title -->
-  <div class="px-6 pt-5 pb-3 shrink-0">
-    <h1 class="text-heading text-foreground">Account</h1>
-  </div>
+<div class="av-page animate-fade-in-up">
+  <h1 class="text-heading" style="margin-bottom: 6px;">Account</h1>
 
-  <div class="flex-1 flex flex-col gap-5 px-6 pb-6">
   {#if !accountReady}
-    <div class="flex items-center justify-center h-full">
+    <div class="flex items-center justify-center" style="min-height: 200px;">
       <LoadingSpinner />
     </div>
   {:else if settings && settings.noren_pro_logged_in && proStatus}
-    <!-- Logged-in state -->
-    <div class="flex flex-col gap-5 max-w-sm">
-      <!-- Account card -->
-      <div class="card-hero p-5">
-        <div class="flex items-center gap-2.5">
-          <span class="text-sm font-medium text-foreground">{proStatus?.email || "Account"}</span>
-          <span class="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full
-            {subscription?.tier === 'pro' ? 'bg-accent/15 text-accent' : 'bg-border text-muted'}">
-            {subscription?.tier === "pro" ? (isTrial() ? "Trial" : "Pro") : "Free"}
+    <!-- ═══ LOGGED IN ═══ -->
+    <div class="av-sections av-stagger">
+
+      <!-- Identity bar -->
+      <div class="av-identity">
+        <div class="av-identity-left">
+          <span class="av-email">{proStatus?.email || "Account"}</span>
+          <span class="av-badge {effectivelyPro ? (isTrial() ? 'av-badge-trial' : 'av-badge-pro') : 'av-badge-free'}">
+            {effectivelyPro ? (isTrial() ? "Trial" : "Pro") : "Free"}
           </span>
         </div>
-        {#if subscription?.tier === "pro"}
-          <div class="divider-thread mt-3 mb-3"></div>
-          <div class="flex flex-wrap gap-x-4 gap-y-1.5">
-            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Inference</span>
-            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Extraction</span>
-            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Living profile</span>
-            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Sync</span>
-            <span class="flex items-center gap-1.5 text-[11px] text-muted"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Export</span>
-          </div>
-        {/if}
+        <button class="av-signout" onclick={handleProLogout}>Sign out</button>
       </div>
 
-      {#if subscription?.tier === "pro" && subscription.active}
-        <!-- Usage + Billing -->
-        <div>
-          <span class="text-heading block mb-2">Usage</span>
-          <div class="card p-4">
+      <!-- Trial callout -->
+      {#if effectivelyPro && subscription?.active && isTrial()}
+        {@const days = trialDaysLeft()}
+        <div class="av-trial-callout card-flat">
+          <span class="av-trial-text">
+            {#if days != null && days <= 3}
+              Trial ends in {days === 0 ? "less than a day" : days === 1 ? "1 day" : `${days} days`}
+            {:else if subscription.trial_expires_at}
+              Trial until {formatDate(subscription.trial_expires_at)}
+            {:else}
+              Active trial
+            {/if}
+          </span>
+          <button class="btn-primary av-btn-sm" onclick={() => handleUpgrade("pro")}>Upgrade</button>
+        </div>
+      {/if}
+
+      <!-- Cancellation notice -->
+      {#if subscription?.cancel_at_period_end}
+        <div class="av-cancel-notice card-flat">
+          Cancels at end of period{subscription.current_period_end ? ` (${formatDate(subscription.current_period_end)})` : ""}
+        </div>
+      {/if}
+
+      {#if hasInference}
+        <!-- Usage + Features grid -->
+        <div class="av-grid">
+          <!-- Usage -->
+          <div class="card-hero av-card-pad">
+            <span class="section-label" style="display:block; margin-bottom: 14px;">Usage</span>
             {#if proStatus.tokens_used != null && proStatus.tokens_limit != null}
-              <div class="flex items-center justify-between text-[11px] text-muted mb-2">
-                <span>{proStatus.tokens_used.toLocaleString()} tokens used</span>
+              <div class="av-usage-head">
+                <span>{proStatus.tokens_used.toLocaleString()} tokens</span>
                 <span>{proStatus.tokens_limit.toLocaleString()} limit</span>
               </div>
-              <div class="h-1.5 bg-border rounded-full overflow-hidden">
+              <div class="av-bar">
                 <div
-                  class="h-full bg-accent rounded-full transition-all"
-                  style="width: {Math.min(100, (proStatus.tokens_used / proStatus.tokens_limit) * 100)}%"
+                  class="av-bar-fill"
+                  class:go={usageAnimated}
+                  style="--pct: {Math.min(100, (proStatus.tokens_used / (proStatus.tokens_limit || 1)) * 100)}%"
                 ></div>
               </div>
-              <p class="text-[11px] text-muted mt-2">
-                {proStatus.requests_this_month} requests this month
-              </p>
-              {#if subscription.current_period_end}
-                <p class="text-[11px] text-muted mt-0.5">
-                  Period ends {formatDate(subscription.current_period_end)}
-                </p>
-              {/if}
+              <div class="av-usage-meta">
+                <span>{proStatus.requests_this_month} requests this month</span>
+                {#if subscription?.current_period_end}
+                  <span>Period ends {formatDate(subscription.current_period_end)}</span>
+                {/if}
+              </div>
             {:else}
               <p class="text-[11px] text-muted">No usage data yet</p>
             {/if}
-            <div class="divider-thread mt-3 mb-3"></div>
-            <button
-              onclick={handleManageBilling}
-              class="btn-outline"
-            >
-              Manage billing
-            </button>
+          </div>
+
+          <!-- Features -->
+          <div class="card av-card-pad">
+            <span class="section-label" style="display:block; margin-bottom: 10px;">Included</span>
+            <div class="av-features">
+              <span class="av-feat"><svg class="av-check-icon" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Inference</span>
+              <span class="av-feat"><svg class="av-check-icon" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Extraction</span>
+              <span class="av-feat"><svg class="av-check-icon" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Living profile</span>
+              <span class="av-feat"><svg class="av-check-icon" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Sync</span>
+              <span class="av-feat"><svg class="av-check-icon" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Export</span>
+            </div>
           </div>
         </div>
-
-        {#if isTrial()}
-          {@const days = trialDaysLeft()}
-          <div class="card-flat p-3 flex items-center justify-between" style="border-color: var(--color-secondary);">
-            <p class="text-xs text-secondary">
-              {#if days != null && days <= 3}
-                Trial ends in {days === 0 ? "less than a day" : days === 1 ? "1 day" : `${days} days`}
-              {:else if subscription.trial_expires_at}
-                Trial until {formatDate(subscription.trial_expires_at)}
-              {:else}
-                Active trial
-              {/if}
-            </p>
-            <button
-              onclick={() => handleUpgrade("pro")}
-              class="btn-primary text-[11px] py-1.5 px-3"
-            >
-              Upgrade
-            </button>
-          </div>
-        {/if}
-
-        {#if subscription.cancel_at_period_end}
-          <div class="card-flat p-3" style="border-color: var(--color-warning);">
-            <p class="text-xs text-warning">
-              Cancels at end of period{subscription.current_period_end ? ` (${formatDate(subscription.current_period_end)})` : ""}
-            </p>
-          </div>
-        {/if}
 
         <div class="divider-thread"></div>
 
-        <!-- Security -->
-        <div>
-          <span class="section-label" style="display:block; margin-bottom: 8px;">Security</span>
-          <div class="card-flat" style="padding: 14px 16px;">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-xs font-medium text-foreground">Password</div>
-                <div class="text-[11px] text-muted mt-0.5">Sends a reset link to {proStatus?.email || "your email"}</div>
-              </div>
+        <!-- Billing row -->
+        <div class="card-flat">
+          <div class="av-setting-row">
+            <div>
+              <div class="av-setting-label">Billing</div>
+              <div class="av-setting-desc">Manage payment method, invoices, and plan</div>
+            </div>
+            <button class="btn-outline" onclick={handleManageBilling}>Manage</button>
+          </div>
+        </div>
+
+        <!-- Password row -->
+        <div class="card-flat">
+          <div class="av-setting-row">
+            <div>
+              <div class="av-setting-label">Password</div>
+              <div class="av-setting-desc">Send a reset link to {proStatus?.email || "your email"}</div>
+            </div>
+            <button class="btn-outline" onclick={handlePasswordReset}>Reset</button>
+          </div>
+        </div>
+
+      {:else}
+        <!-- Free tier: upgrade card -->
+        <button class="card av-upgrade-card" onclick={() => handleUpgrade("pro")}>
+          <div>
+            <div class="av-upgrade-title">Subscribe to Pro</div>
+            <div class="av-upgrade-sub">Bundled inference, living profile, sync, and export</div>
+          </div>
+          <div class="av-upgrade-price">$7<span class="av-upgrade-per">/mo</span></div>
+        </button>
+
+        <div class="av-coupon">
+          {#if !showCouponInput}
+            <button class="av-coupon-toggle" onclick={() => { showCouponInput = true; couponMessage = ""; }}>Have a coupon?</button>
+          {:else}
+            <div class="av-coupon-form">
+              <input
+                type="text"
+                bind:value={couponCode}
+                onkeydown={(e) => { if (e.key === "Enter") handleApplyCoupon(); }}
+                class="input-field av-coupon-input"
+                placeholder="Coupon or promo code"
+              />
               <button
-                onclick={handlePasswordReset}
-                class="btn-outline"
+                class="btn-primary av-btn-sm"
+                onclick={handleApplyCoupon}
+                disabled={couponLoading || !couponCode.trim()}
               >
-                Change password
+                {couponLoading ? "..." : "Apply"}
+              </button>
+            </div>
+            {#if couponMessage}
+              <p class="text-[10px] text-muted mt-1">{couponMessage}</p>
+            {/if}
+            <button class="av-coupon-toggle" style="margin-top: 4px;" onclick={() => { showCouponInput = false; couponCode = ""; couponMessage = ""; }}>Cancel</button>
+          {/if}
+        </div>
+
+        <div class="divider-thread"></div>
+      {/if}
+
+      <!-- Error -->
+      {#if error}
+        <div class="av-error">{error}</div>
+      {/if}
+
+      <!-- Danger zone -->
+      <div class="av-danger-zone" class:open={dangerOpen}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="av-danger-header" onclick={() => { dangerOpen = !dangerOpen; }}>
+          <span class="av-danger-label">Delete account</span>
+          <span class="av-danger-arrow">&#9654;</span>
+        </div>
+        {#if dangerOpen}
+          <div class="av-danger-body">
+            <div class="card-flat av-danger-confirm">
+              {#if deleteStep === "confirm"}
+                <p class="av-danger-text">
+                  This permanently deletes your account, voice profiles, and all data. This cannot be undone.
+                </p>
+                <div class="av-danger-actions">
+                  <button
+                    class="av-btn-danger"
+                    onclick={handleRequestDelete}
+                    disabled={deleteLoading}
+                  >
+                    {#if deleteLoading}
+                      <span class="inline-flex items-center gap-1"><LoadingSpinner /> Sending...</span>
+                    {:else}
+                      Send verification code
+                    {/if}
+                  </button>
+                  <button class="btn-outline" onclick={closeDangerZone}>Cancel</button>
+                </div>
+              {:else}
+                <p class="av-danger-text">
+                  Enter the code sent to <span class="font-medium text-foreground">{proStatus?.email}</span>
+                </p>
+                <input
+                  type="text"
+                  bind:value={deleteCode}
+                  class="input-field av-otp-input"
+                  style="margin-bottom: 14px;"
+                  placeholder="000000"
+                  maxlength={6}
+                  onkeydown={(e) => { if (e.key === "Enter" && deleteCode.trim()) handleConfirmDelete(); }}
+                />
+                <div class="av-danger-actions">
+                  <button
+                    class="av-btn-danger"
+                    onclick={handleConfirmDelete}
+                    disabled={deleteLoading || !deleteCode.trim()}
+                  >
+                    {#if deleteLoading}
+                      <span class="inline-flex items-center gap-1"><LoadingSpinner /> Deleting...</span>
+                    {:else}
+                      Delete permanently
+                    {/if}
+                  </button>
+                  <button class="btn-outline" onclick={closeDangerZone}>Cancel</button>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+  {:else if pendingVerification}
+    <!-- ═══ OTP VERIFICATION ═══ -->
+    <div class="av-sections av-stagger">
+      <div class="card-hero av-otp-card">
+        <h3 class="text-subhead text-foreground mb-2 font-heading italic">Verify your email</h3>
+        <p class="av-otp-desc">
+          We sent a verification code to <span class="font-medium text-foreground">{proEmail}</span>. Enter it below to complete registration.
+        </p>
+
+        <div class="av-otp-form">
+          <input
+            type="text"
+            bind:value={otpCode}
+            onkeydown={(e) => { if (e.key === "Enter") handleVerifyOtp(); }}
+            class="input-field av-otp-input"
+            placeholder="000000"
+            maxlength={6}
+            autocomplete="one-time-code"
+          />
+          <button
+            class="btn-primary"
+            style="width: 100%; padding: 11px;"
+            onclick={handleVerifyOtp}
+            disabled={otpLoading || !otpCode.trim()}
+          >
+            {#if otpLoading}
+              <span class="inline-flex items-center gap-1"><LoadingSpinner /> Verifying...</span>
+            {:else}
+              Verify email
+            {/if}
+          </button>
+        </div>
+
+        {#if otpMessage}
+          <p class="text-[10px] text-secondary mt-2">{otpMessage}</p>
+        {/if}
+
+        <div class="av-otp-actions">
+          <button
+            class="av-resend-btn"
+            onclick={handleResendOtp}
+            disabled={resendCooldown > 0}
+          >
+            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+          </button>
+          <button
+            class="av-text-btn"
+            onclick={() => { pendingVerification = false; otpCode = ""; error = ""; otpMessage = ""; }}
+          >
+            Back
+          </button>
+        </div>
+      </div>
+
+      {#if error}
+        <div class="av-error">{error}</div>
+      {/if}
+    </div>
+
+  {:else}
+    <!-- ═══ NOT LOGGED IN ═══ -->
+    <div class="av-sections av-stagger">
+      <div class="av-auth-split">
+        <!-- Pro pitch -->
+        <div class="card-hero av-pitch">
+          <h3 class="text-heading text-foreground" style="margin-bottom: 18px;">Noren Pro</h3>
+          <ul class="av-pitch-list">
+            <li class="av-pitch-item">
+              <svg class="av-pitch-check" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Bundled inference. No API key needed.
+            </li>
+            <li class="av-pitch-item">
+              <svg class="av-pitch-check" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Living profile that evolves with your writing.
+            </li>
+            <li class="av-pitch-item">
+              <svg class="av-pitch-check" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Cloud sync across devices.
+            </li>
+            <li class="av-pitch-item">
+              <svg class="av-pitch-check" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Export your voice profile anytime.
+            </li>
+          </ul>
+          <div class="divider-thread" style="margin-top: 20px; margin-bottom: 14px;"></div>
+          <p class="text-subhead text-secondary">$7/mo <span class="text-xs text-muted font-normal" style="font-style: normal;">founding member pricing</span></p>
+          {#if canExtract()}
+            <p class="text-[11px] text-muted mt-2">You have extraction. Pro adds inference, living profile, sync.</p>
+          {/if}
+        </div>
+
+        <!-- Auth form -->
+        <div class="card av-auth-card">
+          <div class="av-auth-tabs">
+            <button
+              class="av-auth-tab"
+              class:on={authMode === "login"}
+              onclick={() => { authMode = "login"; }}
+            >Sign In</button>
+            <button
+              class="av-auth-tab"
+              class:on={authMode === "signup"}
+              onclick={() => { authMode = "signup"; }}
+            >Create Account</button>
+          </div>
+
+          <div class="av-auth-body">
+            <!-- Google -->
+            <button
+              class="av-google-btn"
+              onclick={handleGoogleSignIn}
+              disabled={googleLoading || proLoading}
+            >
+              {#if googleLoading}
+                <LoadingSpinner /> Waiting for Google...
+              {:else}
+                <svg class="av-google-icon" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+              {/if}
+            </button>
+
+            <!-- Or divider -->
+            <div class="av-or">
+              <div class="divider-thread" style="flex: 1;"></div>
+              <span class="text-[10px] text-muted" style="text-transform: uppercase; letter-spacing: 0.08em;">or</span>
+              <div class="divider-thread" style="flex: 1;"></div>
+            </div>
+
+            <!-- Email/Password -->
+            <div class="card-inset av-form-inset">
+              <input
+                type="email"
+                bind:value={proEmail}
+                class="input-field"
+                placeholder="Email"
+              />
+              <input
+                type="password"
+                bind:value={proPassword}
+                onkeydown={(e) => { if (e.key === "Enter") handleProAuth(); }}
+                class="input-field"
+                placeholder="Password"
+              />
+              <button
+                class="btn-primary"
+                style="width: 100%; padding: 11px;"
+                onclick={handleProAuth}
+                disabled={proLoading || !proEmail.trim() || !proPassword.trim()}
+              >
+                {#if proLoading}
+                  <span class="inline-flex items-center gap-1.5"><LoadingSpinner /> {authMode === "signup" ? "Creating..." : "Signing in..."}</span>
+                {:else}
+                  {authMode === "signup" ? "Create account" : "Sign in"}
+                {/if}
               </button>
             </div>
           </div>
         </div>
-      {:else}
-        <!-- Free tier: subscribe card -->
-        <div>
-          <span class="section-label mb-2">Upgrade</span>
-          <button
-            onclick={() => handleUpgrade("pro")}
-            class="w-full flex items-center justify-between p-3 card hover:border-secondary cursor-pointer text-left"
-          >
-            <div>
-              <span class="text-xs font-medium text-foreground">Subscribe to Pro</span>
-              <span class="block text-[10px] text-muted mt-0.5">Bundled inference, living profile, sync, and export</span>
-            </div>
-            <span class="text-xs font-medium text-secondary">$7<span class="text-[10px] text-muted font-normal">/mo</span></span>
-          </button>
+      </div>
 
-          {#if !showCouponInput}
-            <button
-              onclick={() => { showCouponInput = true; couponMessage = ""; }}
-              class="text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors mt-1"
-            >
-              Have a coupon?
-            </button>
-          {:else}
-            <div class="mt-1 flex flex-col gap-1.5">
-              <div class="flex gap-1.5">
-                <input
-                  type="text"
-                  bind:value={couponCode}
-                  onkeydown={(e) => { if (e.key === "Enter") handleApplyCoupon(); }}
-                  class="flex-1 px-2.5 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-                  placeholder="Coupon or promo code"
-                />
-                <button
-                  onclick={handleApplyCoupon}
-                  disabled={couponLoading || !couponCode.trim()}
-                  class="px-3 py-1.5 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md whitespace-nowrap"
-                >
-                  {couponLoading ? "..." : "Apply"}
-                </button>
-              </div>
-              {#if couponMessage}
-                <p class="text-[10px] text-muted">{couponMessage}</p>
-              {/if}
-              <button
-                onclick={() => { showCouponInput = false; couponCode = ""; couponMessage = ""; }}
-                class="text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors self-start"
-              >
-                Cancel
+      <!-- Footer links -->
+      <div class="av-auth-bottom">
+        <div class="divider-thread" style="margin-bottom: 12px;"></div>
+        {#if showResendSetup}
+          <div class="card-flat" style="padding: 14px 16px;">
+            <p class="text-[11px] text-muted leading-relaxed mb-2">
+              Enter your email to resend the setup link.
+            </p>
+            <div class="flex gap-2">
+              <input type="email" bind:value={proEmail} class="input-field flex-1" placeholder="Email" />
+              <button class="btn-primary" style="white-space: nowrap;" onclick={handleResendSetup} disabled={resendSetupLoading || !proEmail.trim()}>
+                {resendSetupLoading ? "Sending..." : "Resend"}
               </button>
             </div>
-          {/if}
-        </div>
-      {/if}
-    </div>
-
-    <!-- Account actions -->
-    <div class="max-w-sm">
-      <div class="divider-thread"></div>
-      <div class="pt-3">
-        {#if showDeleteConfirm}
-          <div class="card-flat p-4" style="border-color: var(--color-error);">
-            {#if deleteStep === "confirm"}
-              <p class="text-xs text-muted leading-relaxed mb-3">
-                This will permanently delete your account, voice profiles, and all data. This cannot be undone.
-              </p>
-              <div class="flex gap-2">
-                <button
-                  onclick={handleRequestDelete}
-                  disabled={deleteLoading}
-                  class="px-3 py-1.5 text-xs font-medium text-white rounded-md cursor-pointer disabled:opacity-50 transition-colors"
-                  style="background: var(--color-error);"
-                >
-                  {#if deleteLoading}
-                    <span class="inline-flex items-center gap-1"><LoadingSpinner /> Sending...</span>
-                  {:else}
-                    Send verification code
-                  {/if}
-                </button>
-                <button
-                  onclick={() => { showDeleteConfirm = false; deleteStep = "confirm"; deleteCode = ""; error = ""; }}
-                  class="btn-ghost"
-                >
-                  Cancel
-                </button>
-              </div>
-            {:else}
-              <p class="text-xs text-muted mb-3">
-                Enter the code sent to <span class="text-foreground font-medium">{proStatus?.email}</span>
-              </p>
-              <input
-                type="text"
-                bind:value={deleteCode}
-                class="input-field mb-3"
-                style="text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 16px; letter-spacing: 6px; padding: 10px;"
-                placeholder="000000"
-                maxlength={6}
-                onkeydown={(e) => { if (e.key === "Enter" && deleteCode.trim()) handleConfirmDelete(); }}
-              />
-              <div class="flex gap-2">
-                <button
-                  onclick={handleConfirmDelete}
-                  disabled={deleteLoading || !deleteCode.trim()}
-                  class="px-3 py-1.5 text-xs font-medium text-white rounded-md cursor-pointer disabled:opacity-50 transition-colors"
-                  style="background: var(--color-error);"
-                >
-                  {#if deleteLoading}
-                    <span class="inline-flex items-center gap-1"><LoadingSpinner /> Deleting...</span>
-                  {:else}
-                    Delete permanently
-                  {/if}
-                </button>
-                <button
-                  onclick={() => { showDeleteConfirm = false; deleteStep = "confirm"; deleteCode = ""; error = ""; }}
-                  class="btn-ghost"
-                >
-                  Cancel
-                </button>
-              </div>
+            {#if resendSetupMessage}
+              <p class="text-[11px] text-secondary mt-1">{resendSetupMessage}</p>
             {/if}
           </div>
         {:else}
-          <div class="flex items-center gap-1.5">
-            <button
-              onclick={handleProLogout}
-              class="text-[11px] text-muted hover:text-error transition-colors cursor-pointer"
-            >
-              Sign out
-            </button>
-            <span class="text-[11px] text-border">&middot;</span>
-            <button
-              onclick={() => { showDeleteConfirm = true; }}
-              class="text-[11px] text-muted hover:text-error transition-colors cursor-pointer"
-            >
-              Delete account
-            </button>
-          </div>
+          <p class="text-[11px] text-muted leading-relaxed">
+            Signed up on the website?
+            <button class="av-link-btn" onclick={() => { showResendSetup = true; }}>Resend setup email.</button>
+          </p>
         {/if}
-      </div>
-    </div>
-  {:else if pendingVerification}
-    <!-- OTP Verification -->
-    <div class="flex flex-col gap-4">
-      <div class="card-hero">
-        <h3 class="text-sm font-semibold text-foreground mb-2 font-heading italic">Verify your email</h3>
-        <p class="text-[11px] text-muted">
-          We sent a verification code to <span class="font-medium text-foreground">{proEmail}</span>. Enter it below to complete your registration.
+        <p class="text-[11px] text-muted leading-relaxed" style="margin-top: 4px;">
+          Already using BYOK?
+          <button class="av-link-btn" onclick={() => emit("navigate", "settings")}>Configure your API key in Settings.</button>
         </p>
       </div>
 
-      <div class="flex flex-col gap-3">
-        <input
-          type="text"
-          bind:value={otpCode}
-          onkeydown={(e) => { if (e.key === "Enter") handleVerifyOtp(); }}
-          class="px-3 py-2 text-sm text-center tracking-[0.3em] border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
-          placeholder="000000"
-          maxlength={6}
-          autocomplete="one-time-code"
-        />
-        <button
-          onclick={handleVerifyOtp}
-          disabled={otpLoading || !otpCode.trim()}
-          class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
-        >
-          {#if otpLoading}
-            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Verifying...</span>
-          {:else}
-            Verify email
-          {/if}
-        </button>
-      </div>
-
-      {#if otpMessage}
-        <p class="text-[10px] text-secondary">{otpMessage}</p>
-      {/if}
-
+      <!-- Error -->
       {#if error}
-        <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
-          {error}
-        </div>
+        <div class="av-error">{error}</div>
       {/if}
-
-      <div class="flex items-center justify-between">
-        <button
-          onclick={handleResendOtp}
-          disabled={resendCooldown > 0}
-          class="text-[10px] transition-colors cursor-pointer {resendCooldown > 0 ? 'text-muted/50' : 'text-muted hover:text-foreground underline'}"
-        >
-          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
-        </button>
-        <button
-          onclick={() => { pendingVerification = false; otpCode = ""; error = ""; otpMessage = ""; }}
-          class="text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
-        >
-          Back
-        </button>
-      </div>
-    </div>
-  {:else}
-    <!-- Not logged in: pitch + auth -->
-    <div class="flex flex-col gap-6 max-w-sm mx-auto w-full">
-      <!-- Pro pitch card -->
-      <div class="card-hero p-5">
-        <h3 class="text-heading text-foreground mb-4">Noren Pro</h3>
-        <ul class="flex flex-col gap-2.5 text-xs text-muted">
-          <li class="flex items-start gap-2.5">
-            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            Bundled inference. No API key needed.
-          </li>
-          <li class="flex items-start gap-2.5">
-            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            Living profile that evolves with your writing.
-          </li>
-          <li class="flex items-start gap-2.5">
-            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            Cloud sync across devices.
-          </li>
-          <li class="flex items-start gap-2.5">
-            <svg class="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            Export your voice profile anytime.
-          </li>
-        </ul>
-        <div class="divider-thread mt-4 mb-3"></div>
-        <p class="text-subhead text-secondary">$7/mo <span class="text-xs text-muted font-normal" style="font-style: normal;">founding member pricing</span></p>
-        {#if canExtract()}
-          <p class="text-[11px] text-muted mt-2">You have extraction. Pro adds inference, living profile, sync.</p>
-        {/if}
-      </div>
-
-      <!-- Auth form -->
-      <div class="flex flex-col gap-4">
-        <!-- Mode tabs -->
-        <div class="flex gap-0 card-flat overflow-hidden" style="padding: 0;">
-          <button
-            onclick={() => { authMode = "login"; }}
-            class="flex-1 py-2.5 text-xs font-medium cursor-pointer transition-colors
-              {authMode === 'login'
-                ? 'bg-primary text-white'
-                : 'bg-surface text-muted hover:text-foreground'}"
-            style="border-radius: 0;"
-          >
-            Sign In
-          </button>
-          <button
-            onclick={() => { authMode = "signup"; }}
-            class="flex-1 py-2.5 text-xs font-medium cursor-pointer transition-colors border-l border-border
-              {authMode === 'signup'
-                ? 'bg-primary text-white'
-                : 'bg-surface text-muted hover:text-foreground'}"
-            style="border-radius: 0;"
-          >
-            Create Account
-          </button>
-        </div>
-
-        <!-- Google Sign In -->
-        <button
-          onclick={handleGoogleSignIn}
-          disabled={googleLoading || proLoading}
-          class="w-full py-2.5 text-xs font-medium bg-surface border border-border text-foreground hover:border-secondary transition-colors cursor-pointer disabled:opacity-50 rounded-lg flex items-center justify-center gap-2.5"
-        >
-          {#if googleLoading}
-            <LoadingSpinner /> Waiting for Google...
-          {:else}
-            <svg class="w-4 h-4" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            Continue with Google
-          {/if}
-        </button>
-
-        <!-- Divider -->
-        <div class="flex items-center gap-4">
-          <div class="divider-thread flex-1"></div>
-          <span class="text-[10px] text-muted">or</span>
-          <div class="divider-thread flex-1"></div>
-        </div>
-
-        <!-- Email/Password group -->
-        <div class="card-inset p-4 flex flex-col gap-3">
-          <input
-            type="email"
-            bind:value={proEmail}
-            class="input-field"
-            placeholder="Email"
-          />
-          <input
-            type="password"
-            bind:value={proPassword}
-            onkeydown={(e) => { if (e.key === "Enter") handleProAuth(); }}
-            class="input-field"
-            placeholder="Password"
-          />
-          <button
-            onclick={handleProAuth}
-            disabled={proLoading || !proEmail.trim() || !proPassword.trim()}
-            class="btn-primary w-full py-2.5"
-          >
-            {#if proLoading}
-              <span class="inline-flex items-center gap-1.5"><LoadingSpinner /> {authMode === "signup" ? "Creating..." : "Signing in..."}</span>
-            {:else}
-              {authMode === "signup" ? "Create account" : "Sign in"}
-            {/if}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Resend setup email -->
-    <div class="max-w-sm mx-auto w-full">
-      {#if showResendSetup}
-        <div class="card-flat p-4 flex flex-col gap-2.5">
-          <p class="text-[11px] text-muted leading-relaxed">
-            Signed up on the website? Enter your email to resend the setup link.
-          </p>
-          <div class="flex gap-2">
-            <input
-              type="email"
-              bind:value={proEmail}
-              class="input-field flex-1"
-              placeholder="Email"
-            />
-            <button
-              onclick={handleResendSetup}
-              disabled={resendSetupLoading || !proEmail.trim()}
-              class="btn-primary whitespace-nowrap"
-            >
-              {resendSetupLoading ? "Sending..." : "Resend"}
-            </button>
-          </div>
-          {#if resendSetupMessage}
-            <p class="text-[11px] text-secondary">{resendSetupMessage}</p>
-          {/if}
-        </div>
-      {:else}
-        <button
-          onclick={() => { showResendSetup = true; }}
-          class="text-[11px] text-muted hover:text-foreground cursor-pointer transition-colors"
-        >
-          Signed up on the website? Resend setup email
-        </button>
-      {/if}
-    </div>
-
-    <!-- Error -->
-    {#if error}
-      <div class="max-w-sm mx-auto w-full card-flat p-3 text-xs text-muted leading-relaxed" style="border-color: var(--color-error);">
-        {error}
-      </div>
-    {/if}
-
-    <!-- Footer link -->
-    <div class="mt-auto max-w-sm mx-auto w-full">
-      <div class="divider-thread"></div>
-      <p class="text-[11px] text-muted leading-relaxed pt-3">
-        Already using BYOK?
-        <button
-          onclick={() => emit("navigate", "settings")}
-          class="text-primary hover:text-foreground cursor-pointer underline"
-        >
-          Configure your API key in Settings.
-        </button>
-      </p>
     </div>
   {/if}
-  </div>
+
 </div>
+
+<style>
+  /* ── Page container ── */
+  .av-page {
+    padding: clamp(20px, 4vw, 40px);
+    padding-top: clamp(16px, 3vw, 28px);
+    max-width: 680px;
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  /* ── Sections with gap ── */
+  .av-sections {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 2.5vw, 24px);
+  }
+
+  /* ── Staggered entry ── */
+  .av-stagger > :global(*) {
+    animation: av-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .av-stagger > :global(*:nth-child(1)) { animation-delay: 0ms; }
+  .av-stagger > :global(*:nth-child(2)) { animation-delay: 60ms; }
+  .av-stagger > :global(*:nth-child(3)) { animation-delay: 120ms; }
+  .av-stagger > :global(*:nth-child(4)) { animation-delay: 180ms; }
+  .av-stagger > :global(*:nth-child(5)) { animation-delay: 240ms; }
+  .av-stagger > :global(*:nth-child(6)) { animation-delay: 300ms; }
+  .av-stagger > :global(*:nth-child(7)) { animation-delay: 360ms; }
+  .av-stagger > :global(*:nth-child(8)) { animation-delay: 420ms; }
+
+  @keyframes av-enter {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Identity bar ── */
+  .av-identity {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .av-identity-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .av-email { font-size: 15px; font-weight: 600; }
+  .av-badge {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; border-radius: 100px;
+  }
+  .av-badge-pro { background: rgba(122,51,64,0.12); color: var(--color-accent); }
+  .av-badge-free { background: var(--color-border); color: var(--color-muted); }
+  .av-badge-trial { background: rgba(59,107,138,0.12); color: var(--color-secondary); }
+  .av-signout {
+    font-size: 11px; font-family: inherit; color: var(--color-muted);
+    background: none; border: none; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .av-signout:hover { background: rgba(43,39,37,0.05); color: var(--color-foreground); }
+
+  /* ── Two-column grid ── */
+  .av-grid {
+    display: grid;
+    gap: clamp(14px, 2.5vw, 20px);
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 540px) {
+    .av-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  .av-card-pad { padding: clamp(16px, 3vw, 22px); }
+
+  /* ── Features ── */
+  .av-features { display: flex; flex-wrap: wrap; gap: 6px; }
+  .av-feat {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; font-size: 11px; color: var(--color-muted);
+    background: rgba(30,49,72,0.03); border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .av-feat:hover { background: rgba(30,49,72,0.06); color: var(--color-foreground); }
+  .av-check-icon { width: 11px; height: 11px; flex-shrink: 0; }
+
+  /* ── Usage bar ── */
+  .av-usage-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 11px; color: var(--color-muted); margin-bottom: 10px;
+  }
+  .av-bar {
+    height: 6px; background: var(--color-border);
+    border-radius: 100px; overflow: hidden;
+  }
+  .av-bar-fill {
+    height: 100%; border-radius: 100px;
+    background: linear-gradient(90deg, var(--color-accent), var(--color-secondary));
+    width: 0; transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .av-bar-fill.go { width: var(--pct); }
+  .av-usage-meta {
+    font-size: 11px; color: var(--color-muted); margin-top: 10px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+
+  /* ── Setting rows ── */
+  .av-setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: clamp(12px, 2vw, 16px) clamp(14px, 2.5vw, 20px);
+    gap: 12px; flex-wrap: wrap;
+  }
+  .av-setting-label { font-size: 13px; font-weight: 600; }
+  .av-setting-desc { font-size: 11px; color: var(--color-muted); margin-top: 2px; }
+
+  /* ── Trial callout ── */
+  .av-trial-callout {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px clamp(14px, 2.5vw, 20px);
+    border-color: var(--color-secondary); gap: 12px; flex-wrap: wrap;
+  }
+  .av-trial-text { font-size: 13px; color: var(--color-secondary); font-weight: 500; }
+
+  /* ── Cancel notice ── */
+  .av-cancel-notice {
+    padding: 12px clamp(14px, 2.5vw, 20px);
+    border-color: var(--color-warning);
+    font-size: 12px; color: var(--color-warning); font-weight: 500;
+  }
+
+  /* ── Upgrade card ── */
+  .av-upgrade-card {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: clamp(14px, 2.5vw, 20px); gap: 16px; cursor: pointer;
+    text-align: left; width: 100%;
+    transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+  }
+  .av-upgrade-card:hover {
+    box-shadow: var(--shadow-card-hover); border-color: var(--color-secondary);
+    transform: translateY(-1px);
+  }
+  .av-upgrade-title { font-size: 14px; font-weight: 600; }
+  .av-upgrade-sub { font-size: 11px; color: var(--color-muted); margin-top: 3px; }
+  .av-upgrade-price { font-size: 15px; font-weight: 600; color: var(--color-secondary); white-space: nowrap; }
+  .av-upgrade-per { font-size: 11px; font-weight: 400; color: var(--color-muted); }
+
+  /* ── Coupon ── */
+  .av-coupon { margin-top: -8px; }
+  .av-coupon-toggle {
+    font-size: 11px; font-family: inherit; color: var(--color-muted);
+    background: none; border: none; cursor: pointer; transition: color 0.15s;
+  }
+  .av-coupon-toggle:hover { color: var(--color-foreground); }
+  .av-coupon-form {
+    display: flex; gap: 8px;
+    animation: av-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .av-coupon-input { flex: 1; min-width: 0; padding: 8px 12px !important; font-size: 12px !important; }
+
+  /* ── Small button ── */
+  .av-btn-sm { padding: 7px 16px !important; font-size: 12px !important; }
+
+  /* ── Danger zone ── */
+  .av-danger-zone { margin-top: 8px; }
+  .av-danger-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: clamp(12px, 2vw, 16px) clamp(14px, 2.5vw, 20px);
+    cursor: pointer; border-radius: 12px;
+    transition: background 0.15s;
+  }
+  .av-danger-header:hover { background: rgba(194,59,42,0.03); }
+  .av-danger-label { font-size: 12px; color: var(--color-muted); }
+  .av-danger-arrow {
+    font-size: 10px; color: var(--color-muted);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .av-danger-zone.open .av-danger-arrow { transform: rotate(90deg); }
+
+  .av-danger-body {
+    padding: 0 clamp(14px, 2.5vw, 20px) clamp(14px, 2.5vw, 20px);
+    animation: av-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .av-danger-confirm {
+    padding: 16px; border-color: var(--color-error); border-radius: 10px;
+  }
+  .av-danger-text {
+    font-size: 12px; color: var(--color-muted); line-height: 1.6; margin-bottom: 14px;
+  }
+  .av-danger-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .av-btn-danger {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 16px; font-size: 12px; font-weight: 600; font-family: inherit;
+    color: white; background: var(--color-error); border: none; border-radius: 8px;
+    cursor: pointer; transition: background 0.15s, transform 0.1s;
+  }
+  .av-btn-danger:hover:not(:disabled) { background: #a83222; transform: translateY(-1px); }
+  .av-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── OTP input ── */
+  .av-otp-input {
+    font-family: "JetBrains Mono", monospace !important;
+    font-size: 18px !important; letter-spacing: 0.3em; text-align: center;
+    padding: 12px !important;
+  }
+
+  /* ── OTP card ── */
+  .av-otp-card { padding: clamp(20px, 4vw, 28px); max-width: 400px; }
+  .av-otp-desc { font-size: 12px; color: var(--color-muted); line-height: 1.6; margin-bottom: 20px; }
+  .av-otp-form { display: flex; flex-direction: column; gap: 12px; }
+  .av-otp-actions {
+    display: flex; align-items: center; justify-content: space-between; margin-top: 8px;
+  }
+  .av-resend-btn {
+    font-size: 11px; font-family: inherit; color: var(--color-muted);
+    background: none; border: none; cursor: pointer;
+    text-decoration: underline; transition: color 0.15s;
+  }
+  .av-resend-btn:hover { color: var(--color-foreground); }
+  .av-resend-btn:disabled { opacity: 0.4; text-decoration: none; cursor: not-allowed; }
+  .av-text-btn {
+    font-size: 11px; font-family: inherit; color: var(--color-muted);
+    background: none; border: none; cursor: pointer; transition: color 0.15s;
+  }
+  .av-text-btn:hover { color: var(--color-foreground); }
+
+  /* ── Auth split ── */
+  .av-auth-split {
+    display: grid; gap: clamp(20px, 3vw, 28px); grid-template-columns: 1fr;
+  }
+  @media (min-width: 540px) {
+    .av-auth-split { grid-template-columns: 1fr 1fr; align-items: start; }
+  }
+
+  .av-pitch {
+    padding: clamp(20px, 4vw, 28px);
+    list-style: none;
+  }
+  .av-pitch-list {
+    display: flex; flex-direction: column; gap: 12px;
+    list-style: none; padding: 0; margin: 0;
+  }
+  .av-pitch-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 13px; color: var(--color-muted); line-height: 1.5;
+  }
+  .av-pitch-check { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; }
+
+  /* ── Auth card ── */
+  .av-auth-tabs { display: flex; border-bottom: 1px solid var(--color-border); }
+  .av-auth-tab {
+    flex: 1; padding: 13px; font-size: 13px; font-weight: 600;
+    font-family: inherit; text-align: center; border: none; cursor: pointer;
+    color: var(--color-muted); background: transparent; position: relative;
+    transition: color 0.15s; border-radius: 0;
+  }
+  .av-auth-tab:hover { color: var(--color-foreground); }
+  .av-auth-tab.on { color: var(--color-foreground); }
+  .av-auth-tab.on::after {
+    content: ''; position: absolute; bottom: -1px; left: 16px; right: 16px;
+    height: 2px; background: var(--color-accent); border-radius: 2px 2px 0 0;
+    animation: av-tab-grow 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes av-tab-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+  .av-auth-body {
+    padding: clamp(16px, 3vw, 24px);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  .av-google-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 11px; font-size: 13px; font-weight: 500; font-family: inherit;
+    color: var(--color-foreground); background: var(--color-surface);
+    border: 1px solid var(--color-border); border-radius: 8px; cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  }
+  .av-google-btn:hover { border-color: var(--color-secondary); box-shadow: var(--shadow-card); transform: translateY(-1px); }
+  .av-google-btn:active { transform: translateY(0); }
+  .av-google-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .av-google-icon { width: 18px; height: 18px; }
+
+  .av-or { display: flex; align-items: center; gap: 14px; }
+  .av-form-inset { padding: clamp(12px, 2vw, 16px); display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── Auth bottom ── */
+  .av-link-btn {
+    color: var(--color-primary); text-decoration: underline; background: none;
+    border: none; font-family: inherit; font-size: inherit; cursor: pointer;
+    transition: color 0.15s;
+  }
+  .av-link-btn:hover { color: var(--color-foreground); }
+
+  /* ── Error ── */
+  .av-error {
+    padding: 10px 14px; border-radius: 8px;
+    border: 1px solid rgba(194,59,42,0.3); background: rgba(194,59,42,0.04);
+    font-size: 12px; color: var(--color-error); line-height: 1.5;
+    animation: av-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+</style>

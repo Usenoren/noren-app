@@ -75,7 +75,7 @@
   let isAnthropicType = $derived(selectedPreset === "claude-token" || selectedPreset === "anthropic");
   let isGemini = $derived(selectedPreset === "gemini");
   let isOpenAI = $derived(selectedPreset === "openai");
-  let isNorenPro = $derived(settings?.inference_mode === "noren_pro");
+  let isNorenPro = $derived(settings?.noren_pro_logged_in === true);
 
   // Dynamic Claude model list
   let claudeModels = $state<{ id: string; label: string }[]>([]);
@@ -394,352 +394,115 @@
   }
 </script>
 
-<div class="flex flex-col h-full overflow-y-auto animate-fade-in-up">
-  <!-- View title -->
-  <div class="px-6 pt-5 pb-3 shrink-0">
-    <h1 class="text-heading text-foreground">Settings</h1>
-  </div>
+<div class="sv-page animate-fade-in-up">
+  <h1 class="text-heading text-foreground" style="margin-bottom: 6px;">Settings</h1>
 
-  <div class="flex-1 flex flex-col gap-5 px-6 pb-6 max-w-lg">
   {#if !settings}
-    <div class="flex items-center justify-center h-full">
+    <div class="flex items-center justify-center" style="min-height: 200px;">
       <LoadingSpinner />
     </div>
   {:else}
-    <!-- Appearance / Theme Picker -->
-    <div class="card-flat p-4">
-      <div class="flex items-center justify-between mb-3">
-        <span class="section-label">Appearance</span>
-      </div>
-      <div class="grid grid-cols-4 gap-2">
-        {#each PALETTES as palette}
-          {@const isActive = getTheme() === palette.id}
-          <button
-            class="flex flex-col items-center gap-1.5 p-1.5 rounded-lg border cursor-pointer transition-all duration-200"
-            style="
-              border-color: {isActive ? 'var(--color-accent)' : 'var(--color-border)'};
-              background: {isActive ? 'var(--color-accent-wash)' : 'transparent'};
-              box-shadow: {isActive ? '0 0 10px rgba(122,51,64,0.15)' : 'none'};
-            "
-            onclick={() => setAndPersistTheme(palette.id)}
-          >
-            <div
-              class="w-full rounded-md overflow-hidden"
-              style="height: 42px; background: {palette.bg}; position: relative;"
-            >
-              <div style="height: 8px; background: {palette.surface}; border-bottom: 1px solid {palette.border};"></div>
-              <div style="margin: 5px 8px; height: 16px; background: {palette.surface}; border: 1px solid {palette.border}; border-left: 2px solid {palette.accent}; border-radius: 3px;"></div>
-            </div>
-            <span class="text-[10px] text-muted font-medium" style="font-family: 'JetBrains Mono', monospace;">
-              {palette.name}{palette.id === 'kon' ? ' *' : ''}
-            </span>
-          </button>
-        {/each}
-      </div>
-    </div>
+    <div class="sv-sections sv-stagger">
 
-    <!-- Keyboard Shortcut -->
-    <div class="card-flat p-4">
-      <div class="flex items-center justify-between mb-3">
-        <span class="section-label">Quick Access Shortcut</span>
-      </div>
-      {#if isRecording}
-        <div class="flex flex-col gap-2">
-          <div
-            tabindex="-1"
-            role="textbox"
-            class="card-inset px-3 py-3 text-xs text-foreground text-center font-medium"
-            style="border: 2px solid var(--color-secondary);"
-            onkeydown={handleHotkeyKeydown}
-            use:focusOnMount
-          >
-            {recordedHotkey ? formatHotkeyHuman(recordedHotkey) : "Press a key combination..."}
-          </div>
-          <div class="flex gap-2">
+      <!-- ── Appearance ── -->
+      <div class="card-flat sv-card-pad">
+        <span class="section-label" style="display:block; margin-bottom: 12px;">Appearance</span>
+        <div class="sv-palette-grid">
+          {#each PALETTES as palette}
+            {@const isActive = getTheme() === palette.id}
             <button
-              onclick={handleHotkeySave}
-              disabled={!recordedHotkey}
-              class="btn-primary flex-1"
+              class="sv-palette-btn"
+              class:active={isActive}
+              onclick={() => setAndPersistTheme(palette.id)}
             >
-              Save
-            </button>
-            <button
-              onclick={handleHotkeyCancel}
-              class="btn-outline"
-            >
-              Cancel
-            </button>
-          </div>
-          {#if hotkeyError}
-            <p class="text-[10px] text-error">{hotkeyError}</p>
-          {/if}
-        </div>
-      {:else}
-        <div class="card-inset flex items-center justify-between px-3 py-2.5">
-          <span class="text-xs text-foreground font-medium">
-            {formatHotkeyHuman(settings.hotkey)}
-          </span>
-          <button
-            onclick={() => { isRecording = true; recordedHotkey = ""; hotkeyError = ""; }}
-            class="btn-outline"
-          >
-            Change
-          </button>
-        </div>
-      {/if}
-    </div>
-
-    {#if isNorenPro}
-      <!-- Noren Pro inference -->
-      <div class="card-hero p-5">
-        <div class="flex items-center gap-2.5 mb-2">
-          <span class="text-subhead text-foreground">Noren Pro</span>
-          <span class="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-accent/15 text-accent">Active</span>
-        </div>
-        <p class="text-xs text-muted leading-relaxed">No API key needed. Inference runs on Noren servers with your voice profile.</p>
-        <div class="divider-thread mt-4 mb-3"></div>
-        <button
-          onclick={() => emit("navigate", "account")}
-          class="btn-outline text-xs"
-        >
-          Manage subscription
-        </button>
-      </div>
-
-      <div class="divider-thread"></div>
-
-      <!-- Model (read-only for Pro) -->
-      <div>
-        <span class="section-label" style="display:block; margin-bottom: 8px;">Model</span>
-        <div class="card-flat" style="padding: 14px 16px;">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="font-mono text-xs text-foreground">{settings.provider.model}</span>
-            <span class="px-1.5 py-0.5 text-[8px] font-semibold rounded-full bg-tint text-secondary">Voice router</span>
-          </div>
-          <p class="text-[11px] text-muted">Selected automatically based on your voice profile</p>
-        </div>
-      </div>
-
-      <!-- Extended Thinking (also available for Pro) -->
-      <div class="divider-thread"></div>
-      <div>
-        <span class="section-label" style="display:block; margin-bottom: 8px;">Output Preferences</span>
-        <div class="card-flat" style="overflow: hidden;">
-          <div class="flex items-center justify-between" style="padding: 14px 16px;">
-            <div>
-              <div class="text-xs font-medium text-foreground">Extended thinking</div>
-              <div class="text-[11px] text-muted mt-0.5">Chain-of-thought for complex tasks</div>
-            </div>
-            <button
-              onclick={handleThinkingToggle}
-              class="toggle {extendedThinking ? 'active' : ''}"
-              aria-label="Toggle extended thinking"
-            ></button>
-          </div>
-          {#if extendedThinking}
-            <div class="divider" style="height: 1px; background: var(--color-border);"></div>
-            <div class="flex items-center gap-2" style="padding: 10px 16px;">
-              <span class="text-[11px] text-muted whitespace-nowrap">Budget:</span>
-              <select
-                bind:value={thinkingBudget}
-                onchange={handleThinkingBudgetSave}
-                class="input-field flex-1 text-[11px]"
-              >
-                <option value={5000}>5k tokens (fast)</option>
-                <option value={10000}>10k tokens</option>
-                <option value={25000}>25k tokens</option>
-                <option value={50000}>50k tokens (deep)</option>
-              </select>
-            </div>
-          {/if}
-        </div>
-      </div>
-    {:else}
-      <!-- BYOK section -->
-      <!-- Provider -->
-      <div>
-        <span class="section-label mb-2">Provider</span>
-        <div class="flex flex-wrap gap-1">
-          {#each presets as p}
-            <button
-              onclick={() => handlePresetChange(p.id)}
-              class="px-3 py-1.5 text-xs transition-colors cursor-pointer rounded-md
-                {selectedPreset === p.id
-                  ? 'bg-primary text-white font-medium'
-                  : 'bg-surface text-muted border border-border hover:border-secondary hover:text-foreground'}"
-            >
-              {p.label}
+              <div class="sv-palette-preview" style="background: {palette.bg};">
+                <div class="sv-palette-bar" style="background: {palette.surface}; border-bottom: 1px solid {palette.border};"></div>
+                <div class="sv-palette-card" style="background: {palette.surface}; border: 1px solid {palette.border}; border-left: 2px solid {palette.accent};"></div>
+              </div>
+              <span class="sv-palette-label">
+                {palette.name}{palette.id === 'kon' ? ' *' : ''}
+              </span>
             </button>
           {/each}
         </div>
       </div>
 
-      <!-- Base URL (for Ollama and Custom) -->
-      {#if selectedPreset === "ollama" || isCustom}
-        <div>
-          <span class="section-label mb-1.5">Base URL</span>
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={baseUrlInput}
-              class="input-field flex-1"
-              placeholder={selectedPreset === "ollama" ? "http://localhost:11434/v1" : "https://api.example.com/v1"}
-            />
-            <button
-              onclick={isCustom ? handleSaveCustom : handleBaseUrlSave}
-              class="btn-outline"
+      <!-- ── Keyboard Shortcut ── -->
+      <div class="card-flat sv-card-pad">
+        <span class="section-label" style="display:block; margin-bottom: 12px;">Quick Access Shortcut</span>
+        {#if isRecording}
+          <div class="sv-hotkey-record">
+            <div
+              tabindex="-1"
+              role="textbox"
+              class="card-inset sv-hotkey-capture"
+              onkeydown={handleHotkeyKeydown}
+              use:focusOnMount
             >
-              Save
-            </button>
+              {recordedHotkey ? formatHotkeyHuman(recordedHotkey) : "Press a key combination..."}
+            </div>
+            <div class="flex gap-2">
+              <button onclick={handleHotkeySave} disabled={!recordedHotkey} class="btn-primary flex-1">Save</button>
+              <button onclick={handleHotkeyCancel} class="btn-outline">Cancel</button>
+            </div>
+            {#if hotkeyError}
+              <p class="text-[10px] text-error">{hotkeyError}</p>
+            {/if}
           </div>
-        </div>
-      {/if}
-
-      <!-- Model -->
-      <div>
-        <span class="section-label mb-1.5">Model</span>
-        {#if isAnthropicType && claudeModelsLoading}
-          <div class="flex items-center gap-2 text-xs text-muted">
-            <LoadingSpinner /> Fetching models...
-          </div>
-        {:else if isAnthropicType && claudeModels.length > 0}
-          <select
-            bind:value={modelInput}
-            onchange={handleModelSave}
-            class="input-field"
-          >
-            {#each claudeModels as m}
-              <option value={m.id}>{m.label}</option>
-            {/each}
-          </select>
-        {:else if isOpenAI && openaiModelsLoading}
-          <div class="flex items-center gap-2 text-xs text-muted">
-            <LoadingSpinner /> Fetching models...
-          </div>
-        {:else if isOpenAI && openaiModels.length > 0}
-          <select
-            bind:value={modelInput}
-            onchange={handleModelSave}
-            class="input-field"
-          >
-            {#each openaiModels as m}
-              <option value={m.id}>{m.label}</option>
-            {/each}
-          </select>
-        {:else if isOpenAI}
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={modelInput}
-              class="input-field flex-1"
-              placeholder="gpt-4o"
-            />
-            <button
-              onclick={handleModelSave}
-              class="btn-outline"
-            >
-              Save
-            </button>
-          </div>
-        {:else if isGemini && geminiModelsLoading}
-          <div class="flex items-center gap-2 text-xs text-muted">
-            <LoadingSpinner /> Fetching models...
-          </div>
-        {:else if isGemini && geminiModels.length > 0}
-          <select
-            bind:value={modelInput}
-            onchange={handleModelSave}
-            class="input-field"
-          >
-            {#each geminiModels as m}
-              <option value={m.id}>{m.label}</option>
-            {/each}
-          </select>
-        {:else if isGemini}
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={modelInput}
-              class="input-field flex-1"
-              placeholder="gemini-2.0-flash"
-            />
-            <button
-              onclick={handleModelSave}
-              class="btn-outline"
-            >
-              Save
-            </button>
-          </div>
-        {:else if isCustom && customModelsLoading}
-          <div class="flex items-center gap-2 text-xs text-muted">
-            <LoadingSpinner /> Fetching models...
-          </div>
-        {:else if isCustom && customModels.length > 0}
-          <select
-            bind:value={modelInput}
-            onchange={handleModelSave}
-            class="input-field"
-          >
-            {#each customModels as m}
-              <option value={m.id}>{m.label}</option>
-            {/each}
-          </select>
-        {:else if isOllama && ollamaLoading}
-          <div class="flex items-center gap-2 text-xs text-muted">
-            <LoadingSpinner /> Detecting models...
-          </div>
-        {:else if isOllama && ollamaModels.length > 0}
-          <select
-            bind:value={modelInput}
-            onchange={handleModelSave}
-            class="input-field"
-          >
-            {#each ollamaModels as m}
-              <option value={m}>{m}</option>
-            {/each}
-          </select>
         {:else}
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={modelInput}
-              class="input-field flex-1"
-              placeholder={isAnthropicType ? "claude-sonnet-4-6" : "Model ID"}
-            />
+          <div class="card-inset sv-hotkey-display">
+            <span class="text-xs text-foreground font-medium">{formatHotkeyHuman(settings.hotkey)}</span>
             <button
-              onclick={handleModelSave}
+              onclick={() => { isRecording = true; recordedHotkey = ""; hotkeyError = ""; }}
               class="btn-outline"
-            >
-              Save
-            </button>
+            >Change</button>
           </div>
-          {#if isOllama}
-            <p class="text-[10px] text-warning mt-1">Could not detect models. Is Ollama running?</p>
-          {/if}
         {/if}
       </div>
 
-      <!-- Extended Thinking (Anthropic only) -->
-      {#if isAnthropicType}
-        <div>
-          <div class="flex items-center justify-between">
-            <span class="section-label">Extended Thinking</span>
-            <button
-              onclick={handleThinkingToggle}
-              class="relative w-9 h-5 rounded-full transition-colors cursor-pointer {extendedThinking ? 'bg-secondary' : 'bg-border'}"
-              aria-label="Toggle extended thinking"
-            >
-              <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {extendedThinking ? 'translate-x-4' : ''}"></span>
-            </button>
+      <div class="divider-thread"></div>
+
+      <!-- ── Inference: Pro or BYOK ── -->
+      {#if isNorenPro}
+        <!-- Noren Pro inference -->
+        <div class="card-hero sv-card-pad">
+          <div class="flex items-center gap-2.5 mb-2">
+            <span class="text-subhead text-foreground">Noren Pro</span>
+            <span class="sv-status-badge sv-badge-active">Active</span>
+          </div>
+          <p class="text-xs text-muted leading-relaxed">No API key needed. Inference runs on Noren servers with your voice profile.</p>
+          <div class="divider-thread" style="margin: 16px 0 12px;"></div>
+          <button onclick={() => emit("navigate", "account")} class="btn-outline text-xs">Manage subscription</button>
+        </div>
+
+        <!-- Model (read-only for Pro) -->
+        <div class="card-flat">
+          <div class="sv-setting-row">
+            <div>
+              <div class="sv-setting-label">Model</div>
+              <div class="sv-setting-desc">
+                <span class="font-mono text-foreground">{settings.provider.model}</span>
+                <span class="sv-status-badge sv-badge-info" style="margin-left: 6px;">Voice router</span>
+              </div>
+              <div class="text-[11px] text-muted" style="margin-top: 2px;">Selected automatically based on your voice profile</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Extended Thinking (Pro) -->
+        <div class="card-flat" style="overflow: hidden;">
+          <div class="sv-setting-row">
+            <div>
+              <div class="sv-setting-label">Extended thinking</div>
+              <div class="sv-setting-desc">Chain-of-thought for complex tasks</div>
+            </div>
+            <button onclick={handleThinkingToggle} class="toggle {extendedThinking ? 'active' : ''}" aria-label="Toggle extended thinking"></button>
           </div>
           {#if extendedThinking}
-            <div class="flex items-center gap-2 mt-2">
-              <span class="text-[10px] text-muted whitespace-nowrap">Budget:</span>
-              <select
-                bind:value={thinkingBudget}
-                onchange={handleThinkingBudgetSave}
-                class="input-field flex-1 text-[10px]"
-              >
+            <div style="height: 1px; background: var(--color-border);"></div>
+            <div class="flex items-center gap-2" style="padding: 10px clamp(14px, 2.5vw, 20px);">
+              <span class="text-[11px] text-muted whitespace-nowrap">Budget:</span>
+              <select bind:value={thinkingBudget} onchange={handleThinkingBudgetSave} class="input-field flex-1 text-[11px]">
                 <option value={5000}>5k tokens (fast)</option>
                 <option value={10000}>10k tokens</option>
                 <option value={25000}>25k tokens</option>
@@ -747,163 +510,434 @@
               </select>
             </div>
           {/if}
-          <p class="text-[10px] text-muted mt-1.5">
-            {extendedThinking ? "Model will reason step-by-step before responding. Slower but higher quality." : "Direct responses without chain-of-thought reasoning."}
-          </p>
-        </div>
-      {/if}
-
-      <!-- API Key (only for providers that require one) -->
-      {#if requiresKey}
-        <div>
-          {#if isClaudeToken}
-            <p class="text-[10px] text-muted mb-2 leading-relaxed">
-              Run <code class="bg-surface px-1 py-0.5 rounded text-foreground">claude setup-token</code> in your terminal, then paste the token below.
-            </p>
-          {/if}
-          <div class="flex items-center justify-between mb-1.5">
-            <span class="section-label">
-              {isClaudeToken ? "Setup Token" : "API Key"}
-              <span class="ml-1.5 text-[10px] font-normal normal-case tracking-normal {settings.has_key ? 'text-signal' : 'text-muted'}">
-                {settings.has_key ? "Stored in Keychain" : "Not set"}
-              </span>
-            </span>
-            {#if settings.has_key}
-              <button
-                onclick={handleRemoveKey}
-                class="text-[10px] text-error hover:text-foreground cursor-pointer uppercase tracking-wide"
-              >
-                Remove
-              </button>
-            {/if}
-          </div>
-
-          <div class="flex gap-2">
-            <div class="relative flex-1">
-              <input
-                type={showKey ? "text" : "password"}
-                bind:value={apiKeyInput}
-                class="input-field pr-12"
-                placeholder={isClaudeToken
-                  ? (settings.has_key ? "Paste new token to replace" : "sk-ant-oat01-...")
-                  : (settings.has_key ? "Enter new key to replace" : "Enter API key")}
-              />
-              <button
-                onclick={() => { showKey = !showKey; }}
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted hover:text-secondary cursor-pointer uppercase"
-              >
-                {showKey ? "Hide" : "Show"}
-              </button>
-            </div>
-          </div>
-
-          {#if apiKeyInput.trim()}
-            <div class="flex gap-2 mt-2">
-              <button
-                onclick={handleTestConnection}
-                disabled={isTesting}
-                class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
-              >
-                {#if isTesting}
-                  <span class="inline-flex items-center gap-1"><LoadingSpinner /> Testing</span>
-                {:else}
-                  Test
-                {/if}
-              </button>
-              <button
-                onclick={handleSaveKey}
-                disabled={isSaving}
-                class="px-3 py-1.5 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
-              >
-                {isSaving ? "Saving..." : isClaudeToken ? "Save Token" : "Save to Keychain"}
-              </button>
-            </div>
-          {/if}
         </div>
       {:else}
-        <!-- No key needed message -->
-        <div class="p-2 bg-tint border border-border rounded-xl">
-          <p class="text-xs text-muted">
-            No API key needed — {settings.provider.name} runs locally.
+        <!-- ── BYOK Section ── -->
+
+        <!-- Provider picker -->
+        <div>
+          <span class="section-label" style="display:block; margin-bottom: 8px;">Provider</span>
+          <div class="sv-provider-grid">
+            {#each presets as p}
+              <button
+                onclick={() => handlePresetChange(p.id)}
+                class="sv-provider-btn"
+                class:active={selectedPreset === p.id}
+              >{p.label}</button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Base URL (Ollama / Custom) -->
+        {#if selectedPreset === "ollama" || isCustom}
+          <div>
+            <span class="section-label" style="display:block; margin-bottom: 6px;">Base URL</span>
+            <div class="flex gap-2">
+              <input
+                type="text"
+                bind:value={baseUrlInput}
+                class="input-field flex-1"
+                placeholder={selectedPreset === "ollama" ? "http://localhost:11434/v1" : "https://api.example.com/v1"}
+              />
+              <button onclick={isCustom ? handleSaveCustom : handleBaseUrlSave} class="btn-outline">Save</button>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Model -->
+        <div>
+          <span class="section-label" style="display:block; margin-bottom: 6px;">Model</span>
+          {#if isAnthropicType && claudeModelsLoading}
+            <div class="flex items-center gap-2 text-xs text-muted"><LoadingSpinner /> Fetching models...</div>
+          {:else if isAnthropicType && claudeModels.length > 0}
+            <select bind:value={modelInput} onchange={handleModelSave} class="input-field">{#each claudeModels as m}<option value={m.id}>{m.label}</option>{/each}</select>
+          {:else if isOpenAI && openaiModelsLoading}
+            <div class="flex items-center gap-2 text-xs text-muted"><LoadingSpinner /> Fetching models...</div>
+          {:else if isOpenAI && openaiModels.length > 0}
+            <select bind:value={modelInput} onchange={handleModelSave} class="input-field">{#each openaiModels as m}<option value={m.id}>{m.label}</option>{/each}</select>
+          {:else if isOpenAI}
+            <div class="flex gap-2">
+              <input type="text" bind:value={modelInput} class="input-field flex-1" placeholder="gpt-4o" />
+              <button onclick={handleModelSave} class="btn-outline">Save</button>
+            </div>
+          {:else if isGemini && geminiModelsLoading}
+            <div class="flex items-center gap-2 text-xs text-muted"><LoadingSpinner /> Fetching models...</div>
+          {:else if isGemini && geminiModels.length > 0}
+            <select bind:value={modelInput} onchange={handleModelSave} class="input-field">{#each geminiModels as m}<option value={m.id}>{m.label}</option>{/each}</select>
+          {:else if isGemini}
+            <div class="flex gap-2">
+              <input type="text" bind:value={modelInput} class="input-field flex-1" placeholder="gemini-2.0-flash" />
+              <button onclick={handleModelSave} class="btn-outline">Save</button>
+            </div>
+          {:else if isCustom && customModelsLoading}
+            <div class="flex items-center gap-2 text-xs text-muted"><LoadingSpinner /> Fetching models...</div>
+          {:else if isCustom && customModels.length > 0}
+            <select bind:value={modelInput} onchange={handleModelSave} class="input-field">{#each customModels as m}<option value={m.id}>{m.label}</option>{/each}</select>
+          {:else if isOllama && ollamaLoading}
+            <div class="flex items-center gap-2 text-xs text-muted"><LoadingSpinner /> Detecting models...</div>
+          {:else if isOllama && ollamaModels.length > 0}
+            <select bind:value={modelInput} onchange={handleModelSave} class="input-field">{#each ollamaModels as m}<option value={m}>{m}</option>{/each}</select>
+          {:else}
+            <div class="flex gap-2">
+              <input type="text" bind:value={modelInput} class="input-field flex-1" placeholder={isAnthropicType ? "claude-sonnet-4-6" : "Model ID"} />
+              <button onclick={handleModelSave} class="btn-outline">Save</button>
+            </div>
+            {#if isOllama}
+              <p class="text-[10px] text-warning mt-1">Could not detect models. Is Ollama running?</p>
+            {/if}
+          {/if}
+        </div>
+
+        <!-- Extended Thinking (Anthropic BYOK) -->
+        {#if isAnthropicType}
+          <div class="card-flat" style="overflow: hidden;">
+            <div class="sv-setting-row">
+              <div>
+                <div class="sv-setting-label">Extended thinking</div>
+                <div class="sv-setting-desc">
+                  {extendedThinking ? "Model will reason step-by-step before responding. Slower but higher quality." : "Direct responses without chain-of-thought reasoning."}
+                </div>
+              </div>
+              <button onclick={handleThinkingToggle} class="toggle {extendedThinking ? 'active' : ''}" aria-label="Toggle extended thinking"></button>
+            </div>
+            {#if extendedThinking}
+              <div style="height: 1px; background: var(--color-border);"></div>
+              <div class="flex items-center gap-2" style="padding: 10px clamp(14px, 2.5vw, 20px);">
+                <span class="text-[11px] text-muted whitespace-nowrap">Budget:</span>
+                <select bind:value={thinkingBudget} onchange={handleThinkingBudgetSave} class="input-field flex-1 text-[11px]">
+                  <option value={5000}>5k tokens (fast)</option>
+                  <option value={10000}>10k tokens</option>
+                  <option value={25000}>25k tokens</option>
+                  <option value={50000}>50k tokens (deep)</option>
+                </select>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- API Key -->
+        {#if requiresKey}
+          <div>
+            {#if isClaudeToken}
+              <p class="text-[10px] text-muted mb-2 leading-relaxed">
+                Run <code class="bg-surface px-1 py-0.5 rounded text-foreground">claude setup-token</code> in your terminal, then paste the token below.
+              </p>
+            {/if}
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="section-label">
+                {isClaudeToken ? "Setup Token" : "API Key"}
+                <span class="ml-1.5 text-[10px] font-normal normal-case tracking-normal {settings.has_key ? 'text-signal' : 'text-muted'}">
+                  {settings.has_key ? "Stored in Keychain" : "Not set"}
+                </span>
+              </span>
+              {#if settings.has_key}
+                <button onclick={handleRemoveKey} class="text-[10px] text-error hover:text-foreground cursor-pointer uppercase tracking-wide">Remove</button>
+              {/if}
+            </div>
+
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                <input
+                  type={showKey ? "text" : "password"}
+                  bind:value={apiKeyInput}
+                  class="input-field pr-12"
+                  placeholder={isClaudeToken
+                    ? (settings.has_key ? "Paste new token to replace" : "sk-ant-oat01-...")
+                    : (settings.has_key ? "Enter new key to replace" : "Enter API key")}
+                />
+                <button
+                  onclick={() => { showKey = !showKey; }}
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted hover:text-secondary cursor-pointer uppercase"
+                >{showKey ? "Hide" : "Show"}</button>
+              </div>
+            </div>
+
+            {#if apiKeyInput.trim()}
+              <div class="flex gap-2 mt-2">
+                <button onclick={handleTestConnection} disabled={isTesting} class="btn-outline">
+                  {#if isTesting}<span class="inline-flex items-center gap-1"><LoadingSpinner /> Testing</span>{:else}Test{/if}
+                </button>
+                <button onclick={handleSaveKey} disabled={isSaving} class="btn-primary">
+                  {isSaving ? "Saving..." : isClaudeToken ? "Save Token" : "Save to Keychain"}
+                </button>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="p-2 bg-tint border border-border rounded-xl">
+            <p class="text-xs text-muted">No API key needed. {settings.provider.name} runs locally.</p>
+          </div>
+        {/if}
+
+        <!-- Test Connection (stored key or no key needed) -->
+        {#if !requiresKey || (settings.has_key && !apiKeyInput.trim())}
+          <button onclick={handleTestConnection} disabled={isTesting} class="btn-outline self-start">
+            {#if isTesting}<span class="inline-flex items-center gap-1"><LoadingSpinner /> Testing</span>{:else}Test Connection{/if}
+          </button>
+        {/if}
+      {/if}
+
+      <!-- Test result -->
+      {#if testResult}
+        <div class="sv-result-bar sv-result-ok">{testResult}</div>
+      {/if}
+
+      <!-- Error -->
+      {#if error}
+        <div class="sv-result-bar sv-result-err">{error}</div>
+      {/if}
+
+      <!-- Info (BYOK only) -->
+      {#if !isNorenPro}
+        <div>
+          <div class="divider-thread"></div>
+          <p class="text-[11px] text-muted leading-relaxed pt-3">
+            API keys are stored securely in macOS Keychain, never in config files.
+            Any OpenAI-compatible provider works. Groq, Together, Mistral, OpenRouter, LM Studio, and more.
           </p>
         </div>
       {/if}
 
-      <!-- Test Connection (for providers without key, or with stored key) -->
-      {#if !requiresKey || (settings.has_key && !apiKeyInput.trim())}
-        <button
-          onclick={handleTestConnection}
-          disabled={isTesting}
-          class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md self-start"
-        >
-          {#if isTesting}
-            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Testing</span>
-          {:else}
-            Test Connection
-          {/if}
-        </button>
-      {/if}
-    {/if}
-
-    <!-- Test result -->
-    {#if testResult}
-      <div class="p-2 bg-tint border border-signal/30 rounded-xl text-xs text-signal">
-        {testResult}
-      </div>
-    {/if}
-
-    <!-- Error -->
-    {#if error}
-      <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">
-        {error}
-      </div>
-    {/if}
-
-    <!-- Info (for BYOK users only) -->
-    {#if !isNorenPro}
-      <div>
+      <!-- Factory Reset -->
+      <div class="sv-footer">
         <div class="divider-thread"></div>
-        <p class="text-[11px] text-muted leading-relaxed pt-3">
-          API keys are stored securely in macOS Keychain, never in config files.
-          Any OpenAI-compatible provider works. Groq, Together, Mistral, OpenRouter, LM Studio, and more.
-        </p>
-      </div>
-    {/if}
-
-    <!-- Factory Reset -->
-    <div class="mt-auto">
-      <div class="divider-thread"></div>
-      <div class="pt-3">
-        {#if showResetConfirm}
-          <div class="card-flat" style="border-color: var(--color-error)">
-            <p class="text-xs text-foreground font-medium mb-1">Reset everything?</p>
-            <p class="text-[10px] text-muted mb-3">This will delete all config, profiles, chat history, and keychain entries. The app will restart as if freshly installed.</p>
-            <div class="flex gap-2">
-              <button
-                onclick={handleFactoryReset}
-                disabled={resetting}
-                class="px-3 py-1.5 text-xs bg-error text-white hover:bg-error/80 transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
-              >
-                {resetting ? "Resetting..." : "Yes, reset everything"}
-              </button>
-              <button
-                onclick={() => { showResetConfirm = false; }}
-                class="btn-outline"
-              >
-                Cancel
-              </button>
+        <div style="padding-top: 12px;">
+          {#if showResetConfirm}
+            <div class="card-flat sv-reset-confirm">
+              <p class="text-xs text-foreground font-medium" style="margin-bottom: 4px;">Reset everything?</p>
+              <p class="text-[10px] text-muted" style="margin-bottom: 12px;">This will delete all config, profiles, chat history, and keychain entries. The app will restart as if freshly installed.</p>
+              <div class="flex gap-2">
+                <button onclick={handleFactoryReset} disabled={resetting} class="sv-btn-danger">
+                  {resetting ? "Resetting..." : "Yes, reset everything"}
+                </button>
+                <button onclick={() => { showResetConfirm = false; }} class="btn-outline">Cancel</button>
+              </div>
             </div>
-          </div>
-        {:else}
-          <button
-            onclick={() => { showResetConfirm = true; }}
-            class="text-[10px] text-muted hover:text-error transition-colors cursor-pointer"
-          >
-            Factory reset
-          </button>
-        {/if}
+          {:else}
+            <button onclick={() => { showResetConfirm = true; }} class="sv-reset-link">Factory reset</button>
+          {/if}
+        </div>
       </div>
     </div>
   {/if}
-  </div>
 </div>
+
+<style>
+  /* ── Page container ── */
+  .sv-page {
+    padding: clamp(20px, 4vw, 40px);
+    padding-top: clamp(16px, 3vw, 28px);
+    max-width: 680px;
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  /* ── Sections ── */
+  .sv-sections {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 2.5vw, 24px);
+  }
+
+  /* ── Staggered entry ── */
+  .sv-stagger > :global(*) {
+    animation: sv-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .sv-stagger > :global(*:nth-child(1)) { animation-delay: 0ms; }
+  .sv-stagger > :global(*:nth-child(2)) { animation-delay: 60ms; }
+  .sv-stagger > :global(*:nth-child(3)) { animation-delay: 120ms; }
+  .sv-stagger > :global(*:nth-child(4)) { animation-delay: 180ms; }
+  .sv-stagger > :global(*:nth-child(5)) { animation-delay: 240ms; }
+  .sv-stagger > :global(*:nth-child(6)) { animation-delay: 300ms; }
+  .sv-stagger > :global(*:nth-child(7)) { animation-delay: 360ms; }
+  .sv-stagger > :global(*:nth-child(8)) { animation-delay: 420ms; }
+  .sv-stagger > :global(*:nth-child(9)) { animation-delay: 480ms; }
+  .sv-stagger > :global(*:nth-child(10)) { animation-delay: 540ms; }
+
+  @keyframes sv-enter {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Card padding ── */
+  .sv-card-pad { padding: clamp(14px, 2.5vw, 20px); }
+
+  /* ── Palette grid ── */
+  .sv-palette-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+  }
+  .sv-palette-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  }
+  .sv-palette-btn:hover { border-color: var(--color-secondary); }
+  .sv-palette-btn.active {
+    border-color: var(--color-accent);
+    background: var(--color-accent-wash);
+    box-shadow: 0 0 10px rgba(122,51,64,0.15);
+  }
+  .sv-palette-preview {
+    width: 100%;
+    height: 42px;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .sv-palette-bar {
+    height: 8px;
+  }
+  .sv-palette-card {
+    margin: 5px 8px;
+    height: 16px;
+    border-radius: 3px;
+  }
+  .sv-palette-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    color: var(--color-muted);
+    font-weight: 500;
+  }
+
+  /* ── Hotkey ── */
+  .sv-hotkey-record {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sv-hotkey-capture {
+    padding: 12px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-foreground);
+    border: 2px solid var(--color-secondary) !important;
+    outline: none;
+  }
+  .sv-hotkey-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+  }
+
+  /* ── Setting rows ── */
+  .sv-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(12px, 2vw, 16px) clamp(14px, 2.5vw, 20px);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .sv-setting-label { font-size: 13px; font-weight: 600; }
+  .sv-setting-desc { font-size: 11px; color: var(--color-muted); margin-top: 2px; }
+
+  /* ── Status badges ── */
+  .sv-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 100px;
+  }
+  .sv-badge-active { background: rgba(122,51,64,0.12); color: var(--color-accent); }
+  .sv-badge-info { background: var(--color-tint); color: var(--color-secondary); }
+
+  /* ── Provider grid ── */
+  .sv-provider-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .sv-provider-btn {
+    padding: 7px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+  }
+  .sv-provider-btn:hover {
+    border-color: var(--color-secondary);
+    color: var(--color-foreground);
+  }
+  .sv-provider-btn.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  /* ── Result bars ── */
+  .sv-result-bar {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    animation: sv-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .sv-result-ok {
+    background: rgba(45,122,79,0.04);
+    border: 1px solid rgba(45,122,79,0.3);
+    color: var(--color-signal);
+  }
+  .sv-result-err {
+    background: rgba(194,59,42,0.04);
+    border: 1px solid rgba(194,59,42,0.3);
+    color: var(--color-error);
+  }
+
+  /* ── Footer ── */
+  .sv-footer { margin-top: auto; }
+
+  /* ── Factory reset ── */
+  .sv-reset-confirm {
+    padding: clamp(14px, 2.5vw, 20px);
+    border-color: var(--color-error);
+  }
+  .sv-btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    color: white;
+    background: var(--color-error);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .sv-btn-danger:hover:not(:disabled) { background: #a83222; transform: translateY(-1px); }
+  .sv-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .sv-reset-link {
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--color-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .sv-reset-link:hover { color: var(--color-error); }
+</style>
