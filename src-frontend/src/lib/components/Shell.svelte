@@ -83,7 +83,7 @@
         refreshSubscription();
 
         // Auto-migrate local profile to server for Pro users
-        if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
+        if (settings.noren_pro_logged_in && profile.exists && !profile.is_server) {
           migrateProfileToServer().catch(() => {
             // Migration failed silently — user can retry manually
           });

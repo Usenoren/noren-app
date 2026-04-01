@@ -93,7 +93,7 @@
       if (settings.noren_pro_logged_in) {
         refreshSubscription();
 
-        if (settings.inference_mode === "noren_pro" && profile.exists && !profile.is_server) {
+        if (settings.noren_pro_logged_in && profile.exists && !profile.is_server) {
           migrateProfileToServer().catch(() => toastWarning("Profile sync to server failed"));
         }
       }
