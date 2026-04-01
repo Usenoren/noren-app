@@ -399,34 +399,33 @@
         </div>
       {/if}
 
-      {#if hasInference}
-        <!-- Usage -->
-        <div class="card-hero av-card-pad">
-          <span class="section-label" style="display:block; margin-bottom: 14px;">Usage</span>
-          {#if proStatus.generations_used != null && proStatus.generations_limit != null}
-            <div class="av-usage-head">
-              <span>{proStatus.generations_used} / {proStatus.generations_limit} generations</span>
-            </div>
-            <div class="av-bar">
-              <div
-                class="av-bar-fill"
-                class:go={usageAnimated}
-                style="--pct: {Math.min(100, (proStatus.generations_used / (proStatus.generations_limit || 1)) * 100)}%"
-              ></div>
-            </div>
-            <div class="av-usage-meta">
-              <span>Chat and autocomplete don't count</span>
-              <span>Resets {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-            </div>
-          {:else}
-            <p class="text-[11px] text-muted">No usage data yet</p>
-          {/if}
-        </div>
-      {/if}
-
       {#if effectivelyPro}
-        <!-- Features grid -->
+        <!-- Usage + Features grid -->
         <div class="av-grid">
+          <!-- Usage -->
+          <div class="card-hero av-card-pad">
+            <span class="section-label" style="display:block; margin-bottom: 14px;">Usage</span>
+            {#if proStatus.generations_used != null && proStatus.generations_limit != null}
+              <div class="av-usage-head">
+                <span>{proStatus.generations_used} / {proStatus.generations_limit} generations</span>
+                <span>Resets {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              </div>
+              <div class="av-bar">
+                <div
+                  class="av-bar-fill"
+                  class:go={usageAnimated}
+                  style="--pct: {Math.min(100, (proStatus.generations_used / (proStatus.generations_limit || 1)) * 100)}%"
+                ></div>
+              </div>
+              <div class="av-usage-meta">
+                <span>Chat and autocomplete don't count toward your limit.</span>
+              </div>
+            {:else}
+              <p class="text-[11px] text-muted">No usage data yet</p>
+            {/if}
+          </div>
+
+          <!-- Features -->
           <div class="card av-card-pad">
             <span class="section-label" style="display:block; margin-bottom: 10px;">Included</span>
             <div class="av-features">
@@ -461,6 +460,30 @@
             </div>
             <button class="btn-outline" onclick={handlePasswordReset}>Reset</button>
           </div>
+        </div>
+
+      {:else if hasInference}
+        <!-- Free tier with generations: usage only -->
+        <div class="card-hero av-card-pad">
+          <span class="section-label" style="display:block; margin-bottom: 14px;">Usage</span>
+          {#if proStatus.generations_used != null && proStatus.generations_limit != null}
+            <div class="av-usage-head">
+              <span>{proStatus.generations_used} / {proStatus.generations_limit} generations</span>
+              <span>Resets {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+            <div class="av-bar">
+              <div
+                class="av-bar-fill"
+                class:go={usageAnimated}
+                style="--pct: {Math.min(100, (proStatus.generations_used / (proStatus.generations_limit || 1)) * 100)}%"
+              ></div>
+            </div>
+            <div class="av-usage-meta">
+              <span>Chat and autocomplete don't count toward your limit.</span>
+            </div>
+          {:else}
+            <p class="text-[11px] text-muted">No usage data yet</p>
+          {/if}
         </div>
       {/if}
 
