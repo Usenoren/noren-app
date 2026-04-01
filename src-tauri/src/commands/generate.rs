@@ -78,7 +78,7 @@ pub async fn generate(
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
         generate_pro(&config, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref(), None).await
     } else {
-        generate_byok(&config, state.encryption_key, &prompt, &format, &level, mode, &pipeline, context.as_deref(), attachments.as_deref()).await
+        generate_byok(&config, state.encryption_key, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref()).await
     }
 }
 
@@ -164,6 +164,7 @@ async fn generate_byok(
     level: &str,
     mode: &str,
     pipeline: &noren_engine::GenerationPipeline,
+    quick_action: Option<&str>,
     context: Option<&str>,
     attachments: Option<&[String]>,
 ) -> Result<GenerateResult, String> {
@@ -223,8 +224,13 @@ async fn generate_byok(
     .map_err(|e| e.to_string())?;
 
     // Build user message
+    let ctx_label = if quick_action.is_some() {
+        "Full document (for coherence only)"
+    } else {
+        "Context (selected text)"
+    };
     let mut user_content = match context.filter(|s| !s.is_empty()) {
-        Some(ctx) => std::format!("Context (selected text):\n{}\n\nRequest: {}", ctx, prompt),
+        Some(ctx) => std::format!("{}:\n{}\n\nRequest: {}", ctx_label, ctx, prompt),
         None => prompt.to_string(),
     };
 
@@ -240,9 +246,12 @@ async fn generate_byok(
 
     // Voice routing: only override model when user is on the default Anthropic model.
     // If someone manually set Opus, respect their choice.
+    // Quick actions skip routing (stay on configured model for speed).
     let is_default_model = config.provider.model == "claude-sonnet-4-6";
     let (active_model, route_info) =
-        if config.provider.provider_type == noren_engine::ProviderType::Anthropic && is_default_model {
+        if quick_action.is_some() {
+            (config.provider.model.clone(), None)
+        } else if config.provider.provider_type == noren_engine::ProviderType::Anthropic && is_default_model {
             if let Some(ref meta) = metadata {
                 let decision = noren_engine::generate::voice_router::route_voice_to_model(meta, format);
                 if decision.model != config.provider.model {
@@ -269,14 +278,19 @@ async fn generate_byok(
         noren_engine::create_llm_client(&effective_config, api_key).map_err(|e| e.to_string())?
     };
 
-    // Auto-enable thinking for internalized on Anthropic, matching CLI behavior
-    let use_thinking = match pipeline {
-        noren_engine::GenerationPipeline::Internalized
-            if config.provider.provider_type == noren_engine::ProviderType::Anthropic =>
-        {
-            true
+    // Auto-enable thinking for internalized on Anthropic, matching CLI behavior.
+    // Quick actions skip thinking (speed over deliberation for paragraph rewrites).
+    let use_thinking = if quick_action.is_some() {
+        false
+    } else {
+        match pipeline {
+            noren_engine::GenerationPipeline::Internalized
+                if config.provider.provider_type == noren_engine::ProviderType::Anthropic =>
+            {
+                true
+            }
+            _ => config.extended_thinking,
         }
-        _ => config.extended_thinking,
     };
 
     let thinking_budget = config.thinking_budget; // default 10000
@@ -686,7 +700,7 @@ pub async fn rewrite_selection(
     format: String,
 ) -> Result<GenerateResult, String> {
     let prompt = format!(
-        "Rewrite this in my voice: {}\n\n{}",
+        "{}\n\nReturn only the revised text.\n\n{}",
         instruction, selection_text
     );
 
