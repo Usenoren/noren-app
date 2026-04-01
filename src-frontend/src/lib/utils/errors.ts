@@ -4,6 +4,11 @@
 export function friendlyError(raw: unknown): string {
   const msg = String(raw);
 
+  // Generation limit (server-enforced monthly cap)
+  if (msg.includes("Monthly generation limit")) {
+    return "Monthly generation limit reached. Chat and autocomplete still work.";
+  }
+
   // Rate limit errors (Gemini, OpenAI, Anthropic, etc.)
   if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("rate limit") || msg.includes("RESOURCE_EXHAUSTED")) {
     if (msg.includes("gemini") || msg.includes("googleapis")) {

@@ -59,12 +59,10 @@
   let dangerOpen = $state(false);
   let usageAnimated = $state(false);
 
-  // Tier helpers — proStatus.tokens_limit is the source of truth for access.
-  // subscription.tier can lag behind (Stripe webhook delay, stale data).
-  let hasInferenceFromUsage = $derived(proStatus?.tokens_limit != null && proStatus.tokens_limit > 0);
-  let effectivelyPro = $derived((subscription?.tier === "pro") || hasInferenceFromUsage);
+  // Tier helpers
+  let hasInference = $derived((proStatus?.generations_limit ?? 0) > 0);
+  let effectivelyPro = $derived(subscription?.tier === "pro");
   let effectivelyFree = $derived(!effectivelyPro);
-  let hasInference = $derived(effectivelyPro);
 
   onDestroy(() => {
     if (cooldownInterval) clearInterval(cooldownInterval);
@@ -402,35 +400,33 @@
       {/if}
 
       {#if hasInference}
-        <!-- Usage + Features grid -->
-        <div class="av-grid">
-          <!-- Usage -->
-          <div class="card-hero av-card-pad">
-            <span class="section-label" style="display:block; margin-bottom: 14px;">Usage</span>
-            {#if proStatus.tokens_used != null && proStatus.tokens_limit != null}
-              <div class="av-usage-head">
-                <span>{proStatus.tokens_used.toLocaleString()} tokens</span>
-                <span>{proStatus.tokens_limit.toLocaleString()} limit</span>
-              </div>
-              <div class="av-bar">
-                <div
-                  class="av-bar-fill"
-                  class:go={usageAnimated}
-                  style="--pct: {Math.min(100, (proStatus.tokens_used / (proStatus.tokens_limit || 1)) * 100)}%"
-                ></div>
-              </div>
-              <div class="av-usage-meta">
-                <span>{proStatus.requests_this_month} requests this month</span>
-                {#if subscription?.current_period_end}
-                  <span>Period ends {formatDate(subscription.current_period_end)}</span>
-                {/if}
-              </div>
-            {:else}
-              <p class="text-[11px] text-muted">No usage data yet</p>
-            {/if}
-          </div>
+        <!-- Usage -->
+        <div class="card-hero av-card-pad">
+          <span class="section-label" style="display:block; margin-bottom: 14px;">Usage</span>
+          {#if proStatus.generations_used != null && proStatus.generations_limit != null}
+            <div class="av-usage-head">
+              <span>{proStatus.generations_used} / {proStatus.generations_limit} generations</span>
+            </div>
+            <div class="av-bar">
+              <div
+                class="av-bar-fill"
+                class:go={usageAnimated}
+                style="--pct: {Math.min(100, (proStatus.generations_used / (proStatus.generations_limit || 1)) * 100)}%"
+              ></div>
+            </div>
+            <div class="av-usage-meta">
+              <span>Chat and autocomplete don't count</span>
+              <span>Resets {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+          {:else}
+            <p class="text-[11px] text-muted">No usage data yet</p>
+          {/if}
+        </div>
+      {/if}
 
-          <!-- Features -->
+      {#if effectivelyPro}
+        <!-- Features grid -->
+        <div class="av-grid">
           <div class="card av-card-pad">
             <span class="section-label" style="display:block; margin-bottom: 10px;">Included</span>
             <div class="av-features">
@@ -466,8 +462,9 @@
             <button class="btn-outline" onclick={handlePasswordReset}>Reset</button>
           </div>
         </div>
+      {/if}
 
-      {:else}
+      {#if effectivelyFree}
         <!-- Free tier: upgrade card -->
         <button class="card av-upgrade-card" onclick={() => handleUpgrade("pro")}>
           <div>

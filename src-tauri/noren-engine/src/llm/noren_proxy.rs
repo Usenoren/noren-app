@@ -68,6 +68,10 @@ struct UsageResponse {
     pub tokens_used: u64,
     pub tokens_limit: u64,
     pub requests_this_month: u64,
+    #[serde(default)]
+    pub generations_used: u64,
+    #[serde(default)]
+    pub generations_limit: u64,
 }
 
 #[derive(Deserialize)]
@@ -334,7 +338,8 @@ impl NorenProxyClient {
     }
 
     /// Fetch current usage from server.
-    pub async fn get_usage(&self) -> Result<(u64, u64, u64), EngineError> {
+    /// Returns (tokens_used, tokens_limit, requests, generations_used, generations_limit).
+    pub async fn get_usage(&self) -> Result<(u64, u64, u64, u64, u64), EngineError> {
         let url = format!("{}/v1/generate/usage", self.server_url);
         let resp = self
             .http
@@ -360,7 +365,7 @@ impl NorenProxyClient {
                         .json::<UsageResponse>()
                         .await
                         .map_err(|e: reqwest::Error| EngineError::Network(e.to_string()))?;
-                    return Ok((usage.tokens_used, usage.tokens_limit, usage.requests_this_month));
+                    return Ok((usage.tokens_used, usage.tokens_limit, usage.requests_this_month, usage.generations_used, usage.generations_limit));
                 }
             }
             return Err(EngineError::Network(
@@ -386,6 +391,8 @@ impl NorenProxyClient {
             usage.tokens_used,
             usage.tokens_limit,
             usage.requests_this_month,
+            usage.generations_used,
+            usage.generations_limit,
         ))
     }
 }

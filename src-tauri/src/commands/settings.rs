@@ -200,6 +200,8 @@ pub struct NorenProStatus {
     pub tokens_used: Option<u64>,
     pub tokens_limit: Option<u64>,
     pub requests_this_month: Option<u64>,
+    pub generations_used: Option<u64>,
+    pub generations_limit: Option<u64>,
 }
 
 #[tauri::command]
@@ -220,6 +222,8 @@ pub fn get_noren_pro_status(state: State<'_, AppState>) -> NorenProStatus {
         tokens_used: None,
         tokens_limit: None,
         requests_this_month: None,
+        generations_used: None,
+        generations_limit: None,
     }
 }
 
@@ -275,6 +279,8 @@ pub async fn noren_pro_login(
         tokens_used: None,
         tokens_limit: None,
         requests_this_month: None,
+        generations_used: None,
+        generations_limit: None,
     })
 }
 
@@ -330,6 +336,8 @@ pub async fn noren_pro_signup(
         tokens_used: None,
         tokens_limit: None,
         requests_this_month: None,
+        generations_used: None,
+        generations_limit: None,
     })
 }
 
@@ -642,7 +650,7 @@ pub async fn get_noren_pro_usage(
         });
     }
 
-    let (used, limit, requests) = proxy.get_usage().await.map_err(|e| e.to_string())?;
+    let (used, limit, requests, gen_used, gen_limit) = proxy.get_usage().await.map_err(|e| e.to_string())?;
 
     Ok(NorenProStatus {
         logged_in: true,
@@ -651,6 +659,8 @@ pub async fn get_noren_pro_usage(
         tokens_used: Some(used),
         tokens_limit: Some(limit),
         requests_this_month: Some(requests),
+        generations_used: Some(gen_used),
+        generations_limit: Some(gen_limit),
     })
 }
 

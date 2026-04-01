@@ -37,6 +37,8 @@ export interface NorenProStatus {
   tokens_used: number | null;
   tokens_limit: number | null;
   requests_this_month: number | null;
+  generations_used: number | null;
+  generations_limit: number | null;
 }
 
 export async function generate(params: {
@@ -300,6 +302,7 @@ export interface SubscriptionStatus {
   can_sync: boolean;
   can_export: boolean;
   tokens_limit: number;
+  generations_limit: number;
   is_trial: boolean;
   trial_expires_at: string | null;
   current_period_end: string | null;
