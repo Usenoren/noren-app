@@ -27,7 +27,7 @@
   import { open } from "@tauri-apps/plugin-shell";
   import { refresh as refreshSubscription, canExtract, isTrial, trialDaysLeft } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
-  import { toastInfo } from "$lib/stores/toast.svelte";
+  import { toastInfo, toastWarning } from "$lib/stores/toast.svelte";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
   let settings = $state<SettingsInfo | null>(null);
@@ -109,6 +109,16 @@
     }
     accountReady = true;
     setTimeout(() => { usageAnimated = true; }, 400);
+
+    // Soft warning at 80% usage (once per session)
+    if (proStatus?.generations_used != null && proStatus?.generations_limit != null && proStatus.generations_limit > 0) {
+      const pct = proStatus.generations_used / proStatus.generations_limit;
+      const warningKey = `gen-warning-${new Date().toISOString().slice(0, 7)}`;
+      if (pct >= 0.8 && pct < 1 && !sessionStorage.getItem(warningKey)) {
+        sessionStorage.setItem(warningKey, "1");
+        toastWarning(`You've used ${proStatus.generations_used} of your ${proStatus.generations_limit} monthly generations.`);
+      }
+    }
   }
 
   async function handleProAuth() {
@@ -420,6 +430,13 @@
               <div class="av-usage-meta">
                 <span>Chat and autocomplete don't count toward your limit.</span>
               </div>
+              {#if proStatus.generations_used / (proStatus.generations_limit || 1) >= 0.8}
+                <div class="av-usage-warning">
+                  {proStatus.generations_used >= proStatus.generations_limit
+                    ? "Generation limit reached. Resets next month."
+                    : `${proStatus.generations_limit - proStatus.generations_used} generations remaining this month.`}
+                </div>
+              {/if}
             {:else}
               <p class="text-[11px] text-muted">No usage data yet</p>
             {/if}
@@ -906,6 +923,10 @@
   .av-usage-meta {
     font-size: 11px; color: var(--color-muted); margin-top: 10px;
     display: flex; flex-direction: column; gap: 3px;
+  }
+  .av-usage-warning {
+    font-size: 11px; color: var(--color-warning); font-weight: 500;
+    margin-top: 6px;
   }
 
   /* ── Setting rows ── */
