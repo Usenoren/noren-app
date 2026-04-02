@@ -26,6 +26,7 @@
     type RefreshHistoryEntry,
     type SectionDiff,
     type SyncStatus,
+    type VoiceOverview,
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
@@ -507,27 +508,127 @@
     {/if}
   {:else if overview.is_server}
     <!-- Server profile -->
-    <div class="flex flex-col gap-3 h-full pv-stagger">
-      <div class="p-3 card-hero">
-        <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
-        <p class="text-[10px] text-muted mt-1">
-          Your extracted profile is securely stored on Noren servers and used automatically when generating text.
-        </p>
-      </div>
+    {@const vo = overview.voice_overview}
+    <div class="flex flex-col gap-3 h-full overflow-y-auto pv-stagger">
 
-      {#if canLivingProfile() && activeTab !== "living"}
-        <div class="flex items-center gap-1.5">
-          <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
-          <span class="text-subhead text-secondary">Living Profile</span>
+      <!-- Voice Snapshot -->
+      {#if vo?.summary}
+        <div class="card-hero" style="padding: 14px 16px;">
+          <span class="section-label">Voice snapshot</span>
+          <p class="text-xs text-foreground leading-relaxed mt-2">{vo.summary}</p>
+        </div>
+      {:else}
+        <div class="p-3 card-hero">
+          <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
+          <p class="text-[10px] text-muted mt-1">
+            Your extracted profile is securely stored and used automatically when generating text.
+          </p>
         </div>
       {/if}
 
+      <!-- Voice Dimensions -->
+      {#if vo?.routing}
+        {@const routing = vo.routing}
+        <div class="card-flat" style="padding: 14px 16px;">
+          <span class="section-label">Voice dimensions</span>
+          <div class="pv-dims">
+            {@render dimBar("Structure", routing.structure_predictability === "high" ? 85 : routing.structure_predictability === "medium" ? 50 : 15, routing.structure_predictability, "varied", "predictable")}
+            {@render dimBar("Register", routing.register_break_frequency * 10, `${routing.register_break_frequency} / 10`, "consistent", "shifting")}
+            {@render dimBar("Formality", routing.casual_marker_density === "high" ? 85 : routing.casual_marker_density === "medium" ? 50 : 15, routing.casual_marker_density, "formal", "casual")}
+            {@render dimBar("Phrasing", routing.signature_phrase_rigidity === "high" ? 85 : routing.signature_phrase_rigidity === "medium" ? 50 : 15, routing.signature_phrase_rigidity, "fluid", "fixed")}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Pattern Depth -->
+      {#if vo?.counts}
+        {@const counts = vo.counts}
+        <div class="card-flat" style="padding: 14px 16px;">
+          <span class="section-label">Pattern depth</span>
+          <div class="pv-depth">
+            <div class="pv-depth-item">
+              <span class="pv-depth-count">{counts.analogy_domains}</span>
+              <span class="pv-depth-name">analogy<br>families</span>
+            </div>
+            <div class="pv-depth-item">
+              <span class="pv-depth-count">{counts.micro_constructions}</span>
+              <span class="pv-depth-name">sentence<br>patterns</span>
+            </div>
+            <div class="pv-depth-item">
+              <span class="pv-depth-count">{counts.signature_phrases}</span>
+              <span class="pv-depth-name">signature<br>phrases</span>
+            </div>
+            <div class="pv-depth-item">
+              <span class="pv-depth-count">{counts.anti_patterns}</span>
+              <span class="pv-depth-name">anti-<br>patterns</span>
+            </div>
+            {#if vo.corpus}
+              <div class="pv-depth-item pv-depth-full">
+                <span class="pv-depth-count" style="font-size: 14px;">{counts.profile_lines}</span>
+                <span class="pv-depth-name">lines of voice DNA across {vo.corpus.unique_sample_count} samples</span>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Sentence Rhythm -->
+      {#if vo?.baseline_rhythm}
+        {@const rhythm = vo.baseline_rhythm}
+        <div class="card-flat" style="padding: 14px 16px;">
+          <span class="section-label">Sentence rhythm</span>
+          <div style="margin-top: 10px;">
+            <div class="pv-rhythm-bar">
+              <div class="pv-rhythm-seg pv-rhythm-short" style="width: {rhythm.distributionPct.short}%"></div>
+              <div class="pv-rhythm-seg pv-rhythm-medium" style="width: {rhythm.distributionPct.medium}%"></div>
+              <div class="pv-rhythm-seg pv-rhythm-long" style="width: {rhythm.distributionPct.long}%"></div>
+              <div class="pv-rhythm-seg pv-rhythm-vlong" style="width: {rhythm.distributionPct.veryLong}%"></div>
+            </div>
+            <div class="pv-rhythm-legend">
+              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-secondary)"></span>Short &lt;8w</span>
+              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-accent)"></span>Medium 8-15w</span>
+              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-warning)"></span>Long 16-25w</span>
+              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: #C23B2A"></span>25w+</span>
+            </div>
+            <div class="pv-rhythm-stats">
+              <div class="pv-rhythm-stat">
+                <span class="pv-rhythm-stat-val">{Math.round(rhythm.medianWordCount)}</span>
+                <span class="pv-rhythm-stat-lbl">median words</span>
+              </div>
+              <div class="pv-rhythm-stat">
+                <span class="pv-rhythm-stat-val">{rhythm.sentenceCeiling}</span>
+                <span class="pv-rhythm-stat-lbl">ceiling</span>
+              </div>
+              <div class="pv-rhythm-stat">
+                <span class="pv-rhythm-stat-val">{rhythm.longToShortRatio.toFixed(1)}</span>
+                <span class="pv-rhythm-stat-lbl">L:S ratio</span>
+              </div>
+              <div class="pv-rhythm-stat">
+                <span class="pv-rhythm-stat-val">{rhythm.medianCommasPerSentence.toFixed(1)}</span>
+                <span class="pv-rhythm-stat-lbl">commas/sent</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Format Cards -->
       {#if overview.formats.length > 0}
-        <div class="p-3 bg-surface border border-border rounded-xl">
-          <span class="text-[10px] font-medium text-muted uppercase tracking-wide">Formats</span>
-          <div class="flex gap-1.5 mt-1.5 flex-wrap">
+        <div class="card-flat" style="padding: 14px 16px;">
+          <span class="section-label">Formats</span>
+          <div class="pv-format-list">
             {#each overview.formats as fmt}
-              <span class="px-2 py-0.5 text-xs bg-tint border border-border rounded text-secondary">{fmt}</span>
+              {@const fmtRhythm = vo?.format_rhythms?.[fmt]}
+              <div class="pv-format-row">
+                <div class="pv-format-accent" style="background: {FORMAT_ACCENTS[fmt] || 'var(--color-primary)'}"></div>
+                <span class="pv-format-name">{fmt}</span>
+                {#if fmtRhythm}
+                  <div class="pv-format-stats">
+                    <span class="pv-format-stat"><strong>{Math.round(fmtRhythm.medianWordCount)}</strong> median</span>
+                    <span class="pv-format-stat"><strong>{fmtRhythm.longToShortRatio.toFixed(1)}</strong> L:S</span>
+                  </div>
+                {/if}
+              </div>
             {/each}
           </div>
         </div>
@@ -575,7 +676,7 @@
       {/if}
 
       {#if canExport()}
-        <div class="flex items-center justify-between shrink-0 mt-auto">
+        <div class="flex items-center justify-between shrink-0">
           <span class="text-[10px] text-muted">Stored on Noren servers</span>
           <button
             onclick={handleExport}
@@ -592,7 +693,7 @@
         {@const paidDollars = Math.round((thresholdCents - remaining) / 100)}
         {@const thresholdDollars = Math.round(thresholdCents / 100)}
         {@const remainingDollars = Math.round(remaining / 100)}
-        <div class="pv-export-card shrink-0 mt-auto">
+        <div class="pv-export-card shrink-0">
           <span class="section-label" style="display:block; margin-bottom: 12px;">Export</span>
           <div class="pv-export-row">
             <span><strong>${paidDollars}</strong> of ${thresholdDollars}</span>
@@ -609,7 +710,7 @@
           </div>
         </div>
       {:else}
-        <div class="flex items-center justify-between shrink-0 mt-auto">
+        <div class="flex items-center justify-between shrink-0">
           <span class="text-[10px] text-muted">Stored on Noren servers</span>
           <button
             onclick={() => handleUpgrade("export")}
@@ -813,6 +914,22 @@
     {/if}
     </div>
   {/if}
+
+  {#snippet dimBar(label: string, pct: number, value: string, lowLabel: string, highLabel: string)}
+    <div class="pv-dim-row">
+      <div class="pv-dim-header">
+        <span class="pv-dim-label">{label}</span>
+        <span class="pv-dim-value">{value}</span>
+      </div>
+      <div class="pv-dim-track">
+        <div class="pv-dim-indicator" style="left: {pct}%"></div>
+      </div>
+      <div class="pv-dim-ends">
+        <span class="pv-dim-end">{lowLabel}</span>
+        <span class="pv-dim-end">{highLabel}</span>
+      </div>
+    </div>
+  {/snippet}
 
   {#snippet livingTabContent()}
     <div class="flex-1 flex flex-col gap-3 overflow-y-auto">
@@ -1247,5 +1364,191 @@
   .pv-export-pay:hover {
     background: var(--color-secondary);
     color: white;
+  }
+
+  /* Voice Dimensions */
+  .pv-dims {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .pv-dim-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pv-dim-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .pv-dim-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+  .pv-dim-value {
+    font-size: 10px;
+    color: var(--color-muted);
+    text-transform: lowercase;
+  }
+  .pv-dim-track {
+    position: relative;
+    height: 4px;
+    background: var(--color-tint);
+    border-radius: 100px;
+  }
+  .pv-dim-indicator {
+    position: absolute;
+    top: -3px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-secondary);
+    border: 2px solid var(--color-surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transform: translateX(-50%);
+  }
+  .pv-dim-ends {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+  }
+  .pv-dim-end {
+    font-size: 9px;
+    color: var(--color-muted);
+    opacity: 0.7;
+  }
+
+  /* Pattern Depth */
+  .pv-depth {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .pv-depth-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .pv-depth-count {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-foreground);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .pv-depth-name {
+    font-size: 10px;
+    color: var(--color-muted);
+    line-height: 1.3;
+  }
+  .pv-depth-full {
+    grid-column: 1 / -1;
+    padding-top: 4px;
+    border-top: 1px solid var(--color-border);
+    margin-top: 2px;
+  }
+
+  /* Sentence Rhythm */
+  .pv-rhythm-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 100px;
+    overflow: hidden;
+    gap: 1px;
+  }
+  .pv-rhythm-seg {
+    height: 100%;
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pv-rhythm-short { background: var(--color-secondary); border-radius: 100px 0 0 100px; }
+  .pv-rhythm-medium { background: var(--color-accent); }
+  .pv-rhythm-long { background: var(--color-warning); }
+  .pv-rhythm-vlong { background: #C23B2A; border-radius: 0 100px 100px 0; }
+
+  .pv-rhythm-legend {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .pv-rhythm-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    color: var(--color-muted);
+  }
+  .pv-rhythm-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .pv-rhythm-stats {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+  .pv-rhythm-stat {
+    display: flex;
+    flex-direction: column;
+  }
+  .pv-rhythm-stat-val {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-foreground);
+    font-variant-numeric: tabular-nums;
+  }
+  .pv-rhythm-stat-lbl {
+    font-size: 9px;
+    color: var(--color-muted);
+  }
+
+  /* Format Cards */
+  .pv-format-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .pv-format-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--color-tint);
+    border-radius: 8px;
+  }
+  .pv-format-accent {
+    width: 3px;
+    height: 24px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .pv-format-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-foreground);
+    flex: 1;
+  }
+  .pv-format-stats {
+    display: flex;
+    gap: 10px;
+  }
+  .pv-format-stat {
+    font-size: 10px;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .pv-format-stat :global(strong) {
+    font-weight: 600;
+    color: var(--color-foreground);
   }
 </style>

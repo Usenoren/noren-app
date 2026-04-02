@@ -52,6 +52,7 @@ pub struct ProfileMetadata {
     pub extraction_count: u32,
     pub next_refresh_available: Option<String>,
     pub can_rollback: bool,
+    pub voice_overview: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -303,6 +304,7 @@ pub async fn get_profile_metadata(
         extraction_count: data["extraction_count"].as_u64().unwrap_or(1) as u32,
         next_refresh_available: data["next_refresh_available"].as_str().map(|s| s.to_string()),
         can_rollback: data["can_rollback"].as_bool().unwrap_or(false),
+        voice_overview: data.get("voice_overview").cloned(),
     })
 }
 

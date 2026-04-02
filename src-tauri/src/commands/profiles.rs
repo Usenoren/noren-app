@@ -10,6 +10,8 @@ pub struct ProfileOverview {
     pub formats: Vec<String>,
     /// True when profile is stored on Noren servers (Pro path)
     pub is_server: bool,
+    /// Curated voice metadata for frontend visualization
+    pub voice_overview: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -20,6 +22,7 @@ struct ServerProfileMetadata {
     created_at: Option<String>,
     #[allow(dead_code)]
     source: Option<String>,
+    voice_overview: Option<serde_json::Value>,
 }
 
 #[tauri::command]
@@ -41,15 +44,16 @@ pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileO
                         path: String::new(),
                         formats: meta.formats,
                         is_server: true,
+                        voice_overview: meta.voice_overview,
                     });
                 }
                 Ok(meta) if !meta.has_profile && !config.debug_mode => {
-                    // Production: server is authoritative — no profile means no profile
                     return Ok(ProfileOverview {
                         exists: false,
                         path: String::new(),
                         formats: vec![],
                         is_server: true,
+                        voice_overview: None,
                     });
                 }
                 _ => {
@@ -67,11 +71,20 @@ pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileO
     } else {
         vec![]
     };
+
+    // Build voice overview from local files
+    let voice_overview = if exists {
+        build_local_voice_overview(dir)
+    } else {
+        None
+    };
+
     Ok(ProfileOverview {
         exists,
         path: dir.to_string_lossy().to_string(),
         formats,
         is_server: false,
+        voice_overview,
     })
 }
 
@@ -257,6 +270,57 @@ pub async fn export_profile(
     .map_err(|e| e.to_string())?;
 
     Ok(path.as_path().unwrap().to_string_lossy().to_string())
+}
+
+/// Build voice overview from local files (BYOK path).
+fn build_local_voice_overview(profile_dir: &std::path::Path) -> Option<serde_json::Value> {
+    let metadata_path = profile_dir.join("voice-metadata.json");
+    let summary_path = profile_dir.join("voice-summary.txt");
+
+    let metadata: Option<serde_json::Value> = std::fs::read_to_string(&metadata_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok());
+
+    let summary: Option<String> = std::fs::read_to_string(&summary_path).ok();
+
+    if metadata.is_none() && summary.is_none() {
+        return None;
+    }
+
+    let vm = metadata.unwrap_or_default();
+
+    // Strip exampleSentences from rhythm data
+    fn strip_examples(rhythm: &serde_json::Value) -> serde_json::Value {
+        if let Some(obj) = rhythm.as_object() {
+            let mut cleaned = obj.clone();
+            cleaned.remove("exampleSentences");
+            serde_json::Value::Object(cleaned)
+        } else {
+            rhythm.clone()
+        }
+    }
+
+    let baseline = vm.get("baselineRhythm").map(strip_examples);
+    let format_rhythms = vm.get("formatRhythms").and_then(|fr| {
+        fr.as_object().map(|obj| {
+            let cleaned: serde_json::Map<String, serde_json::Value> = obj
+                .iter()
+                .map(|(k, v)| (k.clone(), strip_examples(v)))
+                .collect();
+            serde_json::Value::Object(cleaned)
+        })
+    });
+
+    let overview = serde_json::json!({
+        "summary": summary,
+        "routing": vm.get("routing"),
+        "counts": vm.get("counts"),
+        "corpus": vm.get("corpus"),
+        "baseline_rhythm": baseline,
+        "format_rhythms": format_rhythms,
+    });
+
+    Some(overview)
 }
 
 /// Fetch profile metadata from the Noren server.

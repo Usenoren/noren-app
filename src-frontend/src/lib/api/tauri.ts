@@ -557,11 +557,43 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 
 // --- Profiles ---
 
+export interface VoiceOverview {
+  summary: string | null;
+  routing: {
+    structure_predictability: "high" | "medium" | "low";
+    register_break_frequency: number;
+    casual_marker_density: "high" | "medium" | "low";
+    signature_phrase_rigidity: "high" | "medium" | "low";
+  } | null;
+  counts: {
+    analogy_domains: number;
+    micro_constructions: number;
+    signature_phrases: number;
+    anti_patterns: number;
+    profile_lines: number;
+  } | null;
+  corpus: {
+    unique_sample_count: number;
+    formats: string[];
+  } | null;
+  baseline_rhythm: {
+    totalSentences: number;
+    medianWordCount: number;
+    meanWordCount: number;
+    distributionPct: { short: number; medium: number; long: number; veryLong: number };
+    longToShortRatio: number;
+    medianCommasPerSentence: number;
+    sentenceCeiling: number;
+  } | null;
+  format_rhythms: Record<string, VoiceOverview["baseline_rhythm"]> | null;
+}
+
 export interface ProfileOverview {
   exists: boolean;
   path: string;
   formats: string[];
   is_server?: boolean;
+  voice_overview?: VoiceOverview | null;
 }
 
 export interface ProfileContent {
