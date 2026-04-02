@@ -173,9 +173,10 @@ pub async fn migrate_profile_to_server(
     Ok("Profile migrated to Noren servers".to_string())
 }
 
-/// Export server-side profile to local disk.
+/// Export server-side profile to a user-chosen location as Markdown.
 #[tauri::command]
 pub async fn export_profile(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
@@ -202,6 +203,7 @@ pub async fn export_profile(
     struct ExportResponse {
         core_identity: String,
         contexts: std::collections::HashMap<String, String>,
+        #[allow(dead_code)]
         quality_report: Option<String>,
     }
 
@@ -210,7 +212,42 @@ pub async fn export_profile(
         .await
         .map_err(|e| format!("Failed to parse export: {}", e))?;
 
-    // Save to local disk
+    // Build Markdown
+    let mut md = String::from("# Voice Profile\n\n## Core Identity\n\n");
+    md.push_str(&export.core_identity);
+
+    let mut formats: Vec<_> = export.contexts.iter().collect();
+    formats.sort_by_key(|(k, _)| (*k).clone());
+    for (fmt, content) in formats {
+        let title = fmt
+            .chars()
+            .next()
+            .map(|c| c.to_uppercase().to_string() + &fmt[1..])
+            .unwrap_or_else(|| fmt.clone());
+        md.push_str(&format!("\n\n---\n\n## Context: {}\n\n", title));
+        md.push_str(content);
+    }
+
+    // Open native save dialog
+    use tauri_plugin_dialog::DialogExt;
+
+    let file_path = app
+        .dialog()
+        .file()
+        .set_title("Export Voice Profile")
+        .set_file_name("voice-profile.md")
+        .add_filter("Markdown", &["md"])
+        .blocking_save_file();
+
+    let path = match file_path {
+        Some(p) => p,
+        None => return Err("Export cancelled".to_string()),
+    };
+
+    std::fs::write(path.as_path().unwrap(), md.as_bytes())
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    // Also save to internal profile directory for local BYOK use
     noren_engine::save_profile(
         &config.profile_dir,
         &export.core_identity,
@@ -219,7 +256,7 @@ pub async fn export_profile(
     )
     .map_err(|e| e.to_string())?;
 
-    Ok(config.profile_dir.to_string_lossy().to_string())
+    Ok(path.as_path().unwrap().to_string_lossy().to_string())
 }
 
 /// Fetch profile metadata from the Noren server.

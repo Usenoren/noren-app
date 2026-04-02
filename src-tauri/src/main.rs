@@ -188,6 +188,7 @@ fn main() {
             commands::set_inference_mode,
             commands::get_subscription_status,
             commands::create_checkout,
+            commands::create_export_unlock_checkout,
             commands::open_billing_portal,
             commands::redeem_coupon,
             commands::create_guest_checkout,

@@ -36,6 +36,14 @@ export function canExport(): boolean {
   return status?.can_export ?? false;
 }
 
+export function exportUnlockRemainingCents(): number | null {
+  return status?.export_unlock_remaining_cents ?? null;
+}
+
+export function exportUnlockProgress(): number | null {
+  return status?.export_unlock_progress ?? null;
+}
+
 export function isTrial(): boolean {
   return status?.is_trial ?? false;
 }

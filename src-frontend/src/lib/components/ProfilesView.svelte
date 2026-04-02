@@ -15,6 +15,7 @@
     getSyncStatus,
     exportProfile,
     createCheckout,
+    createExportUnlockCheckout,
     getSettings,
     type ProfileOverview,
     type ProfileContent,
@@ -28,10 +29,11 @@
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
-  import { canLivingProfile, canSync, canExport } from "$lib/stores/subscription.svelte";
+  import { canLivingProfile, canSync, canExport, exportUnlockRemainingCents, exportUnlockProgress, isPro } from "$lib/stores/subscription.svelte";
   import { setRefreshAvailable } from "$lib/stores/patches.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
+  import { toastSuccess } from "$lib/stores/toast.svelte";
   import { marked } from "marked";
   import DOMPurify from "dompurify";
   import LoadingSpinner from "./LoadingSpinner.svelte";
@@ -358,10 +360,14 @@
     isExporting = true;
     error = "";
     try {
-      await exportProfile();
+      const savedPath = await exportProfile();
+      toastSuccess(`Profile exported to ${savedPath}`);
       await loadProfile();
     } catch (e) {
-      error = friendlyError(e);
+      const msg = friendlyError(e);
+      if (!msg.includes("cancelled")) {
+        error = msg;
+      }
     } finally {
       isExporting = false;
     }
@@ -373,6 +379,21 @@
       const result = await createCheckout(target);
       if (result.checkout_url === "dev://granted") {
         await refreshSubscription();
+      } else {
+        await open(result.checkout_url);
+      }
+    } catch (e) {
+      error = friendlyError(e);
+    }
+  }
+
+  async function handleExportUnlock() {
+    error = "";
+    try {
+      const result = await createExportUnlockCheckout();
+      if (result.checkout_url === "dev://granted" || result.session_id === "already_unlocked") {
+        await refreshSubscription();
+        await loadProfile();
       } else {
         await open(result.checkout_url);
       }
@@ -485,7 +506,7 @@
       </div>
     {/if}
   {:else if overview.is_server}
-    <!-- Server profile — metadata only -->
+    <!-- Server profile -->
     <div class="flex flex-col gap-3 h-full pv-stagger">
       <div class="p-3 card-hero">
         <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
@@ -510,43 +531,6 @@
             {/each}
           </div>
         </div>
-      {/if}
-
-      <!-- Debug inspector -->
-      {#if isDevMode}
-        {#if profile}
-          <div class="flex gap-1 shrink-0">
-            <button
-              onclick={() => { activeTab = "core"; }}
-              class="px-2.5 py-1 text-xs cursor-pointer uppercase tracking-wide rounded-md
-                {activeTab === 'core' ? 'bg-primary text-white font-medium' : 'bg-surface text-muted border border-border hover:border-secondary'}"
-            >Core</button>
-            {#each Object.keys(profile.contexts || {}) as ctx}
-              <button
-                onclick={() => { activeTab = ctx; }}
-                class="px-2.5 py-1 text-xs cursor-pointer uppercase tracking-wide rounded-md
-                  {activeTab === ctx ? 'bg-primary text-white font-medium' : 'bg-surface text-muted border border-border hover:border-secondary'}"
-              >{ctx}</button>
-            {/each}
-          </div>
-          <div class="flex-1 min-h-0 overflow-y-auto">
-            <pre class="p-3 text-xs leading-relaxed text-foreground bg-surface border border-border rounded-xl whitespace-pre-wrap">{displayContent}</pre>
-          </div>
-        {:else}
-          <button
-            onclick={async () => {
-              try {
-                await exportProfile();
-                profile = await readProfileContent();
-              } catch (e) {
-                error = friendlyError(e);
-              }
-            }}
-            class="px-4 py-2 text-xs font-medium bg-surface border border-border text-muted hover:border-secondary hover:text-foreground rounded-md cursor-pointer transition-colors"
-          >
-            Inspect profile
-          </button>
-        {/if}
       {/if}
 
       <!-- Living Profile tab -->
@@ -590,17 +574,43 @@
         <p class="text-[10px] text-muted shrink-0">Your profile refines automatically as you write.</p>
       {/if}
 
-      <div class="flex items-center justify-between shrink-0 mt-auto">
-        <span class="text-[10px] text-muted">Stored on Noren servers</span>
-        {#if canExport()}
+      {#if canExport()}
+        <div class="flex items-center justify-between shrink-0 mt-auto">
+          <span class="text-[10px] text-muted">Stored on Noren servers</span>
           <button
             onclick={handleExport}
             disabled={isExporting}
             class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
           >
-            {isExporting ? "Exporting..." : "Export to disk"}
+            {isExporting ? "Exporting..." : "Export as Markdown"}
           </button>
-        {:else}
+        </div>
+      {:else if isPro() && exportUnlockProgress() != null && exportUnlockRemainingCents() != null}
+        {@const remaining = exportUnlockRemainingCents()!}
+        {@const progress = exportUnlockProgress()!}
+        {@const thresholdCents = progress < 100 ? Math.round(remaining / (1 - progress / 100)) : remaining}
+        {@const paidDollars = Math.round((thresholdCents - remaining) / 100)}
+        {@const thresholdDollars = Math.round(thresholdCents / 100)}
+        {@const remainingDollars = Math.round(remaining / 100)}
+        <div class="pv-export-card shrink-0 mt-auto">
+          <span class="section-label" style="display:block; margin-bottom: 12px;">Export</span>
+          <div class="pv-export-row">
+            <span><strong>${paidDollars}</strong> of ${thresholdDollars}</span>
+            <span>Unlocks with subscription</span>
+          </div>
+          <div class="pv-export-bar">
+            <div class="pv-export-bar-fill" style="--pct: {progress}%"></div>
+          </div>
+          <div class="pv-export-foot">
+            <span class="pv-export-hint">Unlocks as you stay subscribed, or pay the difference now.</span>
+            <button onclick={handleExportUnlock} class="pv-export-pay">
+              Unlock · ${remainingDollars}
+            </button>
+          </div>
+        </div>
+      {:else}
+        <div class="flex items-center justify-between shrink-0 mt-auto">
+          <span class="text-[10px] text-muted">Stored on Noren servers</span>
           <button
             onclick={() => handleUpgrade("export")}
             class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
@@ -608,8 +618,8 @@
           >
             Export to disk <span class="text-[8px] text-secondary font-medium">$</span>
           </button>
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       {#if error}
         <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed shrink-0">
@@ -1160,4 +1170,82 @@
   }
   .pv-setting-label { font-size: 13px; font-weight: 600; }
   .pv-setting-desc { font-size: 11px; color: var(--color-muted); margin-top: 2px; }
+
+  /* Export unlock card */
+  .pv-export-card {
+    position: relative;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+    padding: 14px 16px;
+    overflow: hidden;
+  }
+  .pv-export-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 12px; right: 12px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-warning), transparent);
+    opacity: 0.35;
+    border-radius: 1px;
+  }
+  .pv-export-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11px;
+    color: var(--color-muted);
+    margin-bottom: 10px;
+  }
+  .pv-export-row strong {
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+  .pv-export-bar {
+    height: 6px;
+    background: var(--color-border);
+    border-radius: 100px;
+    overflow: hidden;
+  }
+  .pv-export-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    background: linear-gradient(90deg, var(--color-warning), var(--color-secondary));
+    width: 0;
+    animation: pv-export-grow 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+  }
+  @keyframes pv-export-grow {
+    to { width: var(--pct); }
+  }
+  .pv-export-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    gap: 8px;
+  }
+  .pv-export-hint {
+    font-size: 10px;
+    color: var(--color-muted);
+    line-height: 1.4;
+    flex: 1;
+  }
+  .pv-export-pay {
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-secondary);
+    border: 1px solid var(--color-secondary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    background: transparent;
+    flex-shrink: 0;
+  }
+  .pv-export-pay:hover {
+    background: var(--color-secondary);
+    color: white;
+  }
 </style>

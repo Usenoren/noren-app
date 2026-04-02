@@ -22,6 +22,8 @@ pub struct SubscriptionStatus {
     pub current_period_end: Option<String>,
     pub cancel_at_period_end: bool,
     pub one_time_purchases: Vec<String>,
+    pub export_unlock_remaining_cents: Option<u64>,
+    pub export_unlock_progress: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -181,6 +183,8 @@ pub async fn get_subscription_status(
                     .collect()
             })
             .unwrap_or_default(),
+        export_unlock_remaining_cents: data["export_unlock_remaining_cents"].as_u64(),
+        export_unlock_progress: data["export_unlock_progress"].as_u64(),
     })
 }
 
@@ -220,6 +224,41 @@ pub async fn create_checkout(
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
         return Err(format!("Checkout failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e: reqwest::Error| e.to_string())?;
+
+    Ok(CheckoutResult {
+        checkout_url: data["checkout_url"]
+            .as_str()
+            .ok_or("No checkout URL in response")?
+            .to_string(),
+        session_id: data["session_id"]
+            .as_str()
+            .ok_or("No session ID in response")?
+            .to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn create_export_unlock_checkout(
+    state: State<'_, AppState>,
+) -> Result<CheckoutResult, String> {
+    let server_url = server_url_from_config(&state);
+
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client
+            .post(format!("{}/v1/billing/checkout/export-unlock", server_url))
+            .bearer_auth(token)
+    })
+    .await?;
+
+    if !resp.status().is_success() {
+        let body: String = resp.text().await.unwrap_or_default();
+        return Err(format!("Export unlock checkout failed: {}", body));
     }
 
     let data: serde_json::Value = resp

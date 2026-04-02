@@ -308,6 +308,8 @@ export interface SubscriptionStatus {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   one_time_purchases: string[];
+  export_unlock_remaining_cents: number | null;
+  export_unlock_progress: number | null;
 }
 
 export interface CheckoutResult {
@@ -321,6 +323,10 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
 
 export async function createCheckout(tier: string, couponCode?: string): Promise<CheckoutResult> {
   return invoke("create_checkout", { tier, coupon_code: couponCode || undefined });
+}
+
+export async function createExportUnlockCheckout(): Promise<CheckoutResult> {
+  return invoke("create_export_unlock_checkout");
 }
 
 export interface CouponRedeemResult {
