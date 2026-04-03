@@ -72,6 +72,10 @@
   let expandedEntryId = $state<string | null>(null);
   let expandedDiffSection = $state<string | null>(null);
 
+  // Sample submission (server profile)
+  let showSampleInput = $state(false);
+  let isSubmittingSample = $state(false);
+
   // Sync state
   let syncStatus = $state<SyncStatus | null>(null);
   let isSyncing = $state(false);
@@ -166,6 +170,22 @@
     return section;
   }
 
+  async function handleSubmitSample() {
+    if (!sampleDraft.trim() || isSubmittingSample) return;
+    isSubmittingSample = true;
+    error = "";
+    try {
+      await uploadEditLog([{ text: sampleDraft.trim(), format: sampleFormat, added_at: new Date().toISOString() }]);
+      sampleDraft = "";
+      showSampleInput = false;
+      try { profileMeta = await getProfileMetadataInfo(); } catch {}
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isSubmittingSample = false;
+    }
+  }
+
   let displayContent = $derived(
     activeTab === "core"
       ? profile?.core_identity ?? ""
@@ -188,7 +208,9 @@
       // Load living profile status + metadata + history
       try {
         livingStatus = await getLivingProfileStatus();
-        if (livingStatus.enabled) {
+        // Always load refresh history for server profiles (edits tracked server-side).
+        // For local profiles, only load if local tracking is enabled.
+        if (overview.is_server || livingStatus.enabled) {
           await loadRefreshHistory();
         }
       } catch { /* not logged in or not available */ }
@@ -733,45 +755,236 @@
         </div>
       {/if}
 
-      <!-- Living Profile tab -->
-      <div class="flex gap-1 shrink-0 border-b border-border">
-        <button
-          onclick={() => switchTab("living")}
-          class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide
-            {activeTab === 'living'
-              ? 'border-b-2 border-accent text-accent font-medium'
-              : 'border-b-2 border-transparent text-muted hover:text-foreground'}"
-        >
-          Living Profile
-          {#if !canLivingProfile()}
-            <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-accent/70' : 'text-secondary'} font-medium">PRO</span>
-          {/if}
-        </button>
-      </div>
-
-      {#if activeTab === "living"}
-        {#if canLivingProfile()}
-        {@render livingTabContent()}
-        {:else}
-        <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
-          <div class="p-4 bg-tint border border-secondary/20 rounded-xl text-center max-w-[260px]">
-            <p class="text-subhead text-secondary">Living Profile</p>
-            <p class="text-[10px] text-muted mt-1 leading-relaxed">
-              Your profile evolves as you write. Noren tracks your edits and refines automatically.
-            </p>
-            <button
-              onclick={() => handleUpgrade("pro")}
-              class="mt-3 px-4 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
-            >
-              Upgrade to Pro
-            </button>
+      <!-- Living Profile section (server profiles) -->
+      {#if canLivingProfile()}
+        <div class="card-flat" style="padding: 12px 14px;">
+          <div class="flex items-center gap-1.5 mb-3">
+            <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
+            <span class="section-label" style="margin:0">Living Profile</span>
           </div>
-        </div>
-        {/if}
-      {/if}
 
-      {#if canLivingProfile() && activeTab !== "living"}
-        <p class="text-[10px] text-muted shrink-0">Your profile refines automatically as you write.</p>
+          <!-- Upload & Refresh -->
+          <button
+            onclick={handleUploadAndRefresh}
+            disabled={isUploading || isRefreshing || daysUntilRefresh() !== null}
+            class="w-full py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-md
+              {daysUntilRefresh() !== null
+                ? 'bg-surface text-muted border border-border'
+                : 'bg-secondary text-white hover:bg-secondary/90'}"
+          >
+            {#if isUploading}
+              <span class="inline-flex items-center gap-1"><LoadingSpinner /> Uploading edits...</span>
+            {:else if isRefreshing}
+              <span class="inline-flex items-center gap-1"><LoadingSpinner /> Analyzing patterns...</span>
+            {:else if daysUntilRefresh() !== null}
+              Available in {daysUntilRefresh()} day{daysUntilRefresh() !== 1 ? "s" : ""}
+            {:else}
+              Refresh profile
+            {/if}
+          </button>
+
+          {#if refreshMessage}
+            <p class="text-[10px] text-muted mt-2">{refreshMessage}</p>
+          {/if}
+
+          <!-- Signal counts -->
+          {#if profileMeta && (profileMeta.edits_pending > 0 || profileMeta.samples_pending > 0 || profileMeta.generations_since_refresh > 0)}
+            <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
+              {#if profileMeta.edits_pending > 0}
+                <span>{profileMeta.edits_pending} edit{profileMeta.edits_pending !== 1 ? "s" : ""}</span>
+              {/if}
+              {#if profileMeta.samples_pending > 0}
+                <span>{profileMeta.samples_pending} sample{profileMeta.samples_pending !== 1 ? "s" : ""}</span>
+              {/if}
+              {#if profileMeta.generations_since_refresh > 0}
+                <span>{profileMeta.generations_since_refresh} generation{profileMeta.generations_since_refresh !== 1 ? "s" : ""}</span>
+              {/if}
+              <span style="opacity: 0.6">queued for next refresh</span>
+            </div>
+          {/if}
+
+          <!-- Add writing sample -->
+          {#if showSampleInput}
+            <div class="mt-2 flex flex-col gap-2">
+              <textarea
+                bind:value={sampleDraft}
+                placeholder="Paste a writing sample..."
+                class="w-full p-2.5 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none rounded-md focus:outline-none focus:border-secondary"
+                rows="5"
+              ></textarea>
+              <div class="flex flex-wrap gap-1">
+                {#each overview?.formats || ["general"] as fmt}
+                  <button
+                    onclick={() => { sampleFormat = fmt; }}
+                    class="px-2.5 py-1 text-[10px] rounded cursor-pointer transition-colors
+                      {sampleFormat === fmt ? 'bg-secondary text-white' : 'bg-surface border border-border text-muted hover:text-foreground'}"
+                  >{fmt}</button>
+                {/each}
+              </div>
+              <div class="flex gap-2">
+                <button
+                  onclick={() => { showSampleInput = false; sampleDraft = ""; }}
+                  class="px-2.5 py-1 text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors"
+                >Cancel</button>
+                <button
+                  onclick={handleSubmitSample}
+                  disabled={!sampleDraft.trim() || isSubmittingSample}
+                  class="px-2.5 py-1 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium disabled:opacity-50"
+                >{isSubmittingSample ? "Submitting..." : "Submit sample"}</button>
+              </div>
+            </div>
+          {:else}
+            <button
+              onclick={() => { showSampleInput = true; }}
+              class="mt-2 text-[10px] text-muted hover:text-secondary cursor-pointer transition-colors"
+            >+ Add writing sample</button>
+          {/if}
+
+          <!-- Inline observations after a fresh refresh -->
+          {#if latestObservations.length > 0}
+            <div class="mt-2 pl-2.5" style="border-left: 2px solid var(--color-secondary)">
+              {#each latestObservations as obs}
+                <p class="text-[10px] text-foreground leading-relaxed py-0.5">{obs}</p>
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Rollback confirmation -->
+          {#if showRollbackConfirm}
+            <div class="mt-2 p-2.5 bg-surface border border-border rounded-xl">
+              <p class="text-[10px] text-muted leading-relaxed">Any manual edits made after the last refresh will be lost.</p>
+              <div class="flex gap-2 mt-2">
+                <button
+                  onclick={() => { showRollbackConfirm = false; }}
+                  class="px-2 py-0.5 text-[10px] border border-border text-muted hover:text-foreground cursor-pointer rounded transition-colors"
+                >Cancel</button>
+                <button
+                  onclick={handleRollback}
+                  disabled={isRollingBack}
+                  class="px-2 py-0.5 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium disabled:opacity-50"
+                >
+                  {#if isRollingBack}
+                    <span class="inline-flex items-center gap-1"><LoadingSpinner /> Restoring...</span>
+                  {:else}
+                    Confirm rollback
+                  {/if}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Evolution Timeline -->
+          {#if refreshHistory.length > 0}
+            <div class="relative pl-4 mt-3">
+              <div class="absolute left-[5px] top-[6px] bottom-0 w-px" style="background: var(--color-border)"></div>
+              <div class="flex flex-col gap-0">
+                {#each refreshHistory as entry, i}
+                  {@const isExpanded = expandedEntryId === entry.id}
+                  {@const isLatestActive = i === 0 && !entry.rolled_back}
+                  <div
+                    class="relative transition-opacity duration-200"
+                    style={entry.rolled_back ? "opacity: 0.5" : ""}
+                  >
+                    <div
+                      class="absolute -left-4 top-[5px] w-[10px] h-[10px] rounded-full border-2 transition-colors"
+                      style="background: {isLatestActive ? 'var(--color-secondary)' : 'var(--color-surface)'}; border-color: {isLatestActive ? 'var(--color-secondary)' : 'var(--color-border)'}"
+                    ></div>
+                    <button
+                      onclick={() => toggleEntry(entry.id)}
+                      class="w-full text-left py-2 cursor-pointer"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs text-foreground">{formatDate(entry.created_at)}</span>
+                        {#if entry.rolled_back}
+                          <span class="px-1.5 py-px text-[8px] uppercase tracking-wide font-medium rounded" style="color: var(--color-error); opacity: 0.7; border: 1px solid var(--color-error); border-opacity: 0.2">Rolled back</span>
+                        {/if}
+                        {#if !isExpanded}
+                          <svg class="w-[8px] h-[8px] ml-auto shrink-0" viewBox="0 0 8 8" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"><path d="M2 3l2 2 2-2"/></svg>
+                        {/if}
+                      </div>
+                      <p class="text-[10px] text-muted mt-0.5">
+                        {entry.edits_analyzed} edit{entry.edits_analyzed !== 1 ? "s" : ""}, {entry.samples_analyzed} sample{entry.samples_analyzed !== 1 ? "s" : ""}, {entry.generations_analyzed} generation{entry.generations_analyzed !== 1 ? "s" : ""}
+                      </p>
+                    </button>
+                    {#if isExpanded}
+                      <div class="pb-3 flex flex-col gap-2.5">
+                        {#if entry.observations.length > 0}
+                          <div>
+                            <span class="text-[9px] uppercase tracking-wide text-muted font-medium">What we noticed</span>
+                            <div class="mt-1 pl-2.5" style="border-left: 2px solid var(--color-secondary)">
+                              {#each entry.observations as obs}
+                                <p class="text-[10px] text-foreground leading-relaxed py-0.5">{obs}</p>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                        {#if entry.diffs.length > 0}
+                          <div>
+                            <span class="text-[9px] uppercase tracking-wide text-muted font-medium">Changes</span>
+                            <div class="mt-1 flex flex-col gap-1">
+                              {#each entry.diffs as diff}
+                                {@const isDiffOpen = expandedDiffSection === diff.section}
+                                <div>
+                                  <button
+                                    onclick={() => toggleDiffSection(diff.section)}
+                                    class="flex items-center gap-1.5 text-[10px] text-foreground cursor-pointer hover:text-secondary transition-colors py-0.5 w-full text-left"
+                                  >
+                                    <svg
+                                      class="w-[7px] h-[7px] shrink-0 transition-transform duration-150"
+                                      class:rotate-90={isDiffOpen}
+                                      viewBox="0 0 7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                    ><path d="M2.5 1l2.5 2.5-2.5 2.5"/></svg>
+                                    {formatSectionName(diff.section)}
+                                  </button>
+                                  {#if isDiffOpen}
+                                    <div class="ml-3 mt-1 flex flex-col gap-1.5">
+                                      <div class="relative overflow-hidden rounded" style="max-height: 80px">
+                                        <pre class="text-[10px] font-mono text-muted p-2 leading-relaxed whitespace-pre-wrap" style="opacity: 0.6">{diff.before.slice(0, 500)}{diff.before.length > 500 ? "..." : ""}</pre>
+                                        <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
+                                      </div>
+                                      <div class="w-full h-px" style="background: var(--color-border)"></div>
+                                      <div class="relative overflow-hidden rounded" style="max-height: 80px">
+                                        <pre class="text-[10px] font-mono text-secondary p-2 leading-relaxed whitespace-pre-wrap">{diff.after.slice(0, 500)}{diff.after.length > 500 ? "..." : ""}</pre>
+                                        <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
+                                      </div>
+                                    </div>
+                                  {/if}
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                        {#if isLatestActive && profileMeta?.can_rollback}
+                          <button
+                            onclick={() => { showRollbackConfirm = true; }}
+                            class="self-start text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors mt-0.5"
+                          >Undo this refresh</button>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {:else if !isRefreshing && !isUploading}
+            <p class="text-[10px] text-muted text-center py-3">
+              No refreshes yet. Keep writing and come back when you are ready.
+            </p>
+          {/if}
+        </div>
+      {:else}
+        <div class="p-2.5 bg-tint border border-secondary/10 rounded-xl">
+          <p class="text-subhead text-secondary">Living Profile</p>
+          <p class="text-[10px] text-muted mt-1 leading-relaxed">
+            Your profile evolves as you write. Noren tracks your edits and refines automatically.
+          </p>
+          <button
+            onclick={() => handleUpgrade("pro")}
+            class="mt-3 px-4 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
+          >
+            Upgrade to Pro
+          </button>
+        </div>
       {/if}
 
       {#if canExport()}

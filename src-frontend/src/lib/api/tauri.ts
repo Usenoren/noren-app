@@ -500,6 +500,9 @@ export interface ProfileMetadataInfo {
   extraction_count: number;
   next_refresh_available: string | null;
   can_rollback: boolean;
+  edits_pending: number;
+  samples_pending: number;
+  generations_since_refresh: number;
 }
 
 export async function getLivingProfileStatus(): Promise<LivingProfileStatus> {
