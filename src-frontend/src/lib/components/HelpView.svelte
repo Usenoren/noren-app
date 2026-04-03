@@ -126,14 +126,14 @@
           <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">R</span>
           <div>
             <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Rewrite</strong> edits your text in your voice. Fixes errors and makes targeted improvements while keeping your style intact.</p>
-            <p class="text-[11.5px] text-muted mt-1 leading-relaxed">Add instructions before your text for more control: "expand this to 200 words", "tighten", "work on this, keep the length."</p>
+            <p class="text-[11.5px] text-muted mt-1 leading-relaxed">Add instructions after your text for more control: "expand this to 200 words", "tighten", "work on this, keep the length."</p>
           </div>
         </div>
         <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
           <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">R</span>
           <div>
             <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Reply</strong> writes a response to any post in your voice.</p>
-            <p class="text-[11.5px] text-muted mt-1 leading-relaxed">Type a brief direction before the post: "I disagree", "supportive but push back on pricing." Noren takes it from there.</p>
+            <p class="text-[11.5px] text-muted mt-1 leading-relaxed">Type a brief direction after the post: "I disagree", "supportive but push back on pricing." Noren takes it from there.</p>
           </div>
         </div>
         <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
