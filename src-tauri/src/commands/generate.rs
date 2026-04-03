@@ -713,7 +713,7 @@ pub async fn rewrite_selection(
         None,
         Some(full_text),
         None,
-        Some("rewrite".to_string()),
+        Some("refine".to_string()),
     )
     .await
 }
