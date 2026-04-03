@@ -93,6 +93,14 @@
   let guidedError = $state("");
   let showGuidedDiff = $state(false);
 
+  // Voice card collapse (persisted)
+  let voiceCardOpen = $state(localStorage.getItem("noren-voice-expanded") === "true");
+
+  function toggleVoiceCard() {
+    voiceCardOpen = !voiceCardOpen;
+    localStorage.setItem("noren-voice-expanded", voiceCardOpen ? "true" : "false");
+  }
+
   // Empty state
   let showManualCreate = $state(false);
 
@@ -566,128 +574,135 @@
     {@const vo = overview.voice_overview}
     <div class="flex flex-col gap-3 h-full overflow-y-auto pv-stagger">
 
-      <!-- Voice Snapshot -->
-      {#if vo?.summary}
-        <div class="card-hero" style="padding: 14px 16px;">
-          <span class="section-label">Voice snapshot</span>
-          <p class="text-xs text-foreground leading-relaxed mt-2">{vo.summary}</p>
-        </div>
-      {:else}
-        <div class="p-3 card-hero">
-          <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
-          <p class="text-[10px] text-muted mt-1">
-            Your extracted profile is securely stored and used automatically when generating text.
-          </p>
-        </div>
-      {/if}
-
-      <!-- Voice Dimensions -->
-      {#if vo?.routing}
-        {@const routing = vo.routing}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Voice dimensions</span>
-          <div class="pv-dims">
-            {@render dimBar("Structure", routing.structure_predictability === "high" ? 85 : routing.structure_predictability === "medium" ? 50 : 15, routing.structure_predictability, "varied", "predictable")}
-            {@render dimBar("Register", routing.register_break_frequency * 10, `${routing.register_break_frequency} / 10`, "consistent", "shifting")}
-            {@render dimBar("Formality", routing.casual_marker_density === "high" ? 85 : routing.casual_marker_density === "medium" ? 50 : 15, routing.casual_marker_density, "formal", "casual")}
-            {@render dimBar("Phrasing", routing.signature_phrase_rigidity === "high" ? 85 : routing.signature_phrase_rigidity === "medium" ? 50 : 15, routing.signature_phrase_rigidity, "fluid", "fixed")}
+      <!-- Voice Card (collapsible) -->
+      <div class="pv-voice-card" class:open={voiceCardOpen}>
+        <button class="pv-vc-header" onclick={toggleVoiceCard}>
+          <div class="pv-vc-header-top">
+            <span class="font-heading text-sm italic text-foreground">Your voice</span>
+            <span class="pv-vc-chevron">
+              <svg viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+            </span>
           </div>
-        </div>
-      {/if}
+          {#if vo?.summary}
+            <p class="pv-vc-summary">
+              <em>{vo.summary.split('.')[0]}.</em>{vo.summary.split('.').length > 1 ? ' ' + vo.summary.split('.').slice(1).join('.').trim() : ''}
+            </p>
+          {:else}
+            <p class="pv-vc-summary"><em>Voice profile on Noren servers</em></p>
+          {/if}
+          {#if vo?.counts || vo?.baseline_rhythm || overview.formats.length > 0}
+            <div class="pv-vc-stats-row">
+              {#if vo?.counts?.profile_lines}
+                <span class="pv-vc-stat-chip">{vo.counts.profile_lines} <span>lines</span></span>
+              {/if}
+              {#if vo?.corpus?.unique_sample_count}
+                <span class="pv-vc-stat-chip">{vo.corpus.unique_sample_count} <span>samples</span></span>
+              {/if}
+              {#if vo?.baseline_rhythm?.longToShortRatio}
+                <span class="pv-vc-stat-chip">{vo.baseline_rhythm.longToShortRatio.toFixed(1)} <span>L:S</span></span>
+              {/if}
+              {#if overview.formats.length > 0}
+                <span class="pv-vc-stat-chip">{overview.formats.length} <span>formats</span></span>
+              {/if}
+            </div>
+          {/if}
+        </button>
 
-      <!-- Pattern Depth -->
-      {#if vo?.counts}
-        {@const counts = vo.counts}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Pattern depth</span>
-          <div class="pv-depth">
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.analogy_domains}</span>
-              <span class="pv-depth-name">analogy<br>families</span>
-            </div>
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.micro_constructions}</span>
-              <span class="pv-depth-name">sentence<br>patterns</span>
-            </div>
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.signature_phrases}</span>
-              <span class="pv-depth-name">signature<br>phrases</span>
-            </div>
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.anti_patterns}</span>
-              <span class="pv-depth-name">anti-<br>patterns</span>
-            </div>
-            {#if vo.corpus}
-              <div class="pv-depth-item pv-depth-full">
-                <span class="pv-depth-count" style="font-size: 14px;">{counts.profile_lines}</span>
-                <span class="pv-depth-name">lines of voice DNA across {vo.corpus.unique_sample_count} samples</span>
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
+        <div class="pv-vc-detail-wrap">
+          <div class="pv-vc-detail-clip">
+            <div class="pv-vc-detail-inner">
 
-      <!-- Sentence Rhythm -->
-      {#if vo?.baseline_rhythm}
-        {@const rhythm = vo.baseline_rhythm}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Sentence rhythm</span>
-          <div style="margin-top: 10px;">
-            <div class="pv-rhythm-bar">
-              <div class="pv-rhythm-seg pv-rhythm-short" style="width: {rhythm.distributionPct.short}%"></div>
-              <div class="pv-rhythm-seg pv-rhythm-medium" style="width: {rhythm.distributionPct.medium}%"></div>
-              <div class="pv-rhythm-seg pv-rhythm-long" style="width: {rhythm.distributionPct.long}%"></div>
-              <div class="pv-rhythm-seg pv-rhythm-vlong" style="width: {rhythm.distributionPct.veryLong}%"></div>
-            </div>
-            <div class="pv-rhythm-legend">
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-secondary)"></span>Short &lt;8w</span>
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-accent)"></span>Medium 8-15w</span>
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-warning)"></span>Long 16-25w</span>
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: #C23B2A"></span>25w+</span>
-            </div>
-            <div class="pv-rhythm-stats">
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{Math.round(rhythm.medianWordCount)}</span>
-                <span class="pv-rhythm-stat-lbl">median words</span>
-              </div>
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{rhythm.sentenceCeiling}</span>
-                <span class="pv-rhythm-stat-lbl">ceiling</span>
-              </div>
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{rhythm.longToShortRatio.toFixed(1)}</span>
-                <span class="pv-rhythm-stat-lbl">L:S ratio</span>
-              </div>
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{rhythm.medianCommasPerSentence.toFixed(1)}</span>
-                <span class="pv-rhythm-stat-lbl">commas/sent</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
+              {#if vo?.summary}
+                <div>
+                  <span class="section-label">Voice snapshot</span>
+                  <p class="text-xs text-foreground leading-relaxed mt-1.5">{vo.summary}</p>
+                </div>
+              {/if}
 
-      <!-- Format Cards -->
-      {#if overview.formats.length > 0}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Formats</span>
-          <div class="pv-format-list">
-            {#each overview.formats as fmt}
-              {@const fmtRhythm = vo?.format_rhythms?.[fmt]}
-              <div class="pv-format-row">
-                <div class="pv-format-accent" style="background: {FORMAT_ACCENTS[fmt] || 'var(--color-primary)'}"></div>
-                <span class="pv-format-name">{fmt}</span>
-                {#if fmtRhythm}
-                  <div class="pv-format-stats">
-                    <span class="pv-format-stat"><strong>{Math.round(fmtRhythm.medianWordCount)}</strong> median</span>
-                    <span class="pv-format-stat"><strong>{fmtRhythm.longToShortRatio.toFixed(1)}</strong> L:S</span>
+              {#if vo?.routing}
+                {@const routing = vo.routing}
+                <div>
+                  <span class="section-label">Voice dimensions</span>
+                  <div class="pv-dims">
+                    {@render dimBar("Structure", routing.structure_predictability === "high" ? 85 : routing.structure_predictability === "medium" ? 50 : 15, routing.structure_predictability, "varied", "predictable")}
+                    {@render dimBar("Register", routing.register_break_frequency * 10, `${routing.register_break_frequency} / 10`, "consistent", "shifting")}
+                    {@render dimBar("Formality", routing.casual_marker_density === "high" ? 85 : routing.casual_marker_density === "medium" ? 50 : 15, routing.casual_marker_density, "formal", "casual")}
+                    {@render dimBar("Phrasing", routing.signature_phrase_rigidity === "high" ? 85 : routing.signature_phrase_rigidity === "medium" ? 50 : 15, routing.signature_phrase_rigidity, "fluid", "fixed")}
                   </div>
-                {/if}
-              </div>
-            {/each}
+                </div>
+              {/if}
+
+              {#if vo?.counts}
+                {@const counts = vo.counts}
+                <div>
+                  <span class="section-label">Pattern depth</span>
+                  <div class="pv-depth">
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.analogy_domains}</span><span class="pv-depth-name">analogy<br>families</span></div>
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.micro_constructions}</span><span class="pv-depth-name">sentence<br>patterns</span></div>
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.signature_phrases}</span><span class="pv-depth-name">signature<br>phrases</span></div>
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.anti_patterns}</span><span class="pv-depth-name">anti-<br>patterns</span></div>
+                    {#if vo.corpus}
+                      <div class="pv-depth-item pv-depth-full">
+                        <span class="pv-depth-count" style="font-size: 14px;">{counts.profile_lines}</span>
+                        <span class="pv-depth-name">lines of voice DNA across {vo.corpus.unique_sample_count} samples</span>
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+
+              {#if vo?.baseline_rhythm}
+                {@const rhythm = vo.baseline_rhythm}
+                <div>
+                  <span class="section-label">Sentence rhythm</span>
+                  <div style="margin-top: 10px;">
+                    <div class="pv-rhythm-bar">
+                      <div class="pv-rhythm-seg pv-rhythm-short" style="width: {rhythm.distributionPct.short}%"></div>
+                      <div class="pv-rhythm-seg pv-rhythm-medium" style="width: {rhythm.distributionPct.medium}%"></div>
+                      <div class="pv-rhythm-seg pv-rhythm-long" style="width: {rhythm.distributionPct.long}%"></div>
+                      <div class="pv-rhythm-seg pv-rhythm-vlong" style="width: {rhythm.distributionPct.veryLong}%"></div>
+                    </div>
+                    <div class="pv-rhythm-legend">
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-secondary)"></span>Short &lt;8w</span>
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-accent)"></span>Medium 8-15w</span>
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-warning)"></span>Long 16-25w</span>
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: #C23B2A"></span>25w+</span>
+                    </div>
+                    <div class="pv-rhythm-stats-grid">
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{Math.round(rhythm.medianWordCount)}</span><span class="pv-rhythm-stat-lbl">median words</span></div>
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{rhythm.sentenceCeiling}</span><span class="pv-rhythm-stat-lbl">ceiling</span></div>
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{rhythm.longToShortRatio.toFixed(1)}</span><span class="pv-rhythm-stat-lbl">L:S ratio</span></div>
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{rhythm.medianCommasPerSentence.toFixed(1)}</span><span class="pv-rhythm-stat-lbl">commas/sent</span></div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+
+              {#if overview.formats.length > 0}
+                <div>
+                  <span class="section-label">Formats</span>
+                  <div class="pv-format-list">
+                    {#each overview.formats as fmt}
+                      {@const fmtRhythm = vo?.format_rhythms?.[fmt]}
+                      <div class="pv-format-row">
+                        <div class="pv-format-accent" style="background: {FORMAT_ACCENTS[fmt] || 'var(--color-primary)'}"></div>
+                        <span class="pv-format-name">{fmt}</span>
+                        {#if fmtRhythm}
+                          <div class="pv-format-stats">
+                            <span class="pv-format-stat"><strong>{Math.round(fmtRhythm.medianWordCount)}</strong> median</span>
+                            <span class="pv-format-stat"><strong>{fmtRhythm.longToShortRatio.toFixed(1)}</strong> L:S</span>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+            </div>
           </div>
         </div>
-      {/if}
+      </div>
 
       <!-- Guided Edit -->
       {#if isPro() && vo}
@@ -987,58 +1002,36 @@
         </div>
       {/if}
 
-      {#if canExport()}
-        <div class="flex items-center justify-between shrink-0">
-          <span class="text-[10px] text-muted">Stored on Noren servers</span>
-          <button
-            onclick={handleExport}
-            disabled={isExporting}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
-          >
-            {isExporting ? "Exporting..." : "Export as Markdown"}
-          </button>
-        </div>
-      {:else if isPro() && exportUnlockProgress() != null && exportUnlockRemainingCents() != null}
-        {@const remaining = exportUnlockRemainingCents()!}
-        {@const progress = exportUnlockProgress()!}
-        {@const thresholdCents = progress < 100 ? Math.round(remaining / (1 - progress / 100)) : remaining}
-        {@const paidDollars = Math.round((thresholdCents - remaining) / 100)}
-        {@const thresholdDollars = Math.round(thresholdCents / 100)}
-        {@const remainingDollars = Math.round(remaining / 100)}
-        <div class="pv-export-card shrink-0">
-          <span class="section-label" style="display:block; margin-bottom: 12px;">Export</span>
-          <div class="pv-export-row">
-            <span><strong>${paidDollars}</strong> of ${thresholdDollars}</span>
-            <span>Unlocks with subscription</span>
-          </div>
-          <div class="pv-export-bar">
-            <div class="pv-export-bar-fill" style="--pct: {progress}%"></div>
-          </div>
-          <div class="pv-export-foot">
-            <span class="pv-export-hint">Unlocks as you stay subscribed, or pay the difference now.</span>
-            <button onclick={handleExportUnlock} class="pv-export-pay">
-              Unlock · ${remainingDollars}
-            </button>
-          </div>
-        </div>
-      {:else}
-        <div class="flex items-center justify-between shrink-0">
-          <span class="text-[10px] text-muted">Stored on Noren servers</span>
-          <button
-            onclick={() => handleUpgrade("export")}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
-            title="One-time purchase to export your profile"
-          >
-            Export to disk <span class="text-[8px] text-secondary font-medium">$</span>
-          </button>
-        </div>
-      {/if}
-
       {#if error}
         <div class="p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed shrink-0">
           {error}
         </div>
       {/if}
+
+      <!-- Footer: Export -->
+      <div class="pv-footer-row">
+        <span class="text-[10px] text-muted">Stored on Noren servers</span>
+        {#if canExport()}
+          <button
+            onclick={handleExport}
+            disabled={isExporting}
+            class="pv-footer-export"
+          >
+            {isExporting ? "..." : "Export as Markdown"}
+          </button>
+        {:else if isPro() && exportUnlockProgress() != null}
+          <button onclick={handleExportUnlock} class="pv-footer-btn">
+            Export <span class="text-[8px] text-secondary font-medium">${Math.round((exportUnlockRemainingCents() || 0) / 100)}</span>
+          </button>
+        {:else}
+          <button
+            onclick={() => handleUpgrade("export")}
+            class="pv-footer-btn"
+          >
+            Export <span class="text-[8px] text-secondary font-medium">$</span>
+          </button>
+        {/if}
+      </div>
     </div>
   {:else}
     <!-- Local profile -->
@@ -1677,6 +1670,121 @@
     background: var(--color-secondary);
     color: white;
   }
+
+  /* Voice Card (collapsible) */
+  .pv-voice-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    border-top: 2px solid var(--color-accent);
+    box-shadow: var(--shadow-card);
+  }
+  .pv-vc-header {
+    display: block;
+    width: 100%;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+    text-align: left;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .pv-vc-header:hover { background: rgba(30,49,72,0.015); }
+  .pv-vc-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pv-vc-chevron {
+    color: var(--color-muted);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pv-vc-chevron svg { width: 10px; height: 10px; }
+  .pv-voice-card.open .pv-vc-chevron { transform: rotate(180deg); }
+  .pv-vc-summary {
+    font-size: 11px; color: var(--color-muted);
+    line-height: 1.5; margin-top: 6px;
+  }
+  .pv-vc-summary em {
+    font-style: normal;
+    color: var(--color-foreground);
+  }
+  .pv-vc-stats-row {
+    display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+  }
+  .pv-vc-stat-chip {
+    font-size: 10px; font-weight: 600; color: var(--color-foreground);
+    background: var(--color-tint); padding: 2px 8px; border-radius: 6px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .pv-vc-stat-chip span {
+    font-weight: 400; color: var(--color-muted); margin-left: 2px;
+  }
+  .pv-vc-detail-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pv-voice-card.open .pv-vc-detail-wrap {
+    grid-template-rows: 1fr;
+  }
+  .pv-vc-detail-clip {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .pv-vc-detail-inner {
+    padding: 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 14px;
+  }
+
+  /* Rhythm stats 2x2 grid */
+  .pv-rhythm-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* Footer row */
+  .pv-footer-row {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .pv-footer-left {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pv-footer-btn {
+    padding: 5px 10px; font-size: 10px; font-weight: 500; font-family: inherit;
+    border: 1px solid var(--color-border); border-radius: 6px;
+    background: transparent; color: var(--color-muted); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pv-footer-btn:hover { border-color: var(--color-secondary); color: var(--color-foreground); }
+  .pv-footer-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pv-footer-sep {
+    width: 1px; height: 16px; background: var(--color-border); margin: 0 4px;
+  }
+  .pv-footer-export {
+    padding: 6px 14px; font-size: 11px; font-weight: 600; font-family: inherit;
+    color: white; background: var(--color-primary); border: none; border-radius: 8px;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .pv-footer-export:hover { opacity: 0.9; }
+  .pv-footer-export:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Voice Dimensions */
   .pv-dims {
