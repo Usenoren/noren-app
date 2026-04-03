@@ -1249,3 +1249,13 @@ html[data-theme-mode="light"] .loom-idle-img {
 }
 .idle-weft { animation: idle-weft-drift 8s ease-in-out infinite; }
 .idle-weft-ghost { animation: idle-weft-ghost-drift 10s ease-in-out infinite; }
+
+/* Extract nudge: completion ring */
+@keyframes ev-ring-draw {
+  from { stroke-dashoffset: 138.2; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes ev-check-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}

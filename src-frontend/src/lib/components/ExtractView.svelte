@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
   import {
     createGuestCheckout,
@@ -17,6 +18,7 @@
     scrapeBlog,
     scrapeReddit,
     exportProfile,
+    getProfileOverview,
     type FormatGroup,
   } from "../api/tauri";
   import {
@@ -43,6 +45,7 @@
     | "processing"
     | "polling"
     | "restore"
+    | "hasProfile"
     | "inputMethod"
     | "pasteStep"
     | "review"
@@ -239,6 +242,16 @@
 
     // Check if user can extract (Pro or has valid local receipt)
     if (canExtract() || isPro()) {
+      // Check if they already have a profile (nudge before re-extracting)
+      try {
+        const overview = await getProfileOverview();
+        if (overview.exists) {
+          viewState = "hasProfile";
+          return;
+        }
+      } catch {
+        // Can't check, proceed to extraction
+      }
       if (!loadExtractDraft()) {
         viewState = "inputMethod";
       }
@@ -594,6 +607,62 @@
     <!-- Loading -->
     <div class="flex-1 flex items-center justify-center">
       <LoadingSpinner />
+    </div>
+
+  {:else if viewState === "hasProfile"}
+    <!-- Nudge: user already has a profile -->
+    <div class="flex-1 flex flex-col items-center justify-center relative">
+      <!-- Soft radial glow -->
+      <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse at 50% 40%, var(--color-accent-wash) 0%, transparent 70%)"></div>
+
+      <div class="relative flex flex-col items-center animate-fade-in-up" style="max-width: 300px;">
+        <!-- Completion ring -->
+        <div class="relative" style="width: 48px; height: 48px; margin-bottom: 20px;">
+          <svg viewBox="0 0 48 48" style="width: 48px; height: 48px;">
+            <circle cx="24" cy="24" r="22" fill="none" stroke="var(--color-border)" stroke-width="1.5" />
+            <circle cx="24" cy="24" r="22" fill="none" stroke="var(--color-signal)" stroke-width="1.5"
+              stroke-dasharray="138.2" stroke-dashoffset="0" stroke-linecap="round"
+              style="transform-origin: center; transform: rotate(-90deg); animation: ev-ring-draw 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;" />
+          </svg>
+          <svg class="absolute top-1/2 left-1/2" style="width: 18px; height: 18px; transform: translate(-50%, -50%); color: var(--color-signal); animation: ev-check-in 0.3s ease-out 0.6s both;"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+
+        <!-- Card -->
+        <div class="card-hero text-center" style="padding: 20px;">
+          <p class="text-subhead text-foreground">Your voice is already captured</p>
+          <p class="text-[11px] text-muted mt-2" style="line-height: 1.7;">
+            Your profile updates automatically through <strong class="text-secondary font-semibold">Living Profile</strong>.
+            For targeted changes, use <strong class="text-secondary font-semibold">Refine Your Voice</strong> on the Profile tab.
+          </p>
+          <p class="text-[10px] text-muted mt-1.5" style="opacity: 0.7;">
+            Re-extracting replaces your current profile entirely.
+          </p>
+
+          <div class="flex flex-col items-center gap-2 mt-4">
+            <button
+              onclick={() => emit("navigate", "profiles")}
+              class="btn-primary w-full"
+              style="gap: 6px; font-size: 12px;"
+            >
+              <svg style="width: 14px; height: 14px; opacity: 0.8;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Go to Profile
+            </button>
+            <button
+              onclick={() => { if (!loadExtractDraft()) viewState = "inputMethod"; }}
+              class="text-[10px] text-muted hover:text-secondary transition-colors cursor-pointer"
+              style="padding: 4px 8px; background: none; border: none; font-family: inherit;"
+            >
+              Extract anyway
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
   {:else if viewState === "done"}
