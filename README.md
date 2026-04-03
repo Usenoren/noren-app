@@ -21,7 +21,7 @@ Noren extracts your unique writing voice from samples you provide, then uses tha
 
 **Weave** - Write a prompt, get voice-matched output. Paste or inject directly into any app.
 
-**Chat** - Conversational mode with full history. Attach files for context. Every response is filtered through your voice.
+**Chat** - Conversational mode with full history and file attachments. Every response is filtered through your voice.
 
 **Extract** - Feed in writing samples (emails, docs, tweets). Noren distills your tone, rhythm, sentence structure, and vocabulary into a portable voice profile.
 
