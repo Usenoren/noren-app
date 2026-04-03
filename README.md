@@ -19,13 +19,13 @@
 
 Noren extracts your unique writing voice from samples you provide, then uses that voice profile to generate text that sounds like you, not like a chatbot.
 
-**Weave** — Write a prompt, get voice-matched output. Paste or inject directly into any app.
+**Weave** - Write a prompt, get voice-matched output. Paste or inject directly into any app.
 
-**Chat** — Conversational mode with full history. Attach files for context. Every response is filtered through your voice.
+**Chat** - Conversational mode with full history. Attach files for context. Every response is filtered through your voice.
 
-**Extract** — Feed in writing samples (emails, docs, tweets). Noren distills your tone, rhythm, sentence structure, and vocabulary into a portable voice profile.
+**Extract** - Feed in writing samples (emails, docs, tweets). Noren distills your tone, rhythm, sentence structure, and vocabulary into a portable voice profile.
 
-**Compare** — See your voiced output side-by-side with generic AI output. The difference is the product.
+**Compare** - See your voiced output side-by-side with generic AI output. The difference is the product.
 
 ## How it works
 
@@ -35,7 +35,7 @@ Your writing samples → Voice extraction → Profile (core identity + format co
 Your prompt + profile → LLM → Voice-matched output → Clipboard / Inject into app
 ```
 
-The voice profile is a structured document that captures *how* you write, not what you write about. It travels with you across formats — emails, tweets, docs, Slack messages, adapting enforcement level (strict / guided / light) per use case.
+The voice profile is a structured document that captures *how* you write, not what you write about. It travels with you across formats - emails, tweets, docs, Slack messages, adapting enforcement level (strict / guided / light) per use case.
 
 ## Architecture
 
@@ -91,14 +91,14 @@ noren-app/
 
 ## Design
 
-The visual identity draws from Japanese indigo dyeing — the same craft tradition as the noren curtain.
+The visual identity draws from Japanese indigo dyeing - the same craft tradition as the noren curtain.
 
-- **KON** (紺) `#1E3148` — deep indigo, primary
-- **HANADA** (縹) `#3B6B8A` — mid indigo, secondary
-- **AIJIRO** (藍白) `#E8EDF2` — palest indigo, tints
-- **SHU** (朱) `#C44A2F` — persimmon red, accent
-- **KINU** (絹) `#F6F1EB` — unbleached silk, background
-- **SUMI** (墨) `#2B2725` — ink stone, text
+- **KON** (紺) `#1E3148` - deep indigo, primary
+- **HANADA** (縹) `#3B6B8A` - mid indigo, secondary
+- **AIJIRO** (藍白) `#E8EDF2` - palest indigo, tints
+- **SHU** (朱) `#C44A2F` - persimmon red, accent
+- **KINU** (絹) `#F6F1EB` - unbleached silk, background
+- **SUMI** (墨) `#2B2725` - ink stone, text
 
 Dark mode automatically matches macOS appearance via `prefers-color-scheme`.
 
@@ -110,8 +110,8 @@ Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) (headings), [Plus 
 
 - [Rust](https://rustup.rs/) (latest stable)
 - [Node.js](https://nodejs.org/) 18+ or [Bun](https://bun.sh/)
-- [Tauri CLI](https://v2.tauri.app/start/prerequisites/) — `cargo install tauri-cli`
-- Xcode Command Line Tools — `xcode-select --install`
+- [Tauri CLI](https://v2.tauri.app/start/prerequisites/) - `cargo install tauri-cli`
+- Xcode Command Line Tools - `xcode-select --install`
 
 ### Run
 
@@ -140,9 +140,9 @@ Then open normally.
 
 ### Inference modes
 
-**BYOK (Bring Your Own Key)** — Use your own API key with any supported provider. Keys are stored in macOS Keychain, never in config files.
+**BYOK (Bring Your Own Key)** - Use your own API key with any supported provider. Keys are stored in macOS Keychain, never in config files.
 
-**Noren Pro** — Managed inference through `api.usenoren.ai`. No API key needed. Includes server-side voice extraction and profile sync.
+**Noren Pro** - Managed inference through `api.usenoren.ai`. No API key needed. Includes server-side voice extraction and profile sync.
 
 ## License
 
