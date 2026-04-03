@@ -272,6 +272,54 @@ pub async fn export_profile(
     Ok(path.as_path().unwrap().to_string_lossy().to_string())
 }
 
+/// Apply a natural language instruction to modify the voice profile. Pro only.
+#[derive(Serialize, Deserialize)]
+pub struct GuidedEditResponse {
+    pub edited: bool,
+    pub section: String,
+    pub original: String,
+    pub updated: String,
+    pub voice_summary: Option<String>,
+    pub message: String,
+}
+
+#[tauri::command]
+pub async fn guided_profile_edit(
+    state: State<'_, AppState>,
+    instruction: String,
+    format: Option<String>,
+) -> Result<GuidedEditResponse, String> {
+    let config = state.config.lock().unwrap().clone();
+
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+
+    let edit_url = format!("{}/v1/profile/voice/edit", server_url.trim_end_matches('/'));
+    let mut payload = serde_json::json!({ "instruction": instruction });
+    if let Some(fmt) = format {
+        payload["format"] = serde_json::Value::String(fmt);
+    }
+
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&edit_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await?;
+
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Edit failed: {}", text));
+    }
+
+    resp.json::<GuidedEditResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse edit response: {}", e))
+}
+
 /// Build voice overview from local files (BYOK path).
 fn build_local_voice_overview(profile_dir: &std::path::Path) -> Option<serde_json::Value> {
     let metadata_path = profile_dir.join("voice-metadata.json");

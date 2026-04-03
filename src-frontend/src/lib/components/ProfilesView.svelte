@@ -16,6 +16,7 @@
     exportProfile,
     createCheckout,
     createExportUnlockCheckout,
+    guidedProfileEdit,
     getSettings,
     type ProfileOverview,
     type ProfileContent,
@@ -27,6 +28,7 @@
     type SectionDiff,
     type SyncStatus,
     type VoiceOverview,
+    type GuidedEditResponse,
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
@@ -78,6 +80,14 @@
   // Export state (server profiles)
   let isExporting = $state(false);
   let isDevMode = $state(false);
+
+  // Guided editing state
+  let guidedInstruction = $state("");
+  let guidedFormat = $state<string | undefined>(undefined);
+  let isGuidedEditing = $state(false);
+  let guidedResult = $state<GuidedEditResponse | null>(null);
+  let guidedError = $state("");
+  let showGuidedDiff = $state(false);
 
   // Empty state
   let showManualCreate = $state(false);
@@ -388,6 +398,29 @@
     }
   }
 
+  async function handleGuidedEdit() {
+    if (!guidedInstruction.trim()) return;
+    guidedError = "";
+    guidedResult = null;
+    showGuidedDiff = false;
+    isGuidedEditing = true;
+    try {
+      const result = await guidedProfileEdit({
+        instruction: guidedInstruction.trim(),
+        format: guidedFormat,
+      });
+      guidedResult = result;
+      if (result.edited) {
+        guidedInstruction = "";
+        await loadProfile();
+      }
+    } catch (e) {
+      guidedError = friendlyError(e);
+    } finally {
+      isGuidedEditing = false;
+    }
+  }
+
   async function handleExportUnlock() {
     error = "";
     try {
@@ -631,6 +664,72 @@
               </div>
             {/each}
           </div>
+        </div>
+      {/if}
+
+      <!-- Guided Edit -->
+      {#if isPro() && vo}
+        <div class="ge-card">
+          <span class="section-label">Refine your voice</span>
+          <div class="ge-input-row">
+            <input
+              class="ge-input"
+              bind:value={guidedInstruction}
+              placeholder="e.g. Remove exclamation marks from my voice"
+              disabled={isGuidedEditing}
+              onkeydown={(e) => { if (e.key === "Enter") handleGuidedEdit(); }}
+            />
+            <button
+              class="ge-submit"
+              onclick={handleGuidedEdit}
+              disabled={!guidedInstruction.trim() || isGuidedEditing}
+            >
+              {isGuidedEditing ? "..." : "Apply"}
+            </button>
+          </div>
+          {#if overview.formats.length > 0}
+            <div class="ge-format-row">
+              <button
+                class="ge-format-pill {guidedFormat === undefined ? 'active' : ''}"
+                onclick={() => { guidedFormat = undefined; }}
+              >Core</button>
+              {#each overview.formats as fmt}
+                <button
+                  class="ge-format-pill {guidedFormat === fmt ? 'active' : ''}"
+                  onclick={() => { guidedFormat = fmt; }}
+                >{fmt}</button>
+              {/each}
+            </div>
+          {/if}
+          {#if isGuidedEditing}
+            <div class="ge-loading">
+              <LoadingSpinner />
+              <span class="text-[11px] text-muted">Applying changes to {guidedFormat || "core"} profile...</span>
+            </div>
+          {/if}
+          {#if guidedResult}
+            <div class="ge-result" class:ge-result-noop={!guidedResult.edited}>
+              <span class="ge-result-msg" class:text-signal={guidedResult.edited} class:text-muted={!guidedResult.edited}>
+                {guidedResult.message}
+              </span>
+              {#if guidedResult.edited}
+                <button class="ge-result-toggle" onclick={() => { showGuidedDiff = !showGuidedDiff; }}>
+                  {showGuidedDiff ? "Hide" : "Show"} changes
+                </button>
+                {#if showGuidedDiff}
+                  <div class="ge-diff">
+                    <span class="ge-diff-label">Before</span>
+                    <pre class="ge-diff-block ge-diff-old">{guidedResult.original.slice(0, 400)}{guidedResult.original.length > 400 ? "..." : ""}</pre>
+                    <span class="ge-diff-label">After</span>
+                    <pre class="ge-diff-block ge-diff-new">{guidedResult.updated.slice(0, 400)}{guidedResult.updated.length > 400 ? "..." : ""}</pre>
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {/if}
+          {#if guidedError}
+            <p class="text-[10px] text-error mt-2">{guidedError}</p>
+          {/if}
         </div>
       {/if}
 
@@ -1550,5 +1649,135 @@
   .pv-format-stat :global(strong) {
     font-weight: 600;
     color: var(--color-foreground);
+  }
+
+  /* Guided Edit */
+  .ge-card {
+    position: relative;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .ge-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 12px; right: 12px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-secondary), transparent);
+    opacity: 0.25;
+    border-radius: 1px;
+  }
+  .ge-input-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: stretch;
+  }
+  .ge-input {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: inherit;
+    border: 1.5px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .ge-input:focus { border-color: var(--color-secondary); }
+  .ge-input::placeholder { color: var(--color-muted); opacity: 0.6; }
+  .ge-submit {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    color: white;
+    background: var(--color-secondary);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .ge-submit:hover { opacity: 0.9; }
+  .ge-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ge-format-row { display: flex; gap: 6px; margin-top: 8px; }
+  .ge-format-pill {
+    padding: 3px 8px;
+    font-size: 10px;
+    font-family: inherit;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .ge-format-pill.active {
+    background: var(--color-secondary);
+    color: white;
+    border-color: var(--color-secondary);
+  }
+  .ge-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .ge-result {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--color-tint);
+    border-radius: 8px;
+    animation: pv-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ge-result-noop {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+  .ge-result-msg { font-size: 11px; font-weight: 500; }
+  .ge-result-toggle {
+    font-size: 10px;
+    color: var(--color-secondary);
+    cursor: pointer;
+    margin-top: 6px;
+    background: none;
+    border: none;
+    font-family: inherit;
+    padding: 0;
+  }
+  .ge-result-toggle:hover { text-decoration: underline; }
+  .ge-diff { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .ge-diff-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-muted);
+    font-weight: 600;
+  }
+  .ge-diff-old, .ge-diff-new {
+    font-size: 10px;
+    font-family: monospace;
+    padding: 8px;
+    border-radius: 6px;
+    line-height: 1.6;
+    max-height: 80px;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+    position: relative;
+  }
+  .ge-diff-old {
+    background: #fdf0f0;
+    color: var(--color-muted);
+    border: 1px solid #e8d4d4;
+  }
+  .ge-diff-new {
+    background: #f0fdf4;
+    color: var(--color-foreground);
+    border: 1px solid #d4e8d4;
   }
 </style>

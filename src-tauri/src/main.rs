@@ -215,6 +215,7 @@ fn main() {
             commands::read_file_as_text,
             commands::migrate_profile_to_server,
             commands::export_profile,
+            commands::guided_profile_edit,
             commands::update_hotkey,
             commands::list_ollama_models,
             commands::list_claude_models,

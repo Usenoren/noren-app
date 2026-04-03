@@ -602,6 +602,22 @@ export interface ProfileContent {
   quality_check: string | null;
 }
 
+export interface GuidedEditResponse {
+  edited: boolean;
+  section: string;
+  original: string;
+  updated: string;
+  voice_summary: string | null;
+  message: string;
+}
+
+export async function guidedProfileEdit(params: {
+  instruction: string;
+  format?: string;
+}): Promise<GuidedEditResponse> {
+  return invoke("guided_profile_edit", params);
+}
+
 export async function getProfileOverview(): Promise<ProfileOverview> {
   return invoke("get_profile_overview");
 }
