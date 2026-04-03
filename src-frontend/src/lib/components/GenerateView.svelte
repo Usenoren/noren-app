@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { generate, generateStream, generateComparison, cancelGeneration, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, saveGeneration, listGenerations, loadGeneration, loadLatestGeneration, deleteGeneration, rewriteSelection, syncGenerationsFromServer, type GenerateResult, type ComparisonResult, type FixSpan, type Generation, type GenerationSummary } from "$lib/api/tauri";
+  import { generate, generateStream, generateComparison, cancelGeneration, getContextText, listFormats, injectGeneratedText, readFileAsText, getProfileOverview, getSettings, createCheckout, showMainWindow, logEdit, saveGeneration, listGenerations, loadGeneration, deleteGeneration, rewriteSelection, syncGenerationsFromServer, type GenerateResult, type ComparisonResult, type FixSpan, type Generation, type GenerationSummary } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
   import { isFree, canExtract } from "$lib/stores/subscription.svelte";
@@ -96,23 +96,6 @@
       }
     }
     window.addEventListener("keydown", handleKeyDown);
-
-    // Restore last generation (fast: reads only the newest file, not all)
-    loadLatestGeneration().then((gen) => {
-      if (gen) {
-        output = gen.output;
-        editedText = gen.output.text;
-        savedPrompt = gen.prompt;
-        currentVersionId = gen.id;
-        dismissedEmpty = true;
-        versions = [{
-          id: gen.id, timestamp: gen.timestamp, format: gen.format,
-          prompt: gen.prompt, mode: gen.mode,
-          token_count: gen.output.input_tokens + gen.output.output_tokens,
-          is_edited: !gen.edits || gen.edits.length === 0 ? false : true,
-        }];
-      }
-    }).catch(() => {});
 
     // Sync generations from server, then load history
     syncGenerationsFromServer().catch(() => {}).finally(() => {
