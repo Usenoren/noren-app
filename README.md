@@ -17,7 +17,7 @@
 
 ## What is Noren?
 
-Noren extracts your unique writing voice from samples you provide, then uses that voice profile to generate text that sounds like you — not like a chatbot.
+Noren extracts your unique writing voice from samples you provide, then uses that voice profile to generate text that sounds like you, not like a chatbot.
 
 **Weave** — Write a prompt, get voice-matched output. Paste or inject directly into any app.
 
@@ -35,7 +35,7 @@ Your writing samples → Voice extraction → Profile (core identity + format co
 Your prompt + profile → LLM → Voice-matched output → Clipboard / Inject into app
 ```
 
-The voice profile is a structured document that captures *how* you write, not what you write about. It travels with you across formats — emails, tweets, docs, Slack messages — adapting enforcement level (strict / guided / light) per use case.
+The voice profile is a structured document that captures *how* you write, not what you write about. It travels with you across formats — emails, tweets, docs, Slack messages, adapting enforcement level (strict / guided / light) per use case.
 
 ## Architecture
 
