@@ -146,4 +146,4 @@ Then open normally.
 
 ## License
 
-Proprietary. All rights reserved.
+[MIT](LICENSE)

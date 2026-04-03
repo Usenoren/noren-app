@@ -5,6 +5,8 @@ resolver = "2"
 [package]
 name = "noren-app"
 version = "0.2.0"
+description = "Noren desktop app. Voice consistency engine for AI writing."
+license = "MIT"
 edition = "2021"
 default-run = "noren-app"
 
