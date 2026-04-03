@@ -49,8 +49,13 @@ where
         .map_err(|e| format!("Token refresh failed: {}", e))?;
 
     if !refresh_resp.status().is_success() {
-        // Refresh failed, return original 401
-        return Err("Session expired. Please sign in again.".to_string());
+        if refresh_resp.status().as_u16() == 401 {
+            // Token genuinely revoked (password change, logout-all, expired)
+            return Err("Session expired. Please sign in again.".to_string());
+        }
+        // Transient failure (429 rate limit, 5xx server error) — return
+        // the original 401 response so the caller can retry later
+        return Ok(resp);
     }
 
     let data: serde_json::Value = refresh_resp
