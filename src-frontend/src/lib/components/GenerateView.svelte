@@ -672,7 +672,7 @@
           <button onclick={() => emit("navigate", "settings")} style="color: var(--color-secondary); background: none; border: none; cursor: pointer; font-family: inherit; font-size: 10px; font-weight: 600">Settings</button>
         </span>
       {:else}
-        <select bind:value={format} class="w-toolbar-pill w-toolbar-select">
+        <select data-tour="format" bind:value={format} class="w-toolbar-pill w-toolbar-select">
           {#each formats as fmt}
             <option value={fmt}>{fmt.charAt(0).toUpperCase() + fmt.slice(1)}</option>
           {/each}
@@ -683,6 +683,7 @@
         </button>
 
         <button
+          data-tour="adapt"
           onclick={() => { mode = mode === "generate" ? "adapt" : "generate"; }}
           class="w-toolbar-pill"
           class:active={mode === "adapt"}
@@ -957,6 +958,7 @@
         {:else}
           <!-- Normal generate input -->
           <textarea
+            data-tour="input"
             bind:value={prompt}
             onkeydown={(e) => { if (e.key === "Enter" && e.metaKey) handleGenerate(); }}
             class="flex-1 py-[10px] px-3 text-[13px] resize-none text-foreground placeholder-muted border border-border rounded-lg focus:outline-none focus:border-secondary"

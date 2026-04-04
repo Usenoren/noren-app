@@ -72,6 +72,10 @@
   let expandedEntryId = $state<string | null>(null);
   let expandedDiffSection = $state<string | null>(null);
 
+  // Sample submission (server profile)
+  let showSampleInput = $state(false);
+  let isSubmittingSample = $state(false);
+
   // Sync state
   let syncStatus = $state<SyncStatus | null>(null);
   let isSyncing = $state(false);
@@ -88,6 +92,14 @@
   let guidedResult = $state<GuidedEditResponse | null>(null);
   let guidedError = $state("");
   let showGuidedDiff = $state(false);
+
+  // Voice card collapse (persisted)
+  let voiceCardOpen = $state(localStorage.getItem("noren-voice-expanded") === "true");
+
+  function toggleVoiceCard() {
+    voiceCardOpen = !voiceCardOpen;
+    localStorage.setItem("noren-voice-expanded", voiceCardOpen ? "true" : "false");
+  }
 
   // Empty state
   let showManualCreate = $state(false);
@@ -166,6 +178,22 @@
     return section;
   }
 
+  async function handleSubmitSample() {
+    if (!sampleDraft.trim() || isSubmittingSample) return;
+    isSubmittingSample = true;
+    error = "";
+    try {
+      await uploadEditLog([{ text: sampleDraft.trim(), format: sampleFormat, added_at: new Date().toISOString() }]);
+      sampleDraft = "";
+      showSampleInput = false;
+      try { profileMeta = await getProfileMetadataInfo(); } catch {}
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isSubmittingSample = false;
+    }
+  }
+
   let displayContent = $derived(
     activeTab === "core"
       ? profile?.core_identity ?? ""
@@ -188,7 +216,9 @@
       // Load living profile status + metadata + history
       try {
         livingStatus = await getLivingProfileStatus();
-        if (livingStatus.enabled) {
+        // Always load refresh history for server profiles (edits tracked server-side).
+        // For local profiles, only load if local tracking is enabled.
+        if (overview.is_server || livingStatus.enabled) {
           await loadRefreshHistory();
         }
       } catch { /* not logged in or not available */ }
@@ -544,128 +574,135 @@
     {@const vo = overview.voice_overview}
     <div class="flex flex-col gap-3 h-full overflow-y-auto pv-stagger">
 
-      <!-- Voice Snapshot -->
-      {#if vo?.summary}
-        <div class="card-hero" style="padding: 14px 16px;">
-          <span class="section-label">Voice snapshot</span>
-          <p class="text-xs text-foreground leading-relaxed mt-2">{vo.summary}</p>
-        </div>
-      {:else}
-        <div class="p-3 card-hero">
-          <p class="text-sm font-medium text-foreground font-heading italic">Voice profile on Noren servers</p>
-          <p class="text-[10px] text-muted mt-1">
-            Your extracted profile is securely stored and used automatically when generating text.
-          </p>
-        </div>
-      {/if}
-
-      <!-- Voice Dimensions -->
-      {#if vo?.routing}
-        {@const routing = vo.routing}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Voice dimensions</span>
-          <div class="pv-dims">
-            {@render dimBar("Structure", routing.structure_predictability === "high" ? 85 : routing.structure_predictability === "medium" ? 50 : 15, routing.structure_predictability, "varied", "predictable")}
-            {@render dimBar("Register", routing.register_break_frequency * 10, `${routing.register_break_frequency} / 10`, "consistent", "shifting")}
-            {@render dimBar("Formality", routing.casual_marker_density === "high" ? 85 : routing.casual_marker_density === "medium" ? 50 : 15, routing.casual_marker_density, "formal", "casual")}
-            {@render dimBar("Phrasing", routing.signature_phrase_rigidity === "high" ? 85 : routing.signature_phrase_rigidity === "medium" ? 50 : 15, routing.signature_phrase_rigidity, "fluid", "fixed")}
+      <!-- Voice Card (collapsible) -->
+      <div class="pv-voice-card" class:open={voiceCardOpen}>
+        <button class="pv-vc-header" onclick={toggleVoiceCard}>
+          <div class="pv-vc-header-top">
+            <span class="font-heading text-sm italic text-foreground">Your voice</span>
+            <span class="pv-vc-chevron">
+              <svg viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+            </span>
           </div>
-        </div>
-      {/if}
+          {#if vo?.summary}
+            <p class="pv-vc-summary">
+              <em>{vo.summary.split('.')[0]}.</em>{vo.summary.split('.').length > 1 ? ' ' + vo.summary.split('.').slice(1).join('.').trim() : ''}
+            </p>
+          {:else}
+            <p class="pv-vc-summary"><em>Voice profile on Noren servers</em></p>
+          {/if}
+          {#if vo?.counts || vo?.baseline_rhythm || overview.formats.length > 0}
+            <div class="pv-vc-stats-row">
+              {#if vo?.counts?.profile_lines}
+                <span class="pv-vc-stat-chip">{vo.counts.profile_lines} <span>lines</span></span>
+              {/if}
+              {#if vo?.corpus?.unique_sample_count}
+                <span class="pv-vc-stat-chip">{vo.corpus.unique_sample_count} <span>samples</span></span>
+              {/if}
+              {#if vo?.baseline_rhythm?.longToShortRatio}
+                <span class="pv-vc-stat-chip">{vo.baseline_rhythm.longToShortRatio.toFixed(1)} <span>L:S</span></span>
+              {/if}
+              {#if overview.formats.length > 0}
+                <span class="pv-vc-stat-chip">{overview.formats.length} <span>formats</span></span>
+              {/if}
+            </div>
+          {/if}
+        </button>
 
-      <!-- Pattern Depth -->
-      {#if vo?.counts}
-        {@const counts = vo.counts}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Pattern depth</span>
-          <div class="pv-depth">
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.analogy_domains}</span>
-              <span class="pv-depth-name">analogy<br>families</span>
-            </div>
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.micro_constructions}</span>
-              <span class="pv-depth-name">sentence<br>patterns</span>
-            </div>
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.signature_phrases}</span>
-              <span class="pv-depth-name">signature<br>phrases</span>
-            </div>
-            <div class="pv-depth-item">
-              <span class="pv-depth-count">{counts.anti_patterns}</span>
-              <span class="pv-depth-name">anti-<br>patterns</span>
-            </div>
-            {#if vo.corpus}
-              <div class="pv-depth-item pv-depth-full">
-                <span class="pv-depth-count" style="font-size: 14px;">{counts.profile_lines}</span>
-                <span class="pv-depth-name">lines of voice DNA across {vo.corpus.unique_sample_count} samples</span>
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
+        <div class="pv-vc-detail-wrap">
+          <div class="pv-vc-detail-clip">
+            <div class="pv-vc-detail-inner">
 
-      <!-- Sentence Rhythm -->
-      {#if vo?.baseline_rhythm}
-        {@const rhythm = vo.baseline_rhythm}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Sentence rhythm</span>
-          <div style="margin-top: 10px;">
-            <div class="pv-rhythm-bar">
-              <div class="pv-rhythm-seg pv-rhythm-short" style="width: {rhythm.distributionPct.short}%"></div>
-              <div class="pv-rhythm-seg pv-rhythm-medium" style="width: {rhythm.distributionPct.medium}%"></div>
-              <div class="pv-rhythm-seg pv-rhythm-long" style="width: {rhythm.distributionPct.long}%"></div>
-              <div class="pv-rhythm-seg pv-rhythm-vlong" style="width: {rhythm.distributionPct.veryLong}%"></div>
-            </div>
-            <div class="pv-rhythm-legend">
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-secondary)"></span>Short &lt;8w</span>
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-accent)"></span>Medium 8-15w</span>
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-warning)"></span>Long 16-25w</span>
-              <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: #C23B2A"></span>25w+</span>
-            </div>
-            <div class="pv-rhythm-stats">
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{Math.round(rhythm.medianWordCount)}</span>
-                <span class="pv-rhythm-stat-lbl">median words</span>
-              </div>
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{rhythm.sentenceCeiling}</span>
-                <span class="pv-rhythm-stat-lbl">ceiling</span>
-              </div>
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{rhythm.longToShortRatio.toFixed(1)}</span>
-                <span class="pv-rhythm-stat-lbl">L:S ratio</span>
-              </div>
-              <div class="pv-rhythm-stat">
-                <span class="pv-rhythm-stat-val">{rhythm.medianCommasPerSentence.toFixed(1)}</span>
-                <span class="pv-rhythm-stat-lbl">commas/sent</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
+              {#if vo?.summary}
+                <div>
+                  <span class="section-label">Voice snapshot</span>
+                  <p class="text-xs text-foreground leading-relaxed mt-1.5">{vo.summary}</p>
+                </div>
+              {/if}
 
-      <!-- Format Cards -->
-      {#if overview.formats.length > 0}
-        <div class="card-flat" style="padding: 14px 16px;">
-          <span class="section-label">Formats</span>
-          <div class="pv-format-list">
-            {#each overview.formats as fmt}
-              {@const fmtRhythm = vo?.format_rhythms?.[fmt]}
-              <div class="pv-format-row">
-                <div class="pv-format-accent" style="background: {FORMAT_ACCENTS[fmt] || 'var(--color-primary)'}"></div>
-                <span class="pv-format-name">{fmt}</span>
-                {#if fmtRhythm}
-                  <div class="pv-format-stats">
-                    <span class="pv-format-stat"><strong>{Math.round(fmtRhythm.medianWordCount)}</strong> median</span>
-                    <span class="pv-format-stat"><strong>{fmtRhythm.longToShortRatio.toFixed(1)}</strong> L:S</span>
+              {#if vo?.routing}
+                {@const routing = vo.routing}
+                <div>
+                  <span class="section-label">Voice dimensions</span>
+                  <div class="pv-dims">
+                    {@render dimBar("Structure", routing.structure_predictability === "high" ? 85 : routing.structure_predictability === "medium" ? 50 : 15, routing.structure_predictability, "varied", "predictable")}
+                    {@render dimBar("Register", routing.register_break_frequency * 10, `${routing.register_break_frequency} / 10`, "consistent", "shifting")}
+                    {@render dimBar("Formality", routing.casual_marker_density === "high" ? 85 : routing.casual_marker_density === "medium" ? 50 : 15, routing.casual_marker_density, "formal", "casual")}
+                    {@render dimBar("Phrasing", routing.signature_phrase_rigidity === "high" ? 85 : routing.signature_phrase_rigidity === "medium" ? 50 : 15, routing.signature_phrase_rigidity, "fluid", "fixed")}
                   </div>
-                {/if}
-              </div>
-            {/each}
+                </div>
+              {/if}
+
+              {#if vo?.counts}
+                {@const counts = vo.counts}
+                <div>
+                  <span class="section-label">Pattern depth</span>
+                  <div class="pv-depth">
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.analogy_domains}</span><span class="pv-depth-name">analogy<br>families</span></div>
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.micro_constructions}</span><span class="pv-depth-name">sentence<br>patterns</span></div>
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.signature_phrases}</span><span class="pv-depth-name">signature<br>phrases</span></div>
+                    <div class="pv-depth-item"><span class="pv-depth-count">{counts.anti_patterns}</span><span class="pv-depth-name">anti-<br>patterns</span></div>
+                    {#if vo.corpus}
+                      <div class="pv-depth-item pv-depth-full">
+                        <span class="pv-depth-count" style="font-size: 14px;">{counts.profile_lines}</span>
+                        <span class="pv-depth-name">lines of voice DNA across {vo.corpus.unique_sample_count} samples</span>
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+
+              {#if vo?.baseline_rhythm}
+                {@const rhythm = vo.baseline_rhythm}
+                <div>
+                  <span class="section-label">Sentence rhythm</span>
+                  <div style="margin-top: 10px;">
+                    <div class="pv-rhythm-bar">
+                      <div class="pv-rhythm-seg pv-rhythm-short" style="width: {rhythm.distributionPct.short}%"></div>
+                      <div class="pv-rhythm-seg pv-rhythm-medium" style="width: {rhythm.distributionPct.medium}%"></div>
+                      <div class="pv-rhythm-seg pv-rhythm-long" style="width: {rhythm.distributionPct.long}%"></div>
+                      <div class="pv-rhythm-seg pv-rhythm-vlong" style="width: {rhythm.distributionPct.veryLong}%"></div>
+                    </div>
+                    <div class="pv-rhythm-legend">
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-secondary)"></span>Short &lt;8w</span>
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-accent)"></span>Medium 8-15w</span>
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: var(--color-warning)"></span>Long 16-25w</span>
+                      <span class="pv-rhythm-legend-item"><span class="pv-rhythm-dot" style="background: #C23B2A"></span>25w+</span>
+                    </div>
+                    <div class="pv-rhythm-stats-grid">
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{Math.round(rhythm.medianWordCount)}</span><span class="pv-rhythm-stat-lbl">median words</span></div>
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{rhythm.sentenceCeiling}</span><span class="pv-rhythm-stat-lbl">ceiling</span></div>
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{rhythm.longToShortRatio.toFixed(1)}</span><span class="pv-rhythm-stat-lbl">L:S ratio</span></div>
+                      <div class="pv-rhythm-stat"><span class="pv-rhythm-stat-val">{rhythm.medianCommasPerSentence.toFixed(1)}</span><span class="pv-rhythm-stat-lbl">commas/sent</span></div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+
+              {#if overview.formats.length > 0}
+                <div>
+                  <span class="section-label">Formats</span>
+                  <div class="pv-format-list">
+                    {#each overview.formats as fmt}
+                      {@const fmtRhythm = vo?.format_rhythms?.[fmt]}
+                      <div class="pv-format-row">
+                        <div class="pv-format-accent" style="background: {FORMAT_ACCENTS[fmt] || 'var(--color-primary)'}"></div>
+                        <span class="pv-format-name">{fmt}</span>
+                        {#if fmtRhythm}
+                          <div class="pv-format-stats">
+                            <span class="pv-format-stat"><strong>{Math.round(fmtRhythm.medianWordCount)}</strong> median</span>
+                            <span class="pv-format-stat"><strong>{fmtRhythm.longToShortRatio.toFixed(1)}</strong> L:S</span>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+            </div>
           </div>
         </div>
-      {/if}
+      </div>
 
       <!-- Guided Edit -->
       {#if isPro() && vo}
@@ -733,90 +770,234 @@
         </div>
       {/if}
 
-      <!-- Living Profile tab -->
-      <div class="flex gap-1 shrink-0 border-b border-border">
-        <button
-          onclick={() => switchTab("living")}
-          class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide
-            {activeTab === 'living'
-              ? 'border-b-2 border-accent text-accent font-medium'
-              : 'border-b-2 border-transparent text-muted hover:text-foreground'}"
-        >
-          Living Profile
-          {#if !canLivingProfile()}
-            <span class="ml-0.5 text-[8px] {activeTab === 'living' ? 'text-accent/70' : 'text-secondary'} font-medium">PRO</span>
-          {/if}
-        </button>
-      </div>
-
-      {#if activeTab === "living"}
-        {#if canLivingProfile()}
-        {@render livingTabContent()}
-        {:else}
-        <div class="flex-1 flex flex-col items-center justify-center gap-3 py-8">
-          <div class="p-4 bg-tint border border-secondary/20 rounded-xl text-center max-w-[260px]">
-            <p class="text-subhead text-secondary">Living Profile</p>
-            <p class="text-[10px] text-muted mt-1 leading-relaxed">
-              Your profile evolves as you write. Noren tracks your edits and refines automatically.
-            </p>
-            <button
-              onclick={() => handleUpgrade("pro")}
-              class="mt-3 px-4 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
-            >
-              Upgrade to Pro
-            </button>
+      <!-- Living Profile section (server profiles) -->
+      {#if canLivingProfile()}
+        <div class="card-flat" style="padding: 12px 14px;">
+          <div class="flex items-center gap-1.5 mb-3">
+            <div class="w-[5px] h-[5px] rounded-full bg-secondary animate-voice-pulse"></div>
+            <span class="section-label" style="margin:0">Living Profile</span>
           </div>
-        </div>
-        {/if}
-      {/if}
 
-      {#if canLivingProfile() && activeTab !== "living"}
-        <p class="text-[10px] text-muted shrink-0">Your profile refines automatically as you write.</p>
-      {/if}
-
-      {#if canExport()}
-        <div class="flex items-center justify-between shrink-0">
-          <span class="text-[10px] text-muted">Stored on Noren servers</span>
+          <!-- Upload & Refresh -->
           <button
-            onclick={handleExport}
-            disabled={isExporting}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md"
+            onclick={handleUploadAndRefresh}
+            disabled={isUploading || isRefreshing || daysUntilRefresh() !== null}
+            class="w-full py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-md
+              {daysUntilRefresh() !== null
+                ? 'bg-surface text-muted border border-border'
+                : 'bg-secondary text-white hover:bg-secondary/90'}"
           >
-            {isExporting ? "Exporting..." : "Export as Markdown"}
+            {#if isUploading}
+              <span class="inline-flex items-center gap-1"><LoadingSpinner /> Uploading edits...</span>
+            {:else if isRefreshing}
+              <span class="inline-flex items-center gap-1"><LoadingSpinner /> Analyzing patterns...</span>
+            {:else if daysUntilRefresh() !== null}
+              Available in {daysUntilRefresh()} day{daysUntilRefresh() !== 1 ? "s" : ""}
+            {:else}
+              Refresh profile
+            {/if}
           </button>
-        </div>
-      {:else if isPro() && exportUnlockProgress() != null && exportUnlockRemainingCents() != null}
-        {@const remaining = exportUnlockRemainingCents()!}
-        {@const progress = exportUnlockProgress()!}
-        {@const thresholdCents = progress < 100 ? Math.round(remaining / (1 - progress / 100)) : remaining}
-        {@const paidDollars = Math.round((thresholdCents - remaining) / 100)}
-        {@const thresholdDollars = Math.round(thresholdCents / 100)}
-        {@const remainingDollars = Math.round(remaining / 100)}
-        <div class="pv-export-card shrink-0">
-          <span class="section-label" style="display:block; margin-bottom: 12px;">Export</span>
-          <div class="pv-export-row">
-            <span><strong>${paidDollars}</strong> of ${thresholdDollars}</span>
-            <span>Unlocks with subscription</span>
-          </div>
-          <div class="pv-export-bar">
-            <div class="pv-export-bar-fill" style="--pct: {progress}%"></div>
-          </div>
-          <div class="pv-export-foot">
-            <span class="pv-export-hint">Unlocks as you stay subscribed, or pay the difference now.</span>
-            <button onclick={handleExportUnlock} class="pv-export-pay">
-              Unlock · ${remainingDollars}
-            </button>
-          </div>
+
+          {#if refreshMessage}
+            <p class="text-[10px] text-muted mt-2">{refreshMessage}</p>
+          {/if}
+
+          <!-- Signal counts -->
+          {#if profileMeta && (profileMeta.edits_pending > 0 || profileMeta.samples_pending > 0 || profileMeta.generations_since_refresh > 0)}
+            <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
+              {#if profileMeta.edits_pending > 0}
+                <span>{profileMeta.edits_pending} edit{profileMeta.edits_pending !== 1 ? "s" : ""}</span>
+              {/if}
+              {#if profileMeta.samples_pending > 0}
+                <span>{profileMeta.samples_pending} sample{profileMeta.samples_pending !== 1 ? "s" : ""}</span>
+              {/if}
+              {#if profileMeta.generations_since_refresh > 0}
+                <span>{profileMeta.generations_since_refresh} generation{profileMeta.generations_since_refresh !== 1 ? "s" : ""}</span>
+              {/if}
+              <span style="opacity: 0.6">queued for next refresh</span>
+            </div>
+          {/if}
+
+          <!-- Add writing sample -->
+          {#if showSampleInput}
+            <div class="mt-2 flex flex-col gap-2">
+              <textarea
+                bind:value={sampleDraft}
+                placeholder="Paste a writing sample..."
+                class="w-full p-2.5 text-xs leading-relaxed border border-border bg-surface text-foreground resize-none rounded-md focus:outline-none focus:border-secondary"
+                rows="5"
+              ></textarea>
+              <div class="flex flex-wrap gap-1">
+                {#each overview?.formats || ["general"] as fmt}
+                  <button
+                    onclick={() => { sampleFormat = fmt; }}
+                    class="px-2.5 py-1 text-[10px] rounded cursor-pointer transition-colors
+                      {sampleFormat === fmt ? 'bg-secondary text-white' : 'bg-surface border border-border text-muted hover:text-foreground'}"
+                  >{fmt}</button>
+                {/each}
+              </div>
+              <div class="flex gap-2">
+                <button
+                  onclick={() => { showSampleInput = false; sampleDraft = ""; }}
+                  class="px-2.5 py-1 text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors"
+                >Cancel</button>
+                <button
+                  onclick={handleSubmitSample}
+                  disabled={!sampleDraft.trim() || isSubmittingSample}
+                  class="px-2.5 py-1 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium disabled:opacity-50"
+                >{isSubmittingSample ? "Submitting..." : "Submit sample"}</button>
+              </div>
+            </div>
+          {:else}
+            <button
+              onclick={() => { showSampleInput = true; }}
+              class="mt-2 text-[10px] text-muted hover:text-secondary cursor-pointer transition-colors"
+            >+ Add writing sample</button>
+          {/if}
+
+          <!-- Inline observations after a fresh refresh -->
+          {#if latestObservations.length > 0}
+            <div class="mt-2 pl-2.5" style="border-left: 2px solid var(--color-secondary)">
+              {#each latestObservations as obs}
+                <p class="text-[10px] text-foreground leading-relaxed py-0.5">{obs}</p>
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Rollback confirmation -->
+          {#if showRollbackConfirm}
+            <div class="mt-2 p-2.5 bg-surface border border-border rounded-xl">
+              <p class="text-[10px] text-muted leading-relaxed">Any manual edits made after the last refresh will be lost.</p>
+              <div class="flex gap-2 mt-2">
+                <button
+                  onclick={() => { showRollbackConfirm = false; }}
+                  class="px-2 py-0.5 text-[10px] border border-border text-muted hover:text-foreground cursor-pointer rounded transition-colors"
+                >Cancel</button>
+                <button
+                  onclick={handleRollback}
+                  disabled={isRollingBack}
+                  class="px-2 py-0.5 text-[10px] bg-secondary text-white hover:bg-secondary/90 cursor-pointer rounded transition-colors font-medium disabled:opacity-50"
+                >
+                  {#if isRollingBack}
+                    <span class="inline-flex items-center gap-1"><LoadingSpinner /> Restoring...</span>
+                  {:else}
+                    Confirm rollback
+                  {/if}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Evolution Timeline -->
+          {#if refreshHistory.length > 0}
+            <div class="relative pl-4 mt-3">
+              <div class="absolute left-[5px] top-[6px] bottom-0 w-px" style="background: var(--color-border)"></div>
+              <div class="flex flex-col gap-0">
+                {#each refreshHistory as entry, i}
+                  {@const isExpanded = expandedEntryId === entry.id}
+                  {@const isLatestActive = i === 0 && !entry.rolled_back}
+                  <div
+                    class="relative transition-opacity duration-200"
+                    style={entry.rolled_back ? "opacity: 0.5" : ""}
+                  >
+                    <div
+                      class="absolute -left-4 top-[5px] w-[10px] h-[10px] rounded-full border-2 transition-colors"
+                      style="background: {isLatestActive ? 'var(--color-secondary)' : 'var(--color-surface)'}; border-color: {isLatestActive ? 'var(--color-secondary)' : 'var(--color-border)'}"
+                    ></div>
+                    <button
+                      onclick={() => toggleEntry(entry.id)}
+                      class="w-full text-left py-2 cursor-pointer"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs text-foreground">{formatDate(entry.created_at)}</span>
+                        {#if entry.rolled_back}
+                          <span class="px-1.5 py-px text-[8px] uppercase tracking-wide font-medium rounded" style="color: var(--color-error); opacity: 0.7; border: 1px solid var(--color-error); border-opacity: 0.2">Rolled back</span>
+                        {/if}
+                        {#if !isExpanded}
+                          <svg class="w-[8px] h-[8px] ml-auto shrink-0" viewBox="0 0 8 8" fill="none" stroke="var(--color-muted)" stroke-width="1.5" stroke-linecap="round"><path d="M2 3l2 2 2-2"/></svg>
+                        {/if}
+                      </div>
+                      <p class="text-[10px] text-muted mt-0.5">
+                        {entry.edits_analyzed} edit{entry.edits_analyzed !== 1 ? "s" : ""}, {entry.samples_analyzed} sample{entry.samples_analyzed !== 1 ? "s" : ""}, {entry.generations_analyzed} generation{entry.generations_analyzed !== 1 ? "s" : ""}
+                      </p>
+                    </button>
+                    {#if isExpanded}
+                      <div class="pb-3 flex flex-col gap-2.5">
+                        {#if entry.observations.length > 0}
+                          <div>
+                            <span class="text-[9px] uppercase tracking-wide text-muted font-medium">What we noticed</span>
+                            <div class="mt-1 pl-2.5" style="border-left: 2px solid var(--color-secondary)">
+                              {#each entry.observations as obs}
+                                <p class="text-[10px] text-foreground leading-relaxed py-0.5">{obs}</p>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                        {#if entry.diffs.length > 0}
+                          <div>
+                            <span class="text-[9px] uppercase tracking-wide text-muted font-medium">Changes</span>
+                            <div class="mt-1 flex flex-col gap-1">
+                              {#each entry.diffs as diff}
+                                {@const isDiffOpen = expandedDiffSection === diff.section}
+                                <div>
+                                  <button
+                                    onclick={() => toggleDiffSection(diff.section)}
+                                    class="flex items-center gap-1.5 text-[10px] text-foreground cursor-pointer hover:text-secondary transition-colors py-0.5 w-full text-left"
+                                  >
+                                    <svg
+                                      class="w-[7px] h-[7px] shrink-0 transition-transform duration-150"
+                                      class:rotate-90={isDiffOpen}
+                                      viewBox="0 0 7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                    ><path d="M2.5 1l2.5 2.5-2.5 2.5"/></svg>
+                                    {formatSectionName(diff.section)}
+                                  </button>
+                                  {#if isDiffOpen}
+                                    <div class="ml-3 mt-1 flex flex-col gap-1.5">
+                                      <div class="relative overflow-hidden rounded" style="max-height: 80px">
+                                        <pre class="text-[10px] font-mono text-muted p-2 leading-relaxed whitespace-pre-wrap" style="opacity: 0.6">{diff.before.slice(0, 500)}{diff.before.length > 500 ? "..." : ""}</pre>
+                                        <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
+                                      </div>
+                                      <div class="w-full h-px" style="background: var(--color-border)"></div>
+                                      <div class="relative overflow-hidden rounded" style="max-height: 80px">
+                                        <pre class="text-[10px] font-mono text-secondary p-2 leading-relaxed whitespace-pre-wrap">{diff.after.slice(0, 500)}{diff.after.length > 500 ? "..." : ""}</pre>
+                                        <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
+                                      </div>
+                                    </div>
+                                  {/if}
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                        {#if isLatestActive && profileMeta?.can_rollback}
+                          <button
+                            onclick={() => { showRollbackConfirm = true; }}
+                            class="self-start text-[10px] text-muted hover:text-foreground cursor-pointer transition-colors mt-0.5"
+                          >Undo this refresh</button>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {:else if !isRefreshing && !isUploading}
+            <p class="text-[10px] text-muted text-center py-3">
+              No refreshes yet. Keep writing and come back when you are ready.
+            </p>
+          {/if}
         </div>
       {:else}
-        <div class="flex items-center justify-between shrink-0">
-          <span class="text-[10px] text-muted">Stored on Noren servers</span>
+        <div class="p-2.5 bg-tint border border-secondary/10 rounded-xl">
+          <p class="text-subhead text-secondary">Living Profile</p>
+          <p class="text-[10px] text-muted mt-1 leading-relaxed">
+            Your profile evolves as you write. Noren tracks your edits and refines automatically.
+          </p>
           <button
-            onclick={() => handleUpgrade("export")}
-            class="px-3 py-1.5 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
-            title="One-time purchase to export your profile"
+            onclick={() => handleUpgrade("pro")}
+            class="mt-3 px-4 py-1.5 text-[10px] font-medium bg-secondary text-white hover:bg-secondary/90 transition-colors cursor-pointer rounded uppercase tracking-wide"
           >
-            Export to disk <span class="text-[8px] text-secondary font-medium">$</span>
+            Upgrade to Pro
           </button>
         </div>
       {/if}
@@ -826,6 +1007,31 @@
           {error}
         </div>
       {/if}
+
+      <!-- Footer: Export -->
+      <div class="pv-footer-row">
+        <span class="text-[10px] text-muted">Stored on Noren servers</span>
+        {#if canExport()}
+          <button
+            onclick={handleExport}
+            disabled={isExporting}
+            class="pv-footer-export"
+          >
+            {isExporting ? "..." : "Export as Markdown"}
+          </button>
+        {:else if isPro() && exportUnlockProgress() != null}
+          <button onclick={handleExportUnlock} class="pv-footer-btn">
+            Export <span class="text-[8px] text-secondary font-medium">${Math.round((exportUnlockRemainingCents() || 0) / 100)}</span>
+          </button>
+        {:else}
+          <button
+            onclick={() => handleUpgrade("export")}
+            class="pv-footer-btn"
+          >
+            Export <span class="text-[8px] text-secondary font-medium">$</span>
+          </button>
+        {/if}
+      </div>
     </div>
   {:else}
     <!-- Local profile -->
@@ -1464,6 +1670,121 @@
     background: var(--color-secondary);
     color: white;
   }
+
+  /* Voice Card (collapsible) */
+  .pv-voice-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    border-top: 2px solid var(--color-accent);
+    box-shadow: var(--shadow-card);
+  }
+  .pv-vc-header {
+    display: block;
+    width: 100%;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+    text-align: left;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .pv-vc-header:hover { background: rgba(30,49,72,0.015); }
+  .pv-vc-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pv-vc-chevron {
+    color: var(--color-muted);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pv-vc-chevron svg { width: 10px; height: 10px; }
+  .pv-voice-card.open .pv-vc-chevron { transform: rotate(180deg); }
+  .pv-vc-summary {
+    font-size: 11px; color: var(--color-muted);
+    line-height: 1.5; margin-top: 6px;
+  }
+  .pv-vc-summary em {
+    font-style: normal;
+    color: var(--color-foreground);
+  }
+  .pv-vc-stats-row {
+    display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+  }
+  .pv-vc-stat-chip {
+    font-size: 10px; font-weight: 600; color: var(--color-foreground);
+    background: var(--color-tint); padding: 2px 8px; border-radius: 6px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .pv-vc-stat-chip span {
+    font-weight: 400; color: var(--color-muted); margin-left: 2px;
+  }
+  .pv-vc-detail-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pv-voice-card.open .pv-vc-detail-wrap {
+    grid-template-rows: 1fr;
+  }
+  .pv-vc-detail-clip {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .pv-vc-detail-inner {
+    padding: 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 14px;
+  }
+
+  /* Rhythm stats 2x2 grid */
+  .pv-rhythm-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* Footer row */
+  .pv-footer-row {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .pv-footer-left {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pv-footer-btn {
+    padding: 5px 10px; font-size: 10px; font-weight: 500; font-family: inherit;
+    border: 1px solid var(--color-border); border-radius: 6px;
+    background: transparent; color: var(--color-muted); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pv-footer-btn:hover { border-color: var(--color-secondary); color: var(--color-foreground); }
+  .pv-footer-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pv-footer-sep {
+    width: 1px; height: 16px; background: var(--color-border); margin: 0 4px;
+  }
+  .pv-footer-export {
+    padding: 6px 14px; font-size: 11px; font-weight: 600; font-family: inherit;
+    color: white; background: var(--color-primary); border: none; border-radius: 8px;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .pv-footer-export:hover { opacity: 0.9; }
+  .pv-footer-export:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Voice Dimensions */
   .pv-dims {

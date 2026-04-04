@@ -31,7 +31,17 @@
   import NorenMark from "./NorenMark.svelte";
   import AnnouncementBell from "./AnnouncementBell.svelte";
   import ToastContainer from "./ToastContainer.svelte";
+  import SpotlightTour from "./SpotlightTour.svelte";
   import { toastWarning } from "$lib/stores/toast.svelte";
+  import { startTour, type TourStep } from "$lib/stores/tour.svelte";
+
+  const appTourSteps: TourStep[] = [
+    { target: "format", description: "Every format has its own rhythm. Pick one and Noren adjusts length, structure, and tone to match.", placement: "bottom" },
+    { target: "adapt", description: "Have a draft already? Switch to Adapt. Paste your text and Noren rewrites it in your voice.", placement: "bottom" },
+    { target: "chat", description: "Your thinking space. Brainstorm, research, or talk through ideas before you write.", placement: "right" },
+    { target: null, description: "Press \u2318K in any text field on your Mac and Noren writes in your voice. Telegram, Mail, Slack, anywhere.", placement: "center" },
+    { target: "input", description: "You\u2019re ready. Describe what you want to write and Noren takes it from here.", placement: "top" },
+  ];
 
   type View = "generate" | "repurpose" | "chat" | "profiles" | "extract" | "account" | "settings" | "help" | "onboarding";
   let view: View = $state("generate");
@@ -112,7 +122,19 @@
     } else {
       view = "generate";
     }
+    // Trigger tour after onboarding lands on generate
+    if (!targetView || targetView === "generate") {
+      setTimeout(() => startTour(appTourSteps), 700);
+    }
   }
+
+  // Also trigger tour for returning users who completed onboarding in a previous session
+  // but haven't seen the tour yet (e.g. app was closed mid-onboarding)
+  $effect(() => {
+    if (!loading && !needsOnboarding && view === "generate") {
+      setTimeout(() => startTour(appTourSteps), 700);
+    }
+  });
 
   async function handleRequestPermissions() {
     await requestPermissions();
@@ -147,6 +169,7 @@
         <div class="flex flex-col items-center gap-0.5">
           {#each navItems as item}
             <button
+              data-tour={item.id === "chat" ? "chat" : undefined}
               onclick={() => { view = item.id; }}
               class="w-[44px] h-[48px] flex flex-col items-center justify-center gap-[3px] rounded-md transition-colors cursor-pointer relative
                 {view === item.id
@@ -306,6 +329,7 @@
       </div>
     </div>
   {/if}
+  <SpotlightTour />
   <ToastContainer />
 </div>
 {/if}
