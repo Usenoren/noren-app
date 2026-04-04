@@ -49,8 +49,9 @@ jobs:
       - name: Build noren-keychain-host
         run: |
           cd src-tauri
-          cargo build --release --bin noren-keychain-host --target ${{ matrix.target }}
           mkdir -p binaries
+          touch binaries/noren-keychain-host-${{ matrix.target }}
+          cargo build --release --bin noren-keychain-host --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/noren-keychain-host \
              binaries/noren-keychain-host-${{ matrix.target }}
 
