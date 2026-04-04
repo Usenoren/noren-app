@@ -13,6 +13,10 @@
   <a href="https://usenoren.ai">Website</a> · <a href="https://usenoren.ai">Download</a>
 </p>
 
+<p align="center">
+  <img src="demo-weave.gif" alt="Noren Weave: type a prompt, get output in your voice" width="800">
+</p>
+
 ---
 
 ## What is Noren?
