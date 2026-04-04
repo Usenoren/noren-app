@@ -56,7 +56,7 @@ jobs:
              binaries/noren-keychain-host-${{ matrix.target }}
 
       - name: Build Tauri app
-        run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
+        run: cargo tauri build --target ${{ matrix.target }}
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
