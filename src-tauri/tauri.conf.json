@@ -17,6 +17,14 @@
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' asset: https://asset.localhost"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNEQjIxQTVERkQyMEJGRjkKUldUNXZ5RDlYUnF5UFFySGhoUyt3UldsQW9yVHlyMUlCak9vbTVSU0tabURTYlNNdGVvTUppa1kK",
+      "endpoints": [
+        "https://api.usenoren.ai/v1/update/{{target}}/{{current_version}}"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["dmg", "app"],
