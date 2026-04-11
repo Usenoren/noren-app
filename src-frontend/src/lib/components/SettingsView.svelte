@@ -481,8 +481,7 @@
             <div>
               <div class="sv-setting-label">Model</div>
               <div class="sv-setting-desc">
-                <span class="font-mono text-foreground">{settings.provider.model}</span>
-                <span class="sv-status-badge sv-badge-info" style="margin-left: 6px;">Voice router</span>
+                <span class="text-foreground">Noren Smart Router</span>
               </div>
               <div class="text-[11px] text-muted" style="margin-top: 2px;">Selected automatically based on your voice profile</div>
             </div>
