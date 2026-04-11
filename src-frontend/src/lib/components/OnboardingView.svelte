@@ -393,9 +393,9 @@
             await afterAuth();
             return;
           }
-        } catch (e) {
-          error = friendlyError(e);
-          return;
+        } catch {
+          // Silently retry — transient errors (rate limits, network blips)
+          // should not abort the polling loop
         }
       }
       error = "Sign-in timed out. Please try again.";
