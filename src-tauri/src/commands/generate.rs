@@ -76,9 +76,33 @@ pub async fn generate(
     };
 
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-        generate_pro(&config, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref(), None).await
+        generate_pro(
+            &config,
+            &prompt,
+            &format,
+            &level,
+            mode,
+            &pipeline,
+            quick_action.as_deref(),
+            context.as_deref(),
+            attachments.as_deref(),
+            None,
+        )
+        .await
     } else {
-        generate_byok(&config, state.encryption_key, &prompt, &format, &level, mode, &pipeline, quick_action.as_deref(), context.as_deref(), attachments.as_deref()).await
+        generate_byok(
+            &config,
+            state.encryption_key,
+            &prompt,
+            &format,
+            &level,
+            mode,
+            &pipeline,
+            quick_action.as_deref(),
+            context.as_deref(),
+            attachments.as_deref(),
+        )
+        .await
     }
 }
 
@@ -102,10 +126,11 @@ async fn generate_pro(
         .unwrap_or("https://api.usenoren.ai")
         .to_string();
     let auth_token = crate::keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
+        .ok_or("Not signed in to Noren. Go to Settings to sign in.")?;
 
     let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
-    let mut client = noren_engine::NorenProxyClient::new(server_url, auth_token, format.to_string());
+    let mut client =
+        noren_engine::NorenProxyClient::new(server_url, auth_token, format.to_string());
     if let Some(rt) = refresh_token {
         client = client.with_token_refresh(rt, |new_access, new_refresh| {
             let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
@@ -143,7 +168,7 @@ async fn generate_pro(
             generation_id,
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
     Ok(GenerateResult {
         text: response.content,
@@ -248,23 +273,27 @@ async fn generate_byok(
     // If someone manually set Opus, respect their choice.
     // Quick actions skip routing (stay on configured model for speed).
     let is_default_model = config.provider.model == "claude-sonnet-4-6";
-    let (active_model, route_info) =
-        if quick_action.is_some() {
-            (config.provider.model.clone(), None)
-        } else if config.provider.provider_type == noren_engine::ProviderType::Anthropic && is_default_model {
-            if let Some(ref meta) = metadata {
-                let decision = noren_engine::generate::voice_router::route_voice_to_model(meta, format);
-                if decision.model != config.provider.model {
-                    (decision.model.clone(), Some((decision.model, decision.reason)))
-                } else {
-                    (config.provider.model.clone(), None)
-                }
+    let (active_model, route_info) = if quick_action.is_some() {
+        (config.provider.model.clone(), None)
+    } else if config.provider.provider_type == noren_engine::ProviderType::Anthropic
+        && is_default_model
+    {
+        if let Some(ref meta) = metadata {
+            let decision = noren_engine::generate::voice_router::route_voice_to_model(meta, format);
+            if decision.model != config.provider.model {
+                (
+                    decision.model.clone(),
+                    Some((decision.model, decision.reason)),
+                )
             } else {
                 (config.provider.model.clone(), None)
             }
         } else {
             (config.provider.model.clone(), None)
-        };
+        }
+    } else {
+        (config.provider.model.clone(), None)
+    };
 
     let client: Box<dyn noren_engine::LlmClient> = {
         let api_key = if config.provider.requires_key {
@@ -329,7 +358,7 @@ async fn generate_byok(
     let response = client
         .complete(&messages, &options)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
     // Run output checks against the generated text
     let rhythm = metadata.as_ref().and_then(|m| {
@@ -430,36 +459,33 @@ pub async fn generate_comparison(
     };
 
     // For "without voice", always use legacy messages path (even for Pro)
-    let client: Box<dyn noren_engine::LlmClient> =
-        if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-            let server_url = config
-                .server_url
-                .as_deref()
-                .unwrap_or("https://api.usenoren.ai")
-                .to_string();
-            let auth_token = crate::keychain::get_api_key("noren-pro-token")
-                .ok_or("Not logged in to Noren Pro.")?;
-            let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
-            let mut proxy = noren_engine::NorenProxyClient::new(
-                server_url,
-                auth_token,
-                format.clone(),
-            );
-            if let Some(rt) = refresh_token {
-                proxy = proxy.with_token_refresh(rt, |new_access, new_refresh| {
-                    let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
-                    let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
-                });
-            }
-            Box::new(proxy)
+    let client: Box<dyn noren_engine::LlmClient> = if config.inference_mode
+        == noren_engine::InferenceMode::NorenPro
+    {
+        let server_url = config
+            .server_url
+            .as_deref()
+            .unwrap_or("https://api.usenoren.ai")
+            .to_string();
+        let auth_token =
+            crate::keychain::get_api_key("noren-pro-token").ok_or("Not signed in to Noren.")?;
+        let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
+        let mut proxy = noren_engine::NorenProxyClient::new(server_url, auth_token, format.clone());
+        if let Some(rt) = refresh_token {
+            proxy = proxy.with_token_refresh(rt, |new_access, new_refresh| {
+                let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
+                let _ = crate::keychain::store_api_key("noren-pro-refresh", &new_refresh);
+            });
+        }
+        Box::new(proxy)
+    } else {
+        let api_key = if config.provider.requires_key {
+            crate::keychain::get_api_key(&config.provider.keychain_id())
         } else {
-            let api_key = if config.provider.requires_key {
-                crate::keychain::get_api_key(&config.provider.keychain_id())
-            } else {
-                None
-            };
-            noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
+            None
         };
+        noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
+    };
 
     let response = client
         .complete(&messages, &options)
@@ -533,15 +559,29 @@ pub async fn generate_stream(
     attachments: Option<Vec<String>>,
     generation_id: Option<String>,
 ) -> Result<(), String> {
-    eprintln!("[generate_stream] called: prompt={:?} format={}", &prompt[..prompt.len().min(30)], format);
+    eprintln!(
+        "[generate_stream] called: prompt={:?} format={}",
+        &prompt[..prompt.len().min(30)],
+        format
+    );
     // Reset cancellation flag at start
-    state.cancel_generation.store(false, std::sync::atomic::Ordering::Relaxed);
+    state
+        .cancel_generation
+        .store(false, std::sync::atomic::Ordering::Relaxed);
     let config = state.config.lock().unwrap().clone();
 
     if config.inference_mode != noren_engine::InferenceMode::NorenPro {
         // BYOK: fall back to blocking generate, emit done event
         let result = generate(
-            state, prompt, format, level, mode, None, context, attachments, None,
+            state,
+            prompt,
+            format,
+            level,
+            mode,
+            None,
+            context,
+            attachments,
+            None,
         )
         .await?;
         let _ = window.emit(
@@ -563,10 +603,9 @@ pub async fn generate_stream(
         .unwrap_or("https://api.usenoren.ai")
         .to_string();
     let auth_token = crate::keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
+        .ok_or("Not signed in to Noren. Go to Settings to sign in.")?;
     let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
-    let mut client =
-        noren_engine::NorenProxyClient::new(server_url, auth_token, format.clone());
+    let mut client = noren_engine::NorenProxyClient::new(server_url, auth_token, format.clone());
     if let Some(rt) = refresh_token {
         client = client.with_token_refresh(rt, |new_access, new_refresh| {
             let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
@@ -599,7 +638,7 @@ pub async fn generate_stream(
             &options,
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
     // Read SSE stream line by line
     use futures_util::StreamExt;
@@ -608,9 +647,17 @@ pub async fn generate_stream(
 
     while let Some(chunk) = stream.next().await {
         // Check cancellation flag
-        if state.cancel_generation.load(std::sync::atomic::Ordering::Relaxed) {
-            state.cancel_generation.store(false, std::sync::atomic::Ordering::Relaxed);
-            let _ = window.emit("gen:error", serde_json::json!({"type": "error", "message": "Generation cancelled"}));
+        if state
+            .cancel_generation
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            state
+                .cancel_generation
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            let _ = window.emit(
+                "gen:error",
+                serde_json::json!({"type": "error", "message": "Generation cancelled"}),
+            );
             return Ok(());
         }
         let chunk = chunk.map_err(|e| e.to_string())?;
@@ -629,7 +676,8 @@ pub async fn generate_stream(
 
             match serde_json::from_str::<StreamEvent>(json_str) {
                 Ok(event) => {
-                    let is_terminal = matches!(&event, StreamEvent::Done { .. } | StreamEvent::Error { .. });
+                    let is_terminal =
+                        matches!(&event, StreamEvent::Done { .. } | StreamEvent::Error { .. });
                     let event_name = match &event {
                         StreamEvent::Delta { .. } => "gen:delta",
                         StreamEvent::Done { .. } => "gen:done",

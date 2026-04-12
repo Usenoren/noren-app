@@ -165,7 +165,13 @@ pub async fn repurpose(
     let config = state.config.lock().unwrap().clone();
 
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-        repurpose_pro(&config, &source_content, &source_format, target_formats.as_deref()).await
+        repurpose_pro(
+            &config,
+            &source_content,
+            &source_format,
+            target_formats.as_deref(),
+        )
+        .await
     } else {
         repurpose_byok(
             &config,
@@ -189,83 +195,21 @@ async fn repurpose_pro(
         .as_deref()
         .unwrap_or("https://api.usenoren.ai")
         .to_string();
-    let auth_token = crate::keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
-
-    let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
 
     let body = serde_json::json!({
         "source_content": source_content,
         "source_format": source_format,
         "target_formats": target_formats,
     });
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/repurpose/", server_url))
-        .json(&body)
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if resp.status() == 401 {
-        // Try token refresh
-        if let Some(rt) = refresh_token {
-            let refresh_resp = client
-                .post(format!("{}/v1/auth/refresh", server_url))
-                .json(&serde_json::json!({ "refresh_token": rt }))
-                .send()
-                .await
-                .map_err(|e| e.to_string())?;
-
-            if refresh_resp.status().is_success() {
-                let tokens: serde_json::Value =
-                    refresh_resp.json().await.map_err(|e| e.to_string())?;
-                let new_access = tokens["access_token"]
-                    .as_str()
-                    .ok_or("Missing access_token in refresh response")?;
-                let new_refresh = tokens["refresh_token"]
-                    .as_str()
-                    .ok_or("Missing refresh_token in refresh response")?;
-                let _ = crate::keychain::store_api_key("noren-pro-token", new_access);
-                let _ = crate::keychain::store_api_key("noren-pro-refresh", new_refresh);
-
-                // Retry with new token
-                let retry_resp = client
-                    .post(format!("{}/v1/repurpose/", server_url))
-                    .json(&body)
-                    .header("Authorization", format!("Bearer {}", new_access))
-                    .send()
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                if !retry_resp.status().is_success() {
-                    let text = retry_resp.text().await.unwrap_or_default();
-                    return Err(format!("Server error after token refresh: {}", text));
-                }
-
-                let data: ServerRepurposeResponse =
-                    retry_resp.json().await.map_err(|e| e.to_string())?;
-                return Ok(RepurposeResult {
-                    total_input_tokens: data.total_input_tokens,
-                    total_output_tokens: data.total_output_tokens,
-                    results: data
-                        .results
-                        .into_iter()
-                        .map(|r| RepurposeFormatResult {
-                            format: r.format,
-                            content: r.content,
-                            input_tokens: r.input_tokens,
-                            output_tokens: r.output_tokens,
-                            passed: r.passed,
-                        })
-                        .collect(),
-                });
-            }
-        }
-        return Err("Authentication failed. Please sign in again.".to_string());
-    }
+    let repurpose_url = format!("{}/v1/repurpose/", server_url);
+    let resp = crate::auth_client::authed_request(&server_url, |client, token| {
+        client
+            .post(&repurpose_url)
+            .json(&body)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await
+    .map_err(crate::auth_client::normalize_auth_error)?;
 
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -307,9 +251,7 @@ async fn repurpose_byok(
     let targets: Vec<String> = if let Some(specified) = target_formats {
         specified.to_vec()
     } else {
-        let source_family = FORMAT_FAMILIES
-            .iter()
-            .find(|f| f.contains(&source_format));
+        let source_family = FORMAT_FAMILIES.iter().find(|f| f.contains(&source_format));
         let exclude: std::collections::HashSet<&str> = match source_family {
             Some(fam) => fam.iter().copied().collect(),
             None => [source_format].into_iter().collect(),
