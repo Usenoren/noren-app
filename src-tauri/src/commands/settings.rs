@@ -358,16 +358,16 @@ pub async fn verify_email(
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/verify-email", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let verify_url = format!("{}/v1/auth/verify-email", server_url);
+    let payload = serde_json::json!({ "code": code });
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&verify_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -384,15 +384,14 @@ pub async fn resend_otp(
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/resend-otp", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let resend_url = format!("{}/v1/auth/resend-otp", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&resend_url)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -462,15 +461,14 @@ pub async fn request_delete_account(
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/request-account-deletion", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let request_url = format!("{}/v1/auth/request-account-deletion", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&request_url)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -488,16 +486,16 @@ pub async fn confirm_delete_account(
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/delete-account", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let delete_url = format!("{}/v1/auth/delete-account", server_url);
+    let payload = serde_json::json!({ "code": code });
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&delete_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -506,6 +504,8 @@ pub async fn confirm_delete_account(
 
     // Clean up local credentials
     let _ = keychain::delete_api_key("noren-pro-token");
+    let _ = keychain::delete_api_key("noren-pro-refresh");
+    let _ = keychain::delete_api_key("noren-pro-email");
 
     let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     Ok(data["message"].as_str().unwrap_or("Account deleted").to_string())
