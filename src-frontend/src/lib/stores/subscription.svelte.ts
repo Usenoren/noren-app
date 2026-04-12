@@ -68,7 +68,7 @@ export async function refresh(): Promise<void> {
     console.error("hasExtractionReceipt failed:", e);
   }
 
-  // Check server status (requires auth, will fail for free BYOK users)
+  // Check server status (requires auth; signed-out BYOK users will fail here)
   try {
     status = await getSubscriptionStatus();
   } catch (e) {
