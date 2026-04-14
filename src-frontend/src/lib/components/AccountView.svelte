@@ -24,9 +24,10 @@
     type SubscriptionStatus,
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
+  import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
   import { refresh as refreshSubscription, canExtract, isTrial, trialDaysLeft } from "$lib/stores/subscription.svelte";
-  import { friendlyError } from "$lib/utils/errors";
+  import { friendlyError, isAuthSessionError } from "$lib/utils/errors";
   import { toastInfo, toastWarning } from "$lib/stores/toast.svelte";
   import LoadingSpinner from "./LoadingSpinner.svelte";
 
@@ -70,11 +71,50 @@
 
   onMount(() => {
     setTimeout(() => { usageAnimated = true; }, 400);
+    let disposed = false;
+    const unlistenPromise = listen("usage:refresh", () => {
+      if (!disposed && settings?.noren_pro_logged_in) {
+        refreshUsageOnly();
+      }
+    });
+    return () => {
+      disposed = true;
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+    };
   });
 
   $effect(() => {
     loadAccount();
   });
+
+  async function refreshUsageOnly() {
+    if (!settings?.noren_pro_logged_in) return;
+    try {
+      proStatus = await getNorenProUsage();
+      setTimeout(() => { usageAnimated = true; }, 400);
+
+      if (proStatus?.generations_used != null && proStatus?.generations_limit != null && proStatus.generations_limit > 0) {
+        const pct = proStatus.generations_used / proStatus.generations_limit;
+        const warningKey = `gen-warning-${new Date().toISOString().slice(0, 7)}`;
+        if (pct >= 0.8 && pct < 1 && !sessionStorage.getItem(warningKey)) {
+          sessionStorage.setItem(warningKey, "1");
+          toastWarning(`You've used ${proStatus.generations_used} of your ${proStatus.generations_limit} monthly generations.`);
+        }
+      }
+    } catch (e) {
+      if (isAuthSessionError(e)) {
+        try {
+          await norenProLogout();
+          settings = await getSettings();
+          accountReady = true;
+        } catch { /* ignore */ }
+        proStatus = null;
+        subscription = null;
+      } else {
+        error = friendlyError(e);
+      }
+    }
+  }
 
   async function loadAccount() {
     accountReady = false;
@@ -89,15 +129,18 @@
           } catch {
             subscription = null;
           }
-        } catch {
-          try {
-            await norenProLogout();
-            settings = await getSettings();
-            accountReady = true;
-          } catch { /* ignore */ }
-          proStatus = null;
-          subscription = null;
-          return;
+        } catch (e) {
+          if (isAuthSessionError(e)) {
+            try {
+              await norenProLogout();
+              settings = await getSettings();
+              accountReady = true;
+            } catch { /* ignore */ }
+            proStatus = null;
+            subscription = null;
+            return;
+          }
+          error = friendlyError(e);
         }
       } else {
         proStatus = null;
@@ -229,9 +272,9 @@
             await refreshSubscription();
             return;
           }
-        } catch (e) {
-          error = friendlyError(e);
-          return;
+        } catch {
+          // Silently retry — transient errors (rate limits, network blips)
+          // should not abort the polling loop
         }
       }
       error = "Sign-in timed out. Please try again.";
@@ -802,8 +845,8 @@
           </p>
         {/if}
         <p class="text-[11px] text-muted leading-relaxed" style="margin-top: 4px;">
-          Already using BYOK?
-          <button class="av-link-btn" onclick={() => emit("navigate", "settings")}>Configure your API key in Settings.</button>
+          Prefer to stay signed out and use your own provider?
+          <button class="av-link-btn" onclick={() => emit("navigate", "settings")}>Configure BYOK in Settings.</button>
         </p>
       </div>
 

@@ -462,34 +462,33 @@
 
       <div class="divider-thread"></div>
 
-      <!-- ── Inference: Pro or BYOK ── -->
+      <!-- ── Inference ── -->
       {#if isNorenPro}
-        <!-- Noren Pro inference -->
+        <!-- Signed-in Noren inference -->
         <div class="card-hero sv-card-pad">
           <div class="flex items-center gap-2.5 mb-2">
-            <span class="text-subhead text-foreground">Noren Pro</span>
-            <span class="sv-status-badge sv-badge-active">Active</span>
+            <span class="text-subhead text-foreground">Noren Account</span>
+            <span class="sv-status-badge sv-badge-active">Signed in</span>
           </div>
-          <p class="text-xs text-muted leading-relaxed">No API key needed. Inference runs on Noren servers with your voice profile.</p>
+          <p class="text-xs text-muted leading-relaxed">No API key needed. Signed-in accounts use Noren's servers with your voice profile. Plan limits are applied server-side.</p>
           <div class="divider-thread" style="margin: 16px 0 12px;"></div>
-          <button onclick={() => emit("navigate", "account")} class="btn-outline text-xs">Manage subscription</button>
+          <button onclick={() => emit("navigate", "account")} class="btn-outline text-xs">Manage account</button>
         </div>
 
-        <!-- Model (read-only for Pro) -->
+        <!-- Model (read-only for signed-in accounts) -->
         <div class="card-flat">
           <div class="sv-setting-row">
             <div>
               <div class="sv-setting-label">Model</div>
               <div class="sv-setting-desc">
-                <span class="font-mono text-foreground">{settings.provider.model}</span>
-                <span class="sv-status-badge sv-badge-info" style="margin-left: 6px;">Voice router</span>
+                <span class="text-foreground">Noren Smart Router</span>
               </div>
               <div class="text-[11px] text-muted" style="margin-top: 2px;">Selected automatically based on your voice profile</div>
             </div>
           </div>
         </div>
 
-        <!-- Extended Thinking (Pro) -->
+        <!-- Extended Thinking (signed-in accounts) -->
         <div class="card-flat" style="overflow: hidden;">
           <div class="sv-setting-row">
             <div>
@@ -854,7 +853,6 @@
     border-radius: 100px;
   }
   .sv-badge-active { background: rgba(122,51,64,0.12); color: var(--color-accent); }
-  .sv-badge-info { background: var(--color-tint); color: var(--color-secondary); }
 
   /* ── Provider grid ── */
   .sv-provider-grid {

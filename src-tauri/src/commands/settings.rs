@@ -56,34 +56,32 @@ pub struct SetProviderArgs {
 }
 
 #[tauri::command]
-pub fn set_provider(
-    state: State<'_, AppState>,
-    provider: SetProviderArgs,
-) -> Result<(), String> {
-    let provider_config = if let Some(preset) = noren_engine::ProviderConfig::preset_by_name(&provider.name) {
-        // Use preset, but allow model override
-        let mut config = preset;
-        if let Some(m) = provider.model {
-            config.model = m;
-        }
-        if let Some(url) = provider.base_url {
-            config.base_url = url;
-        }
-        config
-    } else {
-        // Custom provider — all fields required
-        let provider_type = match provider.provider_type.as_deref() {
-            Some("anthropic") => noren_engine::ProviderType::Anthropic,
-            _ => noren_engine::ProviderType::OpenaiCompatible,
+pub fn set_provider(state: State<'_, AppState>, provider: SetProviderArgs) -> Result<(), String> {
+    let provider_config =
+        if let Some(preset) = noren_engine::ProviderConfig::preset_by_name(&provider.name) {
+            // Use preset, but allow model override
+            let mut config = preset;
+            if let Some(m) = provider.model {
+                config.model = m;
+            }
+            if let Some(url) = provider.base_url {
+                config.base_url = url;
+            }
+            config
+        } else {
+            // Custom provider — all fields required
+            let provider_type = match provider.provider_type.as_deref() {
+                Some("anthropic") => noren_engine::ProviderType::Anthropic,
+                _ => noren_engine::ProviderType::OpenaiCompatible,
+            };
+            noren_engine::ProviderConfig {
+                name: provider.name,
+                provider_type,
+                base_url: provider.base_url.unwrap_or_default(),
+                model: provider.model.unwrap_or_default(),
+                requires_key: provider.requires_key.unwrap_or(true),
+            }
         };
-        noren_engine::ProviderConfig {
-            name: provider.name,
-            provider_type,
-            base_url: provider.base_url.unwrap_or_default(),
-            model: provider.model.unwrap_or_default(),
-            requires_key: provider.requires_key.unwrap_or(true),
-        }
-    };
 
     let mut config = state.config.lock().unwrap();
     config.provider = provider_config;
@@ -93,10 +91,7 @@ pub fn set_provider(
 }
 
 #[tauri::command]
-pub fn update_model(
-    state: State<'_, AppState>,
-    model: String,
-) -> Result<(), String> {
+pub fn update_model(state: State<'_, AppState>, model: String) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     config.provider.model = model;
     save_config_file(&config)?;
@@ -104,10 +99,7 @@ pub fn update_model(
 }
 
 #[tauri::command]
-pub fn set_theme(
-    state: State<'_, AppState>,
-    theme: String,
-) -> Result<(), String> {
+pub fn set_theme(state: State<'_, AppState>, theme: String) -> Result<(), String> {
     const VALID: &[&str] = &[
         "kon", "charcoal", "classic", "sumi", "washi", "matcha", "kumo", "yoru",
     ];
@@ -120,10 +112,7 @@ pub fn set_theme(
 }
 
 #[tauri::command]
-pub fn update_base_url(
-    state: State<'_, AppState>,
-    base_url: String,
-) -> Result<(), String> {
+pub fn update_base_url(state: State<'_, AppState>, base_url: String) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     config.provider.base_url = base_url;
     save_config_file(&config)?;
@@ -131,19 +120,14 @@ pub fn update_base_url(
 }
 
 #[tauri::command]
-pub fn save_api_key(
-    state: State<'_, AppState>,
-    key: String,
-) -> Result<(), String> {
+pub fn save_api_key(state: State<'_, AppState>, key: String) -> Result<(), String> {
     let config = state.config.lock().unwrap();
     let keychain_id = config.provider.keychain_id();
     keychain::store_api_key(&keychain_id, &key)
 }
 
 #[tauri::command]
-pub fn remove_api_key(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub fn remove_api_key(state: State<'_, AppState>) -> Result<(), String> {
     let config = state.config.lock().unwrap();
     let keychain_id = config.provider.keychain_id();
     keychain::delete_api_key(&keychain_id)
@@ -159,8 +143,7 @@ pub async fn test_connection(
 
     // Resolve API key: provided key > keychain > none (for local providers)
     let api_key = if provider.requires_key {
-        let k = key
-            .or_else(|| keychain::get_api_key(&provider.keychain_id()));
+        let k = key.or_else(|| keychain::get_api_key(&provider.keychain_id()));
         if k.is_none() {
             return Err(format!("No API key for {}", provider.name));
         }
@@ -169,8 +152,7 @@ pub async fn test_connection(
         None
     };
 
-    let client = noren_engine::create_llm_client(&config, api_key)
-        .map_err(|e| e.to_string())?;
+    let client = noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?;
 
     let messages = vec![noren_engine::LlmMessage {
         role: noren_engine::Role::User,
@@ -261,9 +243,7 @@ pub async fn noren_pro_login(
     let token = data["access_token"]
         .as_str()
         .ok_or("No access token in response")?;
-    let refresh = data["refresh_token"]
-        .as_str()
-        .unwrap_or("");
+    let refresh = data["refresh_token"].as_str().unwrap_or("");
 
     // Store tokens and email in keychain
     keychain::store_api_key("noren-pro-token", token)?;
@@ -318,9 +298,7 @@ pub async fn noren_pro_signup(
     let token = data["access_token"]
         .as_str()
         .ok_or("No access token in response")?;
-    let refresh = data["refresh_token"]
-        .as_str()
-        .unwrap_or("");
+    let refresh = data["refresh_token"].as_str().unwrap_or("");
 
     // Store tokens and email in keychain
     keychain::store_api_key("noren-pro-token", token)?;
@@ -343,31 +321,29 @@ pub async fn noren_pro_signup(
 
 #[tauri::command]
 pub fn noren_pro_logout() -> Result<(), String> {
-    let _ = keychain::delete_api_key("noren-pro-token");
-    let _ = keychain::delete_api_key("noren-pro-refresh");
-    let _ = keychain::delete_api_key("noren-pro-email");
+    crate::auth_client::clear_auth_credentials();
     Ok(())
 }
 
 // --- Email OTP verification ---
 
 #[tauri::command]
-pub async fn verify_email(
-    state: State<'_, AppState>,
-    code: String,
-) -> Result<String, String> {
+pub async fn verify_email(state: State<'_, AppState>, code: String) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
-    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/verify-email", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let verify_url = format!("{}/v1/auth/verify-email", server_url);
+    let payload = serde_json::json!({ "code": code });
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&verify_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -375,24 +351,27 @@ pub async fn verify_email(
     }
 
     let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(data["message"].as_str().unwrap_or("Email verified").to_string())
+    Ok(data["message"]
+        .as_str()
+        .unwrap_or("Email verified")
+        .to_string())
 }
 
 #[tauri::command]
-pub async fn resend_otp(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn resend_otp(state: State<'_, AppState>) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
-    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/resend-otp", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let resend_url = format!("{}/v1/auth/resend-otp", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&resend_url)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -409,7 +388,10 @@ pub async fn resend_setup_email(
     email: String,
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
-    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
     let resp = client
@@ -425,7 +407,10 @@ pub async fn resend_setup_email(
 
     // Return success for all other statuses (anti-enumeration)
     let data: serde_json::Value = resp.json().await.unwrap_or_default();
-    Ok(data["message"].as_str().unwrap_or("If that email is in our system, we've sent setup instructions.").to_string())
+    Ok(data["message"]
+        .as_str()
+        .unwrap_or("If that email is in our system, we've sent setup instructions.")
+        .to_string())
 }
 
 // --- Password Reset ---
@@ -436,7 +421,10 @@ pub async fn request_password_reset(
     email: String,
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
-    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
 
     let client = reqwest::Client::new();
     let resp = client
@@ -451,26 +439,29 @@ pub async fn request_password_reset(
     }
 
     let data: serde_json::Value = resp.json().await.unwrap_or_default();
-    Ok(data["message"].as_str().unwrap_or("If that email exists, a reset code has been sent.").to_string())
+    Ok(data["message"]
+        .as_str()
+        .unwrap_or("If that email exists, a reset code has been sent.")
+        .to_string())
 }
 
 // --- Account Deletion ---
 
 #[tauri::command]
-pub async fn request_delete_account(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn request_delete_account(state: State<'_, AppState>) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
-    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/request-account-deletion", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let request_url = format!("{}/v1/auth/request-account-deletion", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&request_url)
+            .header("Authorization", format!("Bearer {}", token))
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -478,7 +469,10 @@ pub async fn request_delete_account(
     }
 
     let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(data["message"].as_str().unwrap_or("Verification code sent").to_string())
+    Ok(data["message"]
+        .as_str()
+        .unwrap_or("Verification code sent")
+        .to_string())
 }
 
 #[tauri::command]
@@ -487,17 +481,20 @@ pub async fn confirm_delete_account(
     code: String,
 ) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
-    let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai");
-    let token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/v1/auth/delete-account", server_url))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let delete_url = format!("{}/v1/auth/delete-account", server_url);
+    let payload = serde_json::json!({ "code": code });
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&delete_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -505,10 +502,13 @@ pub async fn confirm_delete_account(
     }
 
     // Clean up local credentials
-    let _ = keychain::delete_api_key("noren-pro-token");
+    crate::auth_client::clear_auth_credentials();
 
     let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(data["message"].as_str().unwrap_or("Account deleted").to_string())
+    Ok(data["message"]
+        .as_str()
+        .unwrap_or("Account deleted")
+        .to_string())
 }
 
 // --- Google OAuth ---
@@ -595,21 +595,14 @@ pub async fn google_oauth_poll(
         .await
         .map_err(|e: reqwest::Error| e.to_string())?;
 
-    let status = data["status"]
-        .as_str()
-        .unwrap_or("pending")
-        .to_string();
+    let status = data["status"].as_str().unwrap_or("pending").to_string();
 
     if status == "complete" {
         let access_token = data["access_token"]
             .as_str()
             .ok_or("No access_token in poll response")?;
-        let refresh_token = data["refresh_token"]
-            .as_str()
-            .unwrap_or("");
-        let email = data["email"]
-            .as_str()
-            .ok_or("No email in poll response")?;
+        let refresh_token = data["refresh_token"].as_str().unwrap_or("");
+        let email = data["email"].as_str().ok_or("No email in poll response")?;
 
         keychain::store_api_key("noren-pro-token", access_token)?;
         if !refresh_token.is_empty() {
@@ -625,16 +618,13 @@ pub async fn google_oauth_poll(
 }
 
 #[tauri::command]
-pub async fn get_noren_pro_usage(
-    state: State<'_, AppState>,
-) -> Result<NorenProStatus, String> {
+pub async fn get_noren_pro_usage(state: State<'_, AppState>) -> Result<NorenProStatus, String> {
     let config = state.config.lock().unwrap().clone();
     let server_url = config
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
+    let auth_token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
     let email = keychain::get_api_key("noren-pro-email");
 
     let refresh_token = keychain::get_api_key("noren-pro-refresh");
@@ -650,7 +640,10 @@ pub async fn get_noren_pro_usage(
         });
     }
 
-    let (used, limit, requests, gen_used, gen_limit) = proxy.get_usage().await.map_err(|e| e.to_string())?;
+    let (used, limit, requests, gen_used, gen_limit) = proxy
+        .get_usage()
+        .await
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
     Ok(NorenProStatus {
         logged_in: true,
@@ -665,10 +658,7 @@ pub async fn get_noren_pro_usage(
 }
 
 #[tauri::command]
-pub fn set_inference_mode(
-    state: State<'_, AppState>,
-    mode: String,
-) -> Result<(), String> {
+pub fn set_inference_mode(state: State<'_, AppState>, mode: String) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     config.inference_mode = match mode.as_str() {
         "noren_pro" => noren_engine::InferenceMode::NorenPro,
@@ -698,11 +688,11 @@ pub fn update_hotkey(
 // --- Ollama model discovery ---
 
 #[tauri::command]
-pub async fn list_ollama_models(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+pub async fn list_ollama_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let config = state.config.lock().unwrap().clone();
-    let base_url = config.provider.base_url
+    let base_url = config
+        .provider
+        .base_url
         .trim_end_matches("/v1")
         .trim_end_matches("/v1/")
         .to_string();
@@ -722,10 +712,7 @@ pub async fn list_ollama_models(
         return Err("Ollama returned an error".to_string());
     }
 
-    let data: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
 
     let models = data["models"]
         .as_array()
@@ -755,7 +742,8 @@ pub async fn list_claude_models(
     let provider = &config.provider;
 
     // Derive API root from base_url (strip /v1/messages)
-    let base = provider.base_url
+    let base = provider
+        .base_url
         .trim_end_matches("/v1/messages")
         .trim_end_matches("/v1/messages/")
         .to_string();
@@ -785,7 +773,10 @@ pub async fn list_claude_models(
         }
     }
 
-    let resp = req.send().await.map_err(|e| format!("Cannot reach API: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach API: {}", e))?;
     if !resp.status().is_success() {
         return Err("Failed to fetch models".to_string());
     }
@@ -822,9 +813,7 @@ pub struct ModelInfo {
 }
 
 #[tauri::command]
-pub async fn list_gemini_models(
-    state: State<'_, AppState>,
-) -> Result<Vec<ModelInfo>, String> {
+pub async fn list_gemini_models(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, String> {
     let config = state.config.lock().unwrap().clone();
     let provider = &config.provider;
 
@@ -861,7 +850,9 @@ pub async fn list_gemini_models(
                 .filter_map(|m| {
                     let name = m["name"].as_str()?;
                     let methods = m["supportedGenerationMethods"].as_array()?;
-                    let supports_generate = methods.iter().any(|v| v.as_str() == Some("generateContent"));
+                    let supports_generate = methods
+                        .iter()
+                        .any(|v| v.as_str() == Some("generateContent"));
                     if !supports_generate {
                         return None;
                     }
@@ -887,9 +878,7 @@ pub async fn list_gemini_models(
 // --- OpenAI model discovery ---
 
 #[tauri::command]
-pub async fn list_openai_models(
-    state: State<'_, AppState>,
-) -> Result<Vec<ModelInfo>, String> {
+pub async fn list_openai_models(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, String> {
     let config = state.config.lock().unwrap().clone();
     let provider = &config.provider;
 
@@ -923,7 +912,11 @@ pub async fn list_openai_models(
             arr.iter()
                 .filter_map(|m| {
                     let id = m["id"].as_str()?;
-                    if !(id.starts_with("gpt-") || id.starts_with("chatgpt-") || (id.starts_with('o') && id.chars().nth(1).is_some_and(|c| c.is_ascii_digit()))) {
+                    if !(id.starts_with("gpt-")
+                        || id.starts_with("chatgpt-")
+                        || (id.starts_with('o')
+                            && id.chars().nth(1).is_some_and(|c| c.is_ascii_digit())))
+                    {
                         return None;
                     }
                     if id.contains("instruct") || id.contains("audio") || id.contains("realtime") {
@@ -945,9 +938,7 @@ pub async fn list_openai_models(
 // --- Custom model discovery ---
 
 #[tauri::command]
-pub async fn list_custom_models(
-    state: State<'_, AppState>,
-) -> Result<Vec<ModelInfo>, String> {
+pub async fn list_custom_models(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, String> {
     let config = state.config.lock().unwrap().clone();
     let provider = &config.provider;
     let base_url = provider.base_url.trim_end_matches('/');
@@ -968,7 +959,10 @@ pub async fn list_custom_models(
         req = req.header("Authorization", format!("Bearer {}", key));
     }
 
-    let resp = req.send().await.map_err(|e| format!("Cannot reach API: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach API: {}", e))?;
     if !resp.status().is_success() {
         return Err("Failed to fetch models".to_string());
     }

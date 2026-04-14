@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::{keychain, AppState};
+use crate::AppState;
 
 // Re-use save_config_file from settings
 use super::settings::save_config_file;
@@ -131,8 +131,6 @@ pub async fn upload_edit_log(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
 
     // Read local edit entries
     let base_dir = config.profile_dir.parent().unwrap_or(&config.profile_dir);
@@ -181,14 +179,15 @@ pub async fn upload_edit_log(
         body.insert("external_samples".to_string(), serde_json::Value::Array(samples_json));
     }
 
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/profile/upload-edits", server_url))
-        .bearer_auth(&auth_token)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Upload failed: {}", e))?;
+    let upload_url = format!("{}/v1/profile/upload-edits", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&upload_url)
+            .bearer_auth(token)
+            .json(&body)
+    })
+    .await
+    .map_err(|e| format!("Upload failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -207,16 +206,14 @@ pub async fn refresh_living_profile(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/profile/refresh", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Refresh failed: {}", e))?;
+    let refresh_url = format!("{}/v1/profile/refresh", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&refresh_url)
+            .bearer_auth(token)
+    })
+    .await
+    .map_err(|e| format!("Refresh failed: {}", e))?;
 
     let resp_status = resp.status();
 
@@ -269,16 +266,14 @@ pub async fn get_profile_metadata(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .get(format!("{}/v1/profile/voice/metadata", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to get metadata: {}", e))?;
+    let metadata_url = format!("{}/v1/profile/voice/metadata", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .get(&metadata_url)
+            .bearer_auth(token)
+    })
+    .await
+    .map_err(|e| format!("Failed to get metadata: {}", e))?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -317,16 +312,14 @@ pub async fn rollback_profile(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
-
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .post(format!("{}/v1/profile/voice/rollback", server_url))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Rollback failed: {}", e))?;
+    let rollback_url = format!("{}/v1/profile/voice/rollback", server_url);
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&rollback_url)
+            .bearer_auth(token)
+    })
+    .await
+    .map_err(|e| format!("Rollback failed: {}", e))?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();
@@ -352,22 +345,21 @@ pub async fn get_refresh_history(
         .server_url
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
-    let auth_token = keychain::get_api_key("noren-pro-token")
-        .ok_or("Not logged in")?;
 
     let limit = limit.unwrap_or(20);
     let offset = offset.unwrap_or(0);
 
-    let client = reqwest::Client::new();
-    let resp: reqwest::Response = client
-        .get(format!(
-            "{}/v1/profile/refresh-history?limit={}&offset={}",
-            server_url, limit, offset
-        ))
-        .bearer_auth(&auth_token)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to get history: {}", e))?;
+    let history_url = format!(
+        "{}/v1/profile/refresh-history?limit={}&offset={}",
+        server_url, limit, offset
+    );
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .get(&history_url)
+            .bearer_auth(token)
+    })
+    .await
+    .map_err(|e| format!("Failed to get history: {}", e))?;
 
     if !resp.status().is_success() {
         let body: String = resp.text().await.unwrap_or_default();

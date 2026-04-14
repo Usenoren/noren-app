@@ -6,6 +6,30 @@
 
 use crate::keychain;
 
+pub fn clear_auth_credentials() {
+    let _ = keychain::delete_api_key("noren-pro-token");
+    let _ = keychain::delete_api_key("noren-pro-refresh");
+    let _ = keychain::delete_api_key("noren-pro-email");
+}
+
+pub fn is_auth_session_error(message: &str) -> bool {
+    message.contains("Session expired")
+        || message.contains("Authentication failed. Please sign in again.")
+        || message.contains("Not logged in")
+        || message.contains("Invalid or expired token")
+        || message.contains("Invalid or expired refresh token")
+        || message.contains("Token has been revoked")
+        || message.contains("User not found")
+}
+
+pub fn normalize_auth_error(message: impl Into<String>) -> String {
+    let message = message.into();
+    if is_auth_session_error(&message) {
+        clear_auth_credentials();
+    }
+    message
+}
+
 /// Get the current auth token or return an error.
 pub fn require_auth() -> Result<String, String> {
     keychain::get_api_key("noren-pro-token").ok_or_else(|| "Not logged in".to_string())
@@ -38,7 +62,10 @@ where
     // Attempt token refresh
     let refresh_token = match keychain::get_api_key("noren-pro-refresh") {
         Some(rt) => rt,
-        None => return Ok(resp), // No refresh token, return the 401 as-is
+        None => {
+            clear_auth_credentials();
+            return Err("Session expired. Please sign in again.".to_string());
+        }
     };
 
     let refresh_resp = client
@@ -51,6 +78,7 @@ where
     if !refresh_resp.status().is_success() {
         if refresh_resp.status().as_u16() == 401 {
             // Token genuinely revoked (password change, logout-all, expired)
+            clear_auth_credentials();
             return Err("Session expired. Please sign in again.".to_string());
         }
         // Transient failure (429 rate limit, 5xx server error) — return
@@ -66,9 +94,7 @@ where
     let new_access = data["access_token"]
         .as_str()
         .ok_or("No access_token in refresh response")?;
-    let new_refresh = data["refresh_token"]
-        .as_str()
-        .unwrap_or("");
+    let new_refresh = data["refresh_token"].as_str().unwrap_or("");
 
     // Persist new tokens
     keychain::store_api_key("noren-pro-token", new_access)?;
@@ -77,8 +103,15 @@ where
     }
 
     // Retry the original request with the new token
-    build_request(&client, new_access)
+    let retry = build_request(&client, new_access)
         .send()
         .await
-        .map_err(|e| format!("Retry failed: {}", e))
+        .map_err(|e| format!("Retry failed: {}", e))?;
+
+    if retry.status().as_u16() == 401 {
+        clear_auth_credentials();
+        return Err("Session expired. Please sign in again.".to_string());
+    }
+
+    Ok(retry)
 }

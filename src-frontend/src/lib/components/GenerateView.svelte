@@ -6,6 +6,7 @@
   import { open as openUrl } from "@tauri-apps/plugin-shell";
   import { isFree, canExtract } from "$lib/stores/subscription.svelte";
   import { getIsExtracting } from "$lib/stores/extraction.svelte";
+  import { trackGenerationUsedDaily } from "$lib/api/analytics";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
   import { toastError } from "$lib/stores/toast.svelte";
@@ -120,7 +121,7 @@
     });
 
     getSettings().then((settings) => {
-      if (settings.inference_mode === "byok" && !settings.has_key && settings.provider.requiresKey) {
+      if (!settings.noren_pro_logged_in && !settings.has_key && settings.provider.requiresKey) {
         noApiKeyLocal = true;
       } else {
         noApiKeyLocal = false;
@@ -170,6 +171,17 @@
     saveGeneration(gen).then(() => listGenerations()).then((gens) => { allGenerations = gens; }).catch(() => {});
   }
 
+  function notifyUsageRefresh() {
+    emit("usage:refresh").catch(() => {});
+    setTimeout(() => {
+      emit("usage:refresh").catch(() => {});
+    }, 2000);
+  }
+
+  function markGenerationCompleted() {
+    trackGenerationUsedDaily().catch(() => {});
+  }
+
   // --- Actions ---
   async function handleGenerate() {
     if (!prompt.trim() || isGenerating) return;
@@ -205,6 +217,8 @@
         });
         output = comparison.with_voice;
         editedText = output.text;
+        markGenerationCompleted();
+        notifyUsageRefresh();
       } catch (e) {
         error = friendlyError(e);
       } finally {
@@ -232,6 +246,8 @@
         editedText = streamedText;
         phase = "done";
         persistGeneration(result, pendingGenerationId);
+        markGenerationCompleted();
+        notifyUsageRefresh();
         weaveComplete = true;
         setTimeout(() => { weaveComplete = false; }, 1000);
       });
@@ -256,6 +272,8 @@
         output = result;
         editedText = e.payload.content;
         phase = "done";
+        markGenerationCompleted();
+        notifyUsageRefresh();
         // Update existing version with cleaned text instead of creating a new one
         if (currentVersionId) {
           loadGeneration(currentVersionId).then((gen) => {
@@ -298,6 +316,8 @@
         editedText = streamedText;
         phase = "done";
         persistGeneration(result, pendingGenerationId);
+        markGenerationCompleted();
+        notifyUsageRefresh();
         weaveComplete = true;
         setTimeout(() => { weaveComplete = false; }, 1000);
       } else if (phase === "streaming") {

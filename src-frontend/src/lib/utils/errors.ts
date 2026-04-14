@@ -2,11 +2,11 @@
  * Parse raw API/system errors into clean, user-friendly messages.
  */
 export function friendlyError(raw: unknown): string {
-  const msg = String(raw);
+  const msg = extractMessage(raw);
 
   // Generation limit (server-enforced monthly cap)
   if (msg.includes("Monthly generation limit")) {
-    return "Monthly generation limit reached. Chat and autocomplete still work.";
+    return "You've reached this account's monthly generation limit. It resets next month. Chat and autocomplete still work.";
   }
 
   // Rate limit errors (Gemini, OpenAI, Anthropic, etc.)
@@ -71,7 +71,7 @@ export function friendlyError(raw: unknown): string {
 
   // Not logged in
   if (msg.includes("Not logged in")) {
-    return "Not signed in to Noren Pro. Go to Settings to sign in.";
+    return "Not signed in to Noren. Go to Settings to sign in.";
   }
 
   // Generic server errors
@@ -103,6 +103,18 @@ export function friendlyError(raw: unknown): string {
   return cleaned;
 }
 
+export function isAuthSessionError(raw: unknown): boolean {
+  const msg = extractMessage(raw);
+  return (
+    msg.includes("Session expired") ||
+    msg.includes("Not logged in") ||
+    msg.includes("Token has been revoked") ||
+    msg.includes("Invalid or expired token") ||
+    msg.includes("Invalid or expired refresh token") ||
+    msg.includes("User not found")
+  );
+}
+
 function extractHost(urlStr: string): string {
   try {
     const clean = urlStr.replace(/[()]/g, "");
@@ -111,4 +123,38 @@ function extractHost(urlStr: string): string {
   } catch {
     return urlStr;
   }
+}
+
+function extractMessage(raw: unknown): string {
+  if (typeof raw === "string") {
+    return extractJsonDetail(raw) ?? raw;
+  }
+  if (raw instanceof Error) {
+    return extractJsonDetail(raw.message) ?? raw.message;
+  }
+  if (raw && typeof raw === "object") {
+    const detail = (raw as { detail?: unknown }).detail;
+    if (typeof detail === "string") return detail;
+  }
+  return extractJsonDetail(String(raw)) ?? String(raw);
+}
+
+function extractJsonDetail(value: string): string | null {
+  const trimmed = value.trim();
+  const candidates = [trimmed];
+  const errorPrefix = "Error: ";
+  if (trimmed.startsWith(errorPrefix)) {
+    candidates.push(trimmed.slice(errorPrefix.length).trim());
+  }
+  for (const candidate of candidates) {
+    if (!(candidate.startsWith("{") && candidate.endsWith("}"))) continue;
+    try {
+      const parsed = JSON.parse(candidate) as { detail?: unknown; message?: unknown };
+      if (typeof parsed.detail === "string") return parsed.detail;
+      if (typeof parsed.message === "string") return parsed.message;
+    } catch {
+      // ignore malformed JSON-looking strings
+    }
+  }
+  return null;
 }

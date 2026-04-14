@@ -45,7 +45,7 @@ pub async fn run_extraction(
     let result = client
         .extract(&samples, &format)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
     if result.stored_server_side {
         Ok("Extraction complete — profile stored on Noren servers".to_string())
@@ -137,12 +137,11 @@ pub async fn start_extraction(
 
     // Spawn extraction in background
     tokio::spawn(async move {
-        let mut client =
-            ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
-                move |progress: ExtractionProgress| {
-                    let _ = app_for_progress.emit("extraction-progress", &progress);
-                },
-            ));
+        let mut client = ServerExtractionClient::new(server_url, auth_token).with_progress(
+            Box::new(move |progress: ExtractionProgress| {
+                let _ = app_for_progress.emit("extraction-progress", &progress);
+            }),
+        );
         if let Some(rt) = refresh_token {
             client = client.with_token_refresh(rt, |new_access, new_refresh| {
                 let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
@@ -155,7 +154,10 @@ pub async fn start_extraction(
 
         match client.extract(&samples, &format).await {
             Ok(result) => handle_extraction_result(result, &app_for_done, &profile_dir),
-            Err(e) => emit_failure(&app_for_done, e.to_string()),
+            Err(e) => emit_failure(
+                &app_for_done,
+                crate::auth_client::normalize_auth_error(e.to_string()),
+            ),
         }
     });
 
@@ -191,12 +193,11 @@ pub async fn start_extraction_multi(
     let app_for_done = app_handle.clone();
 
     tokio::spawn(async move {
-        let mut client =
-            ServerExtractionClient::new(server_url, auth_token).with_progress(Box::new(
-                move |progress: ExtractionProgress| {
-                    let _ = app_for_progress.emit("extraction-progress", &progress);
-                },
-            ));
+        let mut client = ServerExtractionClient::new(server_url, auth_token).with_progress(
+            Box::new(move |progress: ExtractionProgress| {
+                let _ = app_for_progress.emit("extraction-progress", &progress);
+            }),
+        );
         if let Some(rt) = refresh_token {
             client = client.with_token_refresh(rt, |new_access, new_refresh| {
                 let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
@@ -206,7 +207,10 @@ pub async fn start_extraction_multi(
 
         match client.extract_multi(&format_groups).await {
             Ok(result) => handle_extraction_result(result, &app_for_done, &profile_dir),
-            Err(e) => emit_failure(&app_for_done, e.to_string()),
+            Err(e) => emit_failure(
+                &app_for_done,
+                crate::auth_client::normalize_auth_error(e.to_string()),
+            ),
         }
     });
 

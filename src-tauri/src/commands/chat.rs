@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State, Window};
 
-use crate::AppState;
 use super::generate::GenerateResult;
+use crate::AppState;
 
 // --- Types ---
 
@@ -51,9 +51,8 @@ fn chats_dir() -> std::path::PathBuf {
 /// Build a chat system prompt. No voice enforcement, just helpful assistant
 /// with optional context about the user's domain.
 fn build_chat_system_prompt(context_layer: Option<&str>) -> String {
-    let mut prompt = String::from(
-        "You are a helpful assistant. Be conversational, clear, and concise.",
-    );
+    let mut prompt =
+        String::from("You are a helpful assistant. Be conversational, clear, and concise.");
     if let Some(ctx) = context_layer {
         prompt.push_str("\n\nContext about the user's work:\n");
         prompt.push_str(ctx);
@@ -115,10 +114,7 @@ pub async fn chat_send(
             msg.content.clone()
         };
 
-        llm_messages.push(noren_engine::LlmMessage {
-            role,
-            content,
-        });
+        llm_messages.push(noren_engine::LlmMessage { role, content });
     }
 
     let thinking = if config.extended_thinking {
@@ -132,7 +128,11 @@ pub async fn chat_send(
     let use_cache = config.provider.provider_type == noren_engine::ProviderType::Anthropic;
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
+        max_tokens: Some(if config.extended_thinking {
+            config.thinking_budget + 4096
+        } else {
+            4096
+        }),
         thinking,
         cache: if use_cache { Some(true) } else { None },
         chat_id,
@@ -148,13 +148,9 @@ pub async fn chat_send(
                 .unwrap_or("https://api.usenoren.ai")
                 .to_string();
             let auth_token = crate::keychain::get_api_key("noren-pro-token")
-                .ok_or("Not logged in to Noren Pro. Go to Settings to sign in.")?;
+                .ok_or("Not signed in to Noren. Go to Settings to sign in.")?;
             let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
-            let mut proxy = noren_engine::NorenProxyClient::new(
-                server_url,
-                auth_token,
-                format,
-            );
+            let mut proxy = noren_engine::NorenProxyClient::new(server_url, auth_token, format);
             if let Some(rt) = refresh_token {
                 proxy = proxy.with_token_refresh(rt, |new_access, new_refresh| {
                     let _ = crate::keychain::store_api_key("noren-pro-token", &new_access);
@@ -174,7 +170,7 @@ pub async fn chat_send(
     let response = client
         .complete(&llm_messages, &options)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
     Ok(GenerateResult {
         text: response.content,
@@ -187,10 +183,16 @@ pub async fn chat_send(
 }
 
 #[derive(Clone, Serialize)]
-struct ChatChunk { text: String }
+struct ChatChunk {
+    text: String,
+}
 
 #[derive(Clone, Serialize)]
-struct ChatDone { content: String, input_tokens: u64, output_tokens: u64 }
+struct ChatDone {
+    content: String,
+    input_tokens: u64,
+    output_tokens: u64,
+}
 
 #[tauri::command]
 pub async fn chat_send_stream(
@@ -223,33 +225,56 @@ pub async fn chat_send_stream(
         let content = if Some(i) == last_user_idx {
             if let Some(ref atts) = attachments {
                 if !atts.is_empty() {
-                    let mut parts: Vec<String> = atts.iter().enumerate()
-                        .map(|(j, att)| format!("[Attached file {}]\n{}", j + 1, att)).collect();
+                    let mut parts: Vec<String> = atts
+                        .iter()
+                        .enumerate()
+                        .map(|(j, att)| format!("[Attached file {}]\n{}", j + 1, att))
+                        .collect();
                     parts.push(msg.content.clone());
                     parts.join("\n\n")
-                } else { msg.content.clone() }
-            } else { msg.content.clone() }
-        } else { msg.content.clone() };
+                } else {
+                    msg.content.clone()
+                }
+            } else {
+                msg.content.clone()
+            }
+        } else {
+            msg.content.clone()
+        };
         llm_messages.push(noren_engine::LlmMessage { role, content });
     }
 
     let thinking = if config.extended_thinking {
-        Some(noren_engine::ThinkingConfig { budget_tokens: config.thinking_budget })
-    } else { None };
+        Some(noren_engine::ThinkingConfig {
+            budget_tokens: config.thinking_budget,
+        })
+    } else {
+        None
+    };
 
     let use_cache = config.provider.provider_type == noren_engine::ProviderType::Anthropic;
     let options = noren_engine::LlmOptions {
         temperature: Some(0.7),
-        max_tokens: Some(if config.extended_thinking { config.thinking_budget + 4096 } else { 4096 }),
-        thinking, cache: if use_cache { Some(true) } else { None },
-        chat_id, chat_title,
+        max_tokens: Some(if config.extended_thinking {
+            config.thinking_budget + 4096
+        } else {
+            4096
+        }),
+        thinking,
+        cache: if use_cache { Some(true) } else { None },
+        chat_id,
+        chat_title,
     };
 
     let client: Box<dyn noren_engine::LlmClient> =
         if config.inference_mode == noren_engine::InferenceMode::NorenPro {
-            let server_url = config.server_url.as_deref().unwrap_or("https://api.usenoren.ai").to_string();
+            let server_url = config
+                .server_url
+                .as_deref()
+                .unwrap_or("https://api.usenoren.ai")
+                .to_string();
             let auth_token = crate::keychain::get_api_key("noren-pro-token")
-                .ok_or("Not logged in to Noren Pro.")?;
+                .ok_or("Not signed in to Noren.")?;
             let refresh_token = crate::keychain::get_api_key("noren-pro-refresh");
             let mut proxy = noren_engine::NorenProxyClient::new(server_url, auth_token, format);
             if let Some(rt) = refresh_token {
@@ -262,21 +287,35 @@ pub async fn chat_send_stream(
         } else {
             let api_key = if config.provider.requires_key {
                 crate::keychain::get_api_key(&config.provider.keychain_id())
-            } else { None };
+            } else {
+                None
+            };
             noren_engine::create_llm_client(&config, api_key).map_err(|e| e.to_string())?
         };
 
     let w = window.clone();
     let on_chunk: noren_engine::StreamCallback = Box::new(move |text: &str| {
-        let _ = w.emit("chat:chunk", ChatChunk { text: text.to_string() });
+        let _ = w.emit(
+            "chat:chunk",
+            ChatChunk {
+                text: text.to_string(),
+            },
+        );
     });
 
-    let response = client.stream_complete(&llm_messages, &options, on_chunk)
-        .await.map_err(|e| e.to_string())?;
+    let response = client
+        .stream_complete(&llm_messages, &options, on_chunk)
+        .await
+        .map_err(|e| crate::auth_client::normalize_auth_error(e.to_string()))?;
 
-    let _ = window.emit("chat:done", ChatDone {
-        content: response.content, input_tokens: response.input_tokens, output_tokens: response.output_tokens,
-    });
+    let _ = window.emit(
+        "chat:done",
+        ChatDone {
+            content: response.content,
+            input_tokens: response.input_tokens,
+            output_tokens: response.output_tokens,
+        },
+    );
     Ok(())
 }
 
@@ -284,7 +323,10 @@ fn validate_chat_id(id: &str) -> Result<(), String> {
     if id.is_empty() || id.len() > 64 {
         return Err("Invalid chat ID".to_string());
     }
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("Invalid chat ID".to_string());
     }
     Ok(())
@@ -299,8 +341,7 @@ pub fn save_chat(conversation: Conversation) -> Result<(), String> {
     let path = dir.join(format!("{}.json", conversation.id));
     let json = serde_json::to_string_pretty(&conversation)
         .map_err(|e| format!("Failed to serialize: {}", e))?;
-    std::fs::write(&path, json)
-        .map_err(|e| format!("Failed to save chat: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("Failed to save chat: {}", e))?;
     Ok(())
 }
 
@@ -341,10 +382,9 @@ pub fn list_chats() -> Result<Vec<ConversationSummary>, String> {
 pub fn load_chat(id: String) -> Result<Conversation, String> {
     validate_chat_id(&id)?;
     let path = chats_dir().join(format!("{}.json", id));
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read chat: {}", e))?;
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse chat: {}", e))
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read chat: {}", e))?;
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse chat: {}", e))
 }
 
 #[tauri::command]
@@ -352,8 +392,7 @@ pub fn delete_chat(id: String) -> Result<(), String> {
     validate_chat_id(&id)?;
     let path = chats_dir().join(format!("{}.json", id));
     if path.exists() {
-        std::fs::remove_file(&path)
-            .map_err(|e| format!("Failed to delete chat: {}", e))?;
+        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete chat: {}", e))?;
     }
     Ok(())
 }

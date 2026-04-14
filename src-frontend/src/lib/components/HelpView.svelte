@@ -45,7 +45,7 @@
       { q: "How many samples do I need?", a: "5-10 per format gets you basic patterns. 10-25 per format gives solid coverage. Mix formats like tweets, blog posts, and emails for the best results." },
       { q: "What if I don't have writing samples?", a: "Noren includes a guided interview that walks you through short prompts designed to capture your natural voice. No existing writing required. Baseline profile in under 10 minutes." },
       { q: "How long does extraction take?", a: "About an hour. The engine runs a rigorous multi-stage analysis across all your samples, verifying every finding against your originals." },
-      { q: "Which providers are supported?", a: "Anthropic (Claude, recommended), OpenAI (GPT-4 and later), Google (Gemini), and Ollama for fully offline local models. Free tier users bring their own API key." },
+      { q: "Which providers are supported?", a: "Signed-in Noren accounts use Noren's server-managed inference. If you're signed out, you can use Anthropic (Claude, recommended), OpenAI (GPT-4 and later), Google (Gemini), or Ollama for local/offline models." },
       { q: "Can I use Noren offline?", a: "Yes. Configure Ollama as your provider and all extraction and generation runs locally. No data leaves your machine." },
     ]},
   ];

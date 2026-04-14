@@ -92,7 +92,7 @@
         needsOnboarding = true;
         view = "onboarding";
       } else if (
-        settings.inference_mode === "byok" &&
+        !settings.noren_pro_logged_in &&
         !settings.has_key &&
         settings.provider.requiresKey
       ) {
