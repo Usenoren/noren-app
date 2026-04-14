@@ -21,6 +21,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Local signing certificate
+DeveloperIDG2CA.cer
+
 # Internal docs and prompts (server-side IP)
 docs/
 prompts/
