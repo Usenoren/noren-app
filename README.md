@@ -132,6 +132,53 @@ cargo tauri build
 
 The dev build creates a popup window (triggered by global hotkey) and a main app window. The production build outputs `Noren.app` and a `.dmg` installer.
 
+### Release notes for macOS builds
+
+The app bundles a Chrome native-messaging sidecar for Keychain access. Release builds need both of these files present:
+
+- `src-tauri/binaries/noren-keychain-host-aarch64-apple-darwin`
+- `src-tauri/binaries/noren-keychain-host-x86_64-apple-darwin`
+
+They are now tracked in git and must stay in sync with `src/bin/noren-keychain-host.rs`.
+
+If you need to rebuild the sidecars locally:
+
+```bash
+# Apple Silicon sidecar
+cargo build --manifest-path src-tauri/Cargo.toml --bin noren-keychain-host --target aarch64-apple-darwin --release
+cp src-tauri/target/aarch64-apple-darwin/release/noren-keychain-host src-tauri/binaries/noren-keychain-host-aarch64-apple-darwin
+
+# Intel sidecar
+rustup target add x86_64-apple-darwin
+cargo build --manifest-path src-tauri/Cargo.toml --bin noren-keychain-host --target x86_64-apple-darwin --release
+cp src-tauri/target/x86_64-apple-darwin/release/noren-keychain-host src-tauri/binaries/noren-keychain-host-x86_64-apple-darwin
+```
+
+Release build flow:
+
+```bash
+# ARM app + dmg
+cargo tauri build
+
+# Intel app bundle
+cargo tauri build --target x86_64-apple-darwin --bundles app
+```
+
+If the Intel `.dmg` bundle step is unavailable or flaky, create it manually from the built `.app`:
+
+```bash
+mkdir -p src-tauri/target/x86_64-apple-darwin/release/bundle/dmg
+cd src-tauri/target/x86_64-apple-darwin/release/bundle
+hdiutil create -volname Noren -srcfolder macos/Noren.app -ov -format UDZO dmg/Noren_1.0.0_x64.dmg
+```
+
+Current public GitHub release assets expected by the website are:
+
+- `Noren_1.0.0_aarch64.dmg`
+- `Noren_1.0.0_x64.dmg`
+
+After building, upload the matching DMGs to the `v1.0.0` GitHub release with `gh release upload ... --clobber`.
+
 ### Install (unsigned)
 
 The app is not notarized with Apple. macOS will block it on first launch. After copying to `/Applications`, run:
