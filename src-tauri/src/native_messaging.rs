@@ -55,10 +55,16 @@ fn get_host_binary_path() -> Result<PathBuf, String> {
         .ok_or("no parent dir")?
         .to_path_buf();
 
+    let arch_suffix = match std::env::consts::ARCH {
+        "aarch64" => "aarch64-apple-darwin",
+        "x86_64" => "x86_64-apple-darwin",
+        other => return Err(format!("unsupported macOS architecture: {}", other)),
+    };
+
     // Production: Tauri bundles sidecars with target-triple suffix in Contents/MacOS/
-    let sidecar = exe_dir.join("noren-keychain-host-aarch64-apple-darwin");
-    if sidecar.exists() {
-        return Ok(sidecar);
+    let suffixed = exe_dir.join(format!("noren-keychain-host-{}", arch_suffix));
+    if suffixed.exists() {
+        return Ok(suffixed);
     }
 
     // Production: also check without suffix

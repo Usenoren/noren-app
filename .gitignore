@@ -1,6 +1,8 @@
 # Build artifacts
 src-tauri/target/
-src-tauri/binaries/
+src-tauri/binaries/*
+!src-tauri/binaries/noren-keychain-host-aarch64-apple-darwin
+!src-tauri/binaries/noren-keychain-host-x86_64-apple-darwin
 src-frontend/dist/
 src-frontend/node_modules/
 
