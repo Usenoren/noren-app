@@ -99,6 +99,20 @@
     },
   ];
 
+  const MAX_WORDS_PER_SAMPLE = 5000;
+
+  function wordCount(text: string): number {
+    const trimmed = text.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  }
+
+  function hasOversizedSample(): boolean {
+    return Object.values(formatSamples).some((arr) =>
+      arr.some((s) => wordCount(s) > MAX_WORDS_PER_SAMPLE),
+    );
+  }
+
   let currentStep = $state(0);
   let formatSamples: Record<string, string[]> = $state({});
   let bulkPasteOpen = $state(false);
@@ -1059,6 +1073,11 @@
                 style="min-height: 64px; field-sizing: content;"
                 placeholder={i === 0 ? `Paste a ${step.label.toLowerCase()} sample...` : "Another sample..."}
               ></textarea>
+              {#if wordCount(sample) > MAX_WORDS_PER_SAMPLE}
+                <p class="px-2.5 pb-1.5 text-[11px] text-error">
+                  {wordCount(sample).toLocaleString()} words. Max {MAX_WORDS_PER_SAMPLE.toLocaleString()}. Split into shorter excerpts.
+                </p>
+              {/if}
             </div>
           {/each}
 
@@ -1174,7 +1193,7 @@
       <div class="flex flex-col items-center gap-2.5">
         <button
           onclick={handleExtract}
-          disabled={totalSamples() < 5}
+          disabled={totalSamples() < 5 || hasOversizedSample()}
           class="w-full py-3 text-[13px] font-semibold text-white bg-accent rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover hover:-translate-y-px relative overflow-hidden"
           style="box-shadow: 0 2px 8px var(--color-accent-glow)"
         >
@@ -1184,6 +1203,11 @@
         {#if totalSamples() < 5}
           <p class="text-[10px] text-muted text-center leading-relaxed">
             Need at least 5 samples. Go back and add more to any format.
+          </p>
+        {/if}
+        {#if hasOversizedSample()}
+          <p class="text-[10px] text-error text-center leading-relaxed">
+            One or more samples exceed {MAX_WORDS_PER_SAMPLE.toLocaleString()} words. Go back and split them into shorter excerpts.
           </p>
         {/if}
 
