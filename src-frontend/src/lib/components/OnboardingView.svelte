@@ -38,8 +38,8 @@
   // Events
   let { onComplete }: { onComplete: (targetView?: string) => void } = $props();
 
-  type Step = "welcome" | "palette" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
-  let step: Step = $state("welcome");
+  type Step = "welcome-fork" | "welcome-back" | "welcome" | "palette" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
+  let step: Step = $state("welcome-fork");
   let pendingPath: "paste" | "guided" = $state("paste");
 
   // OTP verification state
@@ -63,6 +63,9 @@
 
   // Pro intent: auto-trigger upgrade after auth
   let proIntent = $state(false);
+
+  // Welcome-back flash (returning user with existing profile)
+  let welcomeBackMeta = $state<{ formats: number; lastExtracted: string | null }>({ formats: 0, lastExtracted: null });
 
   // Auth state
   let authMode = $state<"login" | "signup">("login");
@@ -495,15 +498,22 @@
     await refreshSubscription();
 
     // Returning user: if a profile already exists on the server, pull it
-    // down and skip the extraction flow entirely.
+    // down, show a brief welcome-back flash, then complete onboarding.
     try {
       await syncProfileDown();
       const meta = await getProfileMetadataInfo();
       if (meta.has_profile) {
         proIntent = false;
         pendingCoupon = "";
-        clearDraft();
-        onComplete();
+        welcomeBackMeta = {
+          formats: meta.formats?.length ?? 0,
+          lastExtracted: meta.last_extracted_at,
+        };
+        step = "welcome-back";
+        setTimeout(() => {
+          clearDraft();
+          onComplete();
+        }, 900);
         return;
       }
     } catch {
@@ -931,8 +941,149 @@
 
 <div class="flex flex-col h-full p-4 overflow-y-auto animate-fade-in-up">
 
-  {#if step === "welcome"}
-    <!-- Welcome screen: v3 two-zone layout -->
+  {#if step === "welcome-fork"}
+    <!-- Welcome fork: explicit Sign in vs new-user choice -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+
+      <!-- Brand zone -->
+      <div
+        class="relative text-center shrink-0"
+        style="
+          padding: 40px 40px 32px;
+          background-color: var(--color-background);
+          background-image:
+            repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(200,212,221,0.04) 27px, rgba(200,212,221,0.04) 28px),
+            repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(200,212,221,0.04) 27px, rgba(200,212,221,0.04) 28px);
+        "
+      >
+        <div class="flex items-center justify-center mb-3.5" style="color: var(--color-primary)">
+          <NorenMark width={40} height={48} />
+        </div>
+        <h1 class="font-heading" style="font-size:34px; font-weight:300; letter-spacing:3px; line-height:1; color:var(--color-primary)">noren</h1>
+        <p class="text-muted mx-auto" style="font-size:12px; margin-top:12px; line-height:1.6; max-width:240px">
+          Learn how you write. Stay consistent across everything.
+        </p>
+        <div class="absolute bottom-0 left-0 right-0 h-px" style="background: linear-gradient(90deg, transparent, rgba(200,212,221,0.18) 30%, rgba(200,212,221,0.18) 70%, transparent)"></div>
+      </div>
+
+      <!-- Surface zone -->
+      <div class="flex-1 flex flex-col bg-surface" style="padding: 24px 30px 20px">
+        <p class="font-heading italic text-center text-secondary" style="font-size:17px; font-weight:400; margin: 0 0 14px; letter-spacing:0.3px">
+          Welcome<span class="text-accent" style="font-weight:500">.</span>
+        </p>
+
+        <!-- Primary: Sign in -->
+        <button
+          onclick={() => { proIntent = false; authMode = "login"; step = "auth"; }}
+          class="relative overflow-hidden rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer border-none transition-all duration-200"
+          style="
+            padding: 16px 18px;
+            background: var(--color-accent);
+            color: white;
+            box-shadow: 0 2px 8px var(--color-accent-glow), 0 14px 28px var(--color-accent-glow);
+          "
+          onmouseenter={(e) => { e.currentTarget.style.background = 'var(--color-accent-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 3px 10px var(--color-accent-glow), 0 18px 36px var(--color-accent-glow)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px var(--color-accent-glow), 0 14px 28px var(--color-accent-glow)'; }}
+        >
+          <div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, var(--color-accent-wash) 11px, var(--color-accent-wash) 12px)"></div>
+          <div class="shrink-0 flex items-center justify-center rounded-lg relative z-[1]" style="width:36px; height:36px; background:var(--color-accent-wash); margin-top:1px">
+            <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0 relative z-[1]">
+            <div style="font-size:13.5px; font-weight:600; line-height:1.3">Sign in</div>
+            <div style="font-size:11px; line-height:1.55; margin-top:4px; opacity:0.65">Already have a Noren account.</div>
+          </div>
+        </button>
+
+        <!-- Secondary: I'm new -->
+        <button
+          onclick={() => { step = "welcome"; }}
+          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
+          style="margin-top:10px; padding: 16px 18px; border: 1px solid var(--color-border); background: white;"
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(59,107,138,0.10)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:36px; height:36px; margin-top:1px">
+            <svg class="w-[18px] h-[18px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="2.4"/>
+              <path d="M12 3v3"/>
+              <path d="M12 18v3"/>
+              <path d="M3 12h3"/>
+              <path d="M18 12h3"/>
+              <path d="M5.6 5.6l2.1 2.1"/>
+              <path d="M16.3 16.3l2.1 2.1"/>
+              <path d="M5.6 18.4l2.1-2.1"/>
+              <path d="M16.3 7.7l2.1-2.1"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div style="font-size:13.5px; font-weight:600; line-height:1.3">I'm new — get started</div>
+            <div style="font-size:11px; line-height:1.55; margin-top:4px; opacity:0.65">Build my voice profile from scratch.</div>
+          </div>
+        </button>
+
+        <!-- Skip for now -->
+        <div class="mt-auto" style="padding-top:18px; text-align:center">
+          <button
+            onclick={() => { clearDraft(); onComplete(); }}
+            class="cursor-pointer bg-transparent border-none text-muted opacity-70 transition-opacity hover:opacity-100"
+            style="font-size:10.5px; padding:6px 12px; letter-spacing:1.4px; text-transform:uppercase"
+          >
+            Skip for now
+          </button>
+        </div>
+      </div>
+    </div>
+
+  {:else if step === "welcome-back"}
+    <!-- Welcome-back flash: brief confirmation while profile loads -->
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div
+        class="relative text-center shrink-0"
+        style="
+          padding: 40px 40px 32px;
+          background-color: var(--color-background);
+          background-image:
+            repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(200,212,221,0.04) 27px, rgba(200,212,221,0.04) 28px),
+            repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(200,212,221,0.04) 27px, rgba(200,212,221,0.04) 28px);
+        "
+      >
+        <div class="flex items-center justify-center mb-3.5" style="color: var(--color-primary)">
+          <NorenMark width={40} height={48} />
+        </div>
+        <h1 class="font-heading" style="font-size:34px; font-weight:300; letter-spacing:3px; line-height:1; color:var(--color-primary)">noren</h1>
+        <p class="font-heading italic mx-auto" style="font-size:13.5px; margin-top:12px; line-height:1.6; max-width:260px; color:rgba(200,212,221,0.72)">
+          Welcome back.
+        </p>
+        <div class="absolute bottom-0 left-0 right-0 h-px" style="background: linear-gradient(90deg, transparent, rgba(200,212,221,0.18) 30%, rgba(200,212,221,0.18) 70%, transparent)"></div>
+      </div>
+
+      <div class="flex-1 flex flex-col items-center justify-center bg-surface gap-5" style="padding: 26px 30px">
+        <div class="welcome-back-strand"></div>
+        <p class="font-heading italic text-foreground text-center" style="font-size:17px; font-weight:400; margin:0; line-height:1.4">
+          Loading your voice profile…
+        </p>
+        <div class="flex gap-2.5 welcome-back-dots">
+          <i></i><i></i><i></i>
+        </div>
+        {#if welcomeBackMeta.formats > 0}
+          <div class="text-center" style="font-size:11px; color:var(--color-secondary); letter-spacing:1.6px; text-transform:uppercase">
+            {welcomeBackMeta.formats} {welcomeBackMeta.formats === 1 ? "format" : "formats"}
+            {#if welcomeBackMeta.lastExtracted}
+              <span class="text-accent" style="margin:0 6px">·</span>
+              refined {new Date(welcomeBackMeta.lastExtracted).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
+
+  {:else if step === "welcome"}
+    <!-- Method select: Extract / Guided / Manual -->
     <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
 
       <!-- Zone 1: Brand header (warm background with woven grid) -->
@@ -942,19 +1093,29 @@
           padding: 40px 40px 32px;
           background-color: var(--color-background);
           background-image:
-            repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(30,49,72,0.025) 27px, rgba(30,49,72,0.025) 28px),
-            repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(30,49,72,0.025) 27px, rgba(30,49,72,0.025) 28px);
+            repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(200,212,221,0.04) 27px, rgba(200,212,221,0.04) 28px),
+            repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(200,212,221,0.04) 27px, rgba(200,212,221,0.04) 28px);
         "
       >
+        <button
+          onclick={() => { step = "welcome-fork"; }}
+          class="absolute cursor-pointer bg-transparent border-none inline-flex items-center gap-1 transition-colors"
+          style="top:14px; left:16px; font-size:10.5px; color:rgba(200,212,221,0.55); letter-spacing:0.6px"
+          onmouseenter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.color = 'rgba(200,212,221,0.55)'; }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
         <div class="flex items-center justify-center mb-3.5" style="color: var(--color-primary)">
           <NorenMark width={40} height={48} />
         </div>
         <h1 class="font-heading" style="font-size:34px; font-weight:300; letter-spacing:3px; line-height:1; color:var(--color-primary)">noren</h1>
-        <p class="text-muted mx-auto" style="font-size:12px; margin-top:12px; line-height:1.6; max-width:220px">
-          Learn how you write. Stay consistent across everything.
+        <p class="text-muted mx-auto" style="font-size:12px; margin-top:12px; line-height:1.6; max-width:240px">
+          Pick how you'd like to build your voice profile.
         </p>
         <!-- Bottom divider gradient -->
-        <div class="absolute bottom-0 left-0 right-0 h-px" style="background: linear-gradient(90deg, transparent, rgba(30,49,72,0.1) 30%, rgba(30,49,72,0.1) 70%, transparent)"></div>
+        <div class="absolute bottom-0 left-0 right-0 h-px" style="background: linear-gradient(90deg, transparent, rgba(200,212,221,0.18) 30%, rgba(200,212,221,0.18) 70%, transparent)"></div>
       </div>
 
       <!-- Zone 2: Method selection (white background) -->
@@ -1009,30 +1170,27 @@
           </div>
         </button>
 
-        <!-- Tertiary section (pushed to bottom) -->
-        <div class="divider-thread mt-auto mb-0"></div>
-        <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
-          <button
-            onclick={() => { step = "manual"; }}
-            class="cursor-pointer bg-transparent border-none text-secondary hover:text-primary transition-colors"
-            style="font-size:11px; font-weight:500; padding:4px"
-          >
-            Write my own profile
-          </button>
-          <button
-            onclick={() => { proIntent = false; step = "auth"; }}
-            class="cursor-pointer bg-transparent border-none text-muted hover:text-foreground transition-colors"
-            style="font-size:10.5px; padding:4px"
-          >
-            Already have an account? Sign in
-          </button>
-          <button
-            onclick={() => { clearDraft(); onComplete(); }}
-            class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
-            style="font-size:10px; padding:4px"
-          >
-            Skip for now
-          </button>
+        <!-- Tertiary card: Write my own profile -->
+        <button
+          onclick={() => { step = "manual"; }}
+          class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer text-foreground transition-all duration-200"
+          style="padding: 14px 18px; border: 1px dashed rgba(30,49,72,0.18); background: rgba(255,255,255,0.55);"
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.background = 'white'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'rgba(30,49,72,0.18)'; e.currentTarget.style.background = 'rgba(255,255,255,0.55)'; }}
+        >
+          <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:34px; height:34px; margin-top:1px">
+            <svg class="w-[17px] h-[17px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.06 9.02l.92.92L5.92 19H5v-.92l9.06-9.06M17.66 3a.99.99 0 0 0-.7.29l-1.83 1.83 3.75 3.75 1.83-1.83a1 1 0 0 0 0-1.41L18.37 3.29A.99.99 0 0 0 17.66 3zM3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div style="font-size:13px; font-weight:600; line-height:1.3">Write my own profile</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">Paste a profile you've already written.</div>
+          </div>
+        </button>
+
+        <div class="mt-auto" style="padding-top:14px; text-align:center">
+          <span class="font-heading italic text-muted" style="font-size:11px">Each option takes about 5 minutes.</span>
         </div>
       </div>
     </div>
@@ -1568,7 +1726,7 @@
         <div class="divider-thread mt-auto mb-0"></div>
         <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
           <button
-            onclick={() => { step = "welcome"; error = ""; }}
+            onclick={() => { step = "welcome-fork"; error = ""; }}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
             style="font-size:10px; padding:4px"
           >
@@ -2180,3 +2338,44 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Welcome-back flash animations */
+  .welcome-back-strand {
+    width: 200px;
+    height: 1px;
+    background: rgba(30, 49, 72, 0.12);
+    position: relative;
+    overflow: hidden;
+  }
+  .welcome-back-strand::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+    animation: welcome-back-strand 1.6s ease-in-out infinite;
+    transform: translateX(-100%);
+  }
+  @keyframes welcome-back-strand {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .welcome-back-dots i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(30, 49, 72, 0.18);
+    animation: welcome-back-pulse 1.4s ease-in-out infinite;
+    display: inline-block;
+  }
+  .welcome-back-dots i:nth-child(2) { animation-delay: 0.2s; }
+  .welcome-back-dots i:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes welcome-back-pulse {
+    0%, 100% { background: rgba(30, 49, 72, 0.18); transform: scale(1); }
+    50% { background: var(--color-accent); transform: scale(1.2); }
+  }
+</style>
