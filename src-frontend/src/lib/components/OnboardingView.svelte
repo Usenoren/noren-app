@@ -499,8 +499,20 @@
 
     // Returning user: if a profile already exists on the server, pull it
     // down, show a brief welcome-back flash, then complete onboarding.
+    //
+    // The encrypted sync blob and the authoritative Pro profile are two
+    // separate stores. A sync-down failure (e.g. the local encryption key
+    // was reset and the blob can't be decrypted) must NOT prevent us from
+    // checking the authoritative profile metadata — otherwise returning
+    // Pro users get sent through extraction even though their profile is
+    // intact on the server.
     try {
       await syncProfileDown();
+    } catch {
+      // Best-effort. The metadata check below is the source of truth.
+    }
+
+    try {
       const meta = await getProfileMetadataInfo();
       if (meta.has_profile) {
         proIntent = false;
@@ -517,7 +529,7 @@
         return;
       }
     } catch {
-      // Sync or metadata fetch failed (offline, transient server issue).
+      // Metadata fetch failed (offline, transient server issue).
       // Fall through to the existing routing rather than blocking sign-in.
     }
 
