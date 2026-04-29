@@ -328,6 +328,11 @@
         isLoggedIn = true;
         authEmail = "";
         authPassword = "";
+        // Mirror the OTP/signup path: a successful Pro login means the user
+        // intends to use server inference, so the engine config has to know.
+        // Otherwise getProfileOverview falls back to a local-disk check and
+        // shows the empty-state on returning Pro users with server profiles.
+        await setInferenceMode("noren_pro");
         await afterAuth();
       }
     } catch (e) {
@@ -395,6 +400,11 @@
           const result = await googleOAuthPoll(session_id);
           if (result.complete) {
             isLoggedIn = true;
+            // Mirror the email/password and OTP paths: a successful Pro sign-in
+            // means server inference is in play, so the engine config has to
+            // know. Otherwise getProfileOverview falls back to a local-disk
+            // check and shows the empty-state on returning Pro users.
+            await setInferenceMode("noren_pro");
             await afterAuth();
             return;
           }
