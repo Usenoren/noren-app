@@ -1,13 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
   "productName": "Noren",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "ink.noren.desktop",
   "build": {
     "frontendDist": "../src-frontend/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd ../src-frontend && bun run dev",
-    "beforeBuildCommand": "cd ../src-frontend && bun run build"
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build"
   },
   "app": {
     "macOSPrivateApi": true,
@@ -27,6 +27,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["dmg", "app"],
     "externalBin": ["binaries/noren-keychain-host"],
     "icon": [
