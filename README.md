@@ -160,9 +160,19 @@ Release build flow:
 # ARM app + dmg
 cargo tauri build
 
-# Intel app bundle
-cargo tauri build --target x86_64-apple-darwin --bundles app
+# Intel app + dmg
+cargo tauri build --target x86_64-apple-darwin
 ```
+
+For local signed + notarized builds, the machine must have:
+
+- a `Developer ID Application` certificate imported into Keychain
+- Apple notarization credentials available either as:
+  - `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`
+  - or a saved `notarytool` Keychain profile
+- the Tauri updater signing key available via:
+  - `TAURI_SIGNING_PRIVATE_KEY`
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 
 If the Intel `.dmg` bundle step is unavailable or flaky, create it manually from the built `.app`:
 
@@ -179,15 +189,15 @@ Current public GitHub release assets expected by the website are:
 
 After building, upload the matching DMGs to the `v1.0.0` GitHub release with `gh release upload ... --clobber`.
 
-### Install (unsigned)
+### Install
 
-The app is not notarized with Apple. macOS will block it on first launch. After copying to `/Applications`, run:
+Current release builds are intended to be:
 
-```bash
-xattr -cr /Applications/Noren.app
-```
+- Developer ID signed
+- notarized by Apple
+- stapled before distribution
 
-Then open normally.
+Users should be able to download the DMG, drag `Noren.app` into `/Applications`, and open it normally without the old unsigned-app workaround.
 
 ### Inference modes
 
