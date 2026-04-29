@@ -114,27 +114,80 @@ git push origin vX.Y.Z
 
 ## 8. GitHub release
 
+Both architectures produce a file literally named `Noren.app.tar.gz` and `Noren.app.tar.gz.sig`. GitHub release assets must have unique names, so stage renamed copies first.
+
 ```bash
+mkdir -p /tmp/noren-release-X.Y.Z
+cp src-tauri/target/release/bundle/dmg/Noren_X.Y.Z_aarch64.dmg /tmp/noren-release-X.Y.Z/
+cp src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Noren_X.Y.Z_x64.dmg /tmp/noren-release-X.Y.Z/
+cp src-tauri/target/release/bundle/macos/Noren.app.tar.gz \
+   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz
+cp src-tauri/target/release/bundle/macos/Noren.app.tar.gz.sig \
+   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz.sig
+cp src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz \
+   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.app.tar.gz
+cp src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz.sig \
+   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.app.tar.gz.sig
+
 gh release create vX.Y.Z \
   --title "vX.Y.Z" \
   --notes "Release notes here" \
-  src-tauri/target/release/bundle/dmg/Noren_X.Y.Z_aarch64.dmg \
-  src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Noren_X.Y.Z_x64.dmg \
-  src-tauri/target/release/bundle/macos/Noren.app.tar.gz \
-  src-tauri/target/release/bundle/macos/Noren.app.tar.gz.sig \
-  src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz \
-  src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz.sig
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.dmg \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.dmg \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz.sig \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.app.tar.gz \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.app.tar.gz.sig
 ```
 
 ## 9. Update the server updater manifest
 
-The desktop updater hits `https://api.usenoren.ai/v1/update/{target}/{current_version}`. The server has to start advertising the new version for clients to upgrade. Update the source-of-truth manifest in the `server` submodule and deploy. Confirm with:
+The desktop auto-updater hits `https://api.usenoren.ai/v1/update/{target}/{current_version}`. Without this step, clients on the previous version are never prompted, no matter what was uploaded to GitHub.
+
+The manifest source-of-truth is `server/app/updater/routes.py`. Edit the four constants at the top:
+
+- `LATEST_VERSION` -> `"X.Y.Z"`
+- `LATEST_PUB_DATE` -> ISO 8601 timestamp of the GitHub release
+- `LATEST_NOTES` -> short user-facing release notes (one sentence is fine)
+- For each platform in `PLATFORMS`, replace the `signature` block with the contents of the matching `.sig` file from the build:
 
 ```bash
-curl -sS https://api.usenoren.ai/v1/update/darwin-aarch64/X.Y.Z-1 | jq .
+cat src-tauri/target/release/bundle/macos/Noren.app.tar.gz.sig                  # aarch64
+cat src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz.sig  # x86_64
 ```
 
-Should return `{"version": "X.Y.Z", "url": "...", "signature": "..."}` referencing the `.app.tar.gz` and the matching `.sig`.
+The `url` fields key off `LATEST_VERSION`, so they self-update once the version constant is bumped (assuming the GitHub asset names follow `Noren_X.Y.Z_<arch>.app.tar.gz`).
+
+Commit and push the server change:
+
+```bash
+cd /Users/onomeokajevo/noren/server
+git add app/updater/routes.py
+git commit -m "Bump updater manifest to vX.Y.Z"
+git push origin main
+```
+
+Deploy via rsync + docker recreate (no git on prod):
+
+```bash
+rsync -avz -e "ssh -i /Users/onomeokajevo/Downloads/wilfs.pem -o StrictHostKeyChecking=no" \
+  /Users/onomeokajevo/noren/server/app/updater/ \
+  ec2-user@176.34.83.86:~/noren-server/app/updater/
+
+ssh -i /Users/onomeokajevo/Downloads/wilfs.pem ec2-user@176.34.83.86 \
+  "cd ~/noren-server && docker-compose build --no-cache app && docker-compose up -d --force-recreate app"
+```
+
+Verify:
+
+```bash
+# Returns 200 with the new manifest
+curl -sS https://api.usenoren.ai/v1/update/darwin-aarch64/PREV.PREV.PREV | jq .
+
+# Returns 204 (already on latest)
+curl -sS -o /dev/null -w "%{http_code}\n" \
+  https://api.usenoren.ai/v1/update/darwin-aarch64/X.Y.Z
+```
 
 ## 10. Bump submodule pointer in the parent repo
 
