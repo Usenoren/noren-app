@@ -1025,7 +1025,7 @@
         <button
           onclick={() => { step = "welcome"; }}
           class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
-          style="margin-top:10px; padding: 16px 18px; border: 1px solid var(--color-border); background: white;"
+          style="margin-top:10px; padding: 16px 18px; border: 1px solid var(--color-border);"
           onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(59,107,138,0.10)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
           onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
@@ -1530,7 +1530,14 @@
 
         <!-- Tertiary -->
         <div class="divider-thread mt-auto mb-0"></div>
-        <div class="flex flex-col items-center gap-1.5" style="padding-top:14px">
+        <div class="flex flex-col items-center gap-2.5" style="padding-top:14px">
+          <button
+            onclick={() => { clearDraft(); onComplete(); }}
+            class="cursor-pointer bg-transparent border-none text-muted hover:text-foreground transition-colors"
+            style="font-size:11px; padding:4px"
+          >
+            Skip for now
+          </button>
           <button
             onclick={() => { step = "welcome"; error = ""; }}
             class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
