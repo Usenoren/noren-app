@@ -22,6 +22,8 @@
     scrapeTwitter,
     scrapeBlog,
     scrapeReddit,
+    syncProfileDown,
+    getProfileMetadataInfo,
     type FormatGroup,
   } from "$lib/api/tauri";
   import { open } from "@tauri-apps/plugin-shell";
@@ -491,6 +493,24 @@
 
   async function afterAuth() {
     await refreshSubscription();
+
+    // Returning user: if a profile already exists on the server, pull it
+    // down and skip the extraction flow entirely.
+    try {
+      await syncProfileDown();
+      const meta = await getProfileMetadataInfo();
+      if (meta.has_profile) {
+        proIntent = false;
+        pendingCoupon = "";
+        clearDraft();
+        onComplete();
+        return;
+      }
+    } catch {
+      // Sync or metadata fetch failed (offline, transient server issue).
+      // Fall through to the existing routing rather than blocking sign-in.
+    }
+
     if (canExtract()) {
       proIntent = false;
       pendingCoupon = "";
