@@ -567,7 +567,7 @@ pub fn extract_analogy_domains(md: &str) -> Vec<AnalogyDomain> {
     };
 
     let rest = &md[start_match.end()..];
-    let end_re = Regex::new(r"(?m)^##\s+(?!#)").unwrap();
+    let end_re = Regex::new(r"(?m)^##\s+").unwrap();
     let section_body = match end_re.find(rest) {
         Some(m) => &rest[..m.start()],
         None => rest,
@@ -637,7 +637,7 @@ pub fn extract_signature_phrase_terms(md: &str) -> Vec<String> {
     };
 
     let rest = &md[start_match.start()..];
-    let end_re = Regex::new(r"(?m)^##\s+(?!#)").unwrap();
+    let end_re = Regex::new(r"(?m)^##\s+").unwrap();
     let section = match end_re.find(&rest[start_match.end() - start_match.start()..]) {
         Some(m) => &rest[..start_match.end() - start_match.start() + m.start()],
         None => rest,
@@ -1226,6 +1226,47 @@ mod tests {
         let (violations, _) = check_density_stacking(output, &domains, &[]);
         assert!(!violations.is_empty());
         assert!(violations[0].detail.contains("Stacking"));
+    }
+
+    #[test]
+    fn extracts_analogy_domains_until_next_h2() {
+        let md = r#"
+## Analogy Sources
+
+### Medicine
+Terms include diagnosis (triage).
+
+## Signature Phrases
+
+### Should Not Be Parsed
+"#;
+        let domains = extract_analogy_domains(md);
+        assert_eq!(domains.len(), 1);
+        assert_eq!(domains[0].name, "Medicine");
+        assert!(domains[0].terms.contains(&"medicine".to_string()));
+        assert!(domains[0].terms.contains(&"triage".to_string()));
+    }
+
+    #[test]
+    fn extracts_signature_phrases_until_next_h2() {
+        let md = r#"
+## Signature Phrases
+
+| Phrase | Notes |
+|--------|-------|
+| "sharp edge pattern" | recurring |
+| "working surface habit" | recurring |
+
+## Rhythm
+
+| Phrase | Notes |
+|--------|-------|
+| "not part of signature" | later section |
+"#;
+        let phrases = extract_signature_phrase_terms(md);
+        assert!(phrases.contains(&"sharp edge pattern".to_string()));
+        assert!(phrases.contains(&"working surface habit".to_string()));
+        assert!(!phrases.contains(&"not part of signature".to_string()));
     }
 
     // --- AI-ism tests ---
