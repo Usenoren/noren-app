@@ -56,7 +56,7 @@ pub async fn run_extraction(
             config.profile_dir.clone()
         };
 
-        noren_engine::save_profile_for_byok_seed(
+        noren_engine::save_profile_for_local_use(
             &profile_dir,
             &result.core_identity,
             &result.contexts,
@@ -231,7 +231,7 @@ fn handle_extraction_result(
             },
         );
     } else {
-        match noren_engine::save_profile_for_byok_seed(
+        match noren_engine::save_profile_for_local_use(
             profile_dir,
             &result.core_identity,
             &result.contexts,

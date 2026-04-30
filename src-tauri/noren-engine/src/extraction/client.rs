@@ -30,7 +30,7 @@ pub struct FormatGroup {
     pub samples: String,
 }
 
-/// Trait for extraction clients (server-side extraction is the moat)
+/// Trait for extraction clients.
 #[async_trait]
 pub trait ExtractionClient: Send + Sync {
     async fn extract(

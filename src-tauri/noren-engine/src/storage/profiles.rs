@@ -32,8 +32,8 @@ pub fn save_profile(
     Ok(profile_dir.to_path_buf())
 }
 
-/// Save a server-exported profile for local BYOK use.
-pub fn save_profile_for_byok_seed(
+/// Save profile content for local use without diagnostic artifacts.
+pub fn save_profile_for_local_use(
     profile_dir: &Path,
     core_identity: &str,
     contexts: &HashMap<String, String>,
@@ -194,19 +194,19 @@ mod tests {
     }
 
     #[test]
-    fn byok_seed_omits_quality_report_and_removes_stale_file() {
+    fn local_profile_save_omits_diagnostics_and_replaces_contexts() {
         let tmp = TempDir::new().unwrap();
         let profile_dir = tmp.path().join("profile");
 
         let mut old_contexts = HashMap::new();
         old_contexts.insert("twitter".to_string(), "old".to_string());
-        save_profile(&profile_dir, "old core", &old_contexts, "internal qc").unwrap();
-        std::fs::write(profile_dir.join("quality-check-results.md"), "internal qc").unwrap();
+        save_profile(&profile_dir, "old core", &old_contexts, "diagnostic report").unwrap();
+        std::fs::write(profile_dir.join("quality-check-results.md"), "diagnostic report").unwrap();
 
         let mut contexts = HashMap::new();
         contexts.insert("email".to_string(), "Email context".to_string());
 
-        save_profile_for_byok_seed(&profile_dir, "Exported core", &contexts).unwrap();
+        save_profile_for_local_use(&profile_dir, "Exported core", &contexts).unwrap();
 
         let (core, loaded_contexts) = load_profile(&profile_dir).unwrap();
         assert_eq!(core, "Exported core");

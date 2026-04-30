@@ -257,7 +257,7 @@ pub async fn export_profile(
     std::fs::write(path.as_path().unwrap(), md.as_bytes())
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
-    noren_engine::save_profile_for_byok_seed(
+    noren_engine::save_profile_for_local_use(
         &config.profile_dir,
         &export.core_identity,
         &export.contexts,

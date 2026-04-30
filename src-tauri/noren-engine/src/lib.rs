@@ -19,7 +19,7 @@ pub use llm::router::create_llm_client;
 pub use llm::{LlmClient, StreamCallback};
 pub use storage::profiles::{
     list_formats, load_calibration, load_profile, load_voice_metadata, save_profile,
-    save_profile_for_byok_seed,
+    save_profile_for_local_use,
 };
 pub use template::fill_template;
 pub use types::*;
