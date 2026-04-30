@@ -1180,9 +1180,13 @@
         <button
           onclick={() => { step = "manual"; }}
           class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer text-foreground transition-all duration-200"
-          style="padding: 14px 18px; border: 1px dashed rgba(30,49,72,0.18); background: rgba(255,255,255,0.55);"
-          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.background = 'white'; }}
-          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'rgba(30,49,72,0.18)'; e.currentTarget.style.background = 'rgba(255,255,255,0.55)'; }}
+          style="
+            padding: 14px 18px;
+            border: 1px dashed var(--color-border);
+            background: var(--color-surface);
+          "
+          onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.background = 'var(--color-tint)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.background = 'var(--color-surface)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           <div class="shrink-0 flex items-center justify-center rounded-lg bg-tint" style="width:34px; height:34px; margin-top:1px">
             <svg class="w-[17px] h-[17px] text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
