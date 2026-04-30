@@ -6,12 +6,7 @@
   <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs pointer-events-none">
     {#each getToasts() as toast (toast.id)}
       <div
-        class="pointer-events-auto rounded-xl border px-3 py-2.5 text-xs animate-toast-in flex items-start gap-2
-          {toast.type === 'error' ? 'bg-error/5 border-error/20 text-error' :
-           toast.type === 'warning' ? 'bg-warning/5 border-warning/20 text-warning' :
-           toast.type === 'success' ? 'bg-signal/5 border-signal/20 text-signal' :
-           'bg-tint border-border text-muted'}"
-        style="box-shadow: var(--shadow-dropdown)"
+        class="toast pointer-events-auto rounded-xl border px-3 py-2.5 text-xs animate-toast-in flex items-start gap-2 toast-{toast.type}"
       >
         <svg class="w-3.5 h-3.5 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           {#if toast.type === 'error'}
@@ -38,3 +33,62 @@
     {/each}
   </div>
 {/if}
+
+<style>
+  .toast {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-foreground);
+    box-shadow: var(--shadow-dropdown);
+    max-width: min(28rem, calc(100vw - 2rem));
+    overflow-wrap: anywhere;
+  }
+
+  .toast-success {
+    background:
+      linear-gradient(90deg, rgba(45, 122, 79, 0.12), transparent 42%),
+      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-signal) 38%, var(--color-border));
+    color: var(--color-foreground);
+  }
+
+  .toast-success svg {
+    color: var(--color-signal);
+  }
+
+  .toast-error {
+    background:
+      linear-gradient(90deg, rgba(194, 59, 42, 0.12), transparent 42%),
+      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-error) 38%, var(--color-border));
+    color: var(--color-foreground);
+  }
+
+  .toast-error svg {
+    color: var(--color-error);
+  }
+
+  .toast-warning {
+    background:
+      linear-gradient(90deg, rgba(184, 134, 11, 0.14), transparent 42%),
+      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
+    color: var(--color-foreground);
+  }
+
+  .toast-warning svg {
+    color: var(--color-warning);
+  }
+
+  .toast-info {
+    background:
+      linear-gradient(90deg, rgba(59, 107, 138, 0.12), transparent 42%),
+      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-secondary) 38%, var(--color-border));
+    color: var(--color-foreground);
+  }
+
+  .toast-info svg {
+    color: var(--color-secondary);
+  }
+</style>
