@@ -32,6 +32,8 @@
   import AnnouncementBell from "./AnnouncementBell.svelte";
   import ToastContainer from "./ToastContainer.svelte";
   import SpotlightTour from "./SpotlightTour.svelte";
+  import UpdateBanner from "./UpdateBanner.svelte";
+  import { checkForUpdate } from "$lib/stores/updater.svelte";
   import { toastWarning } from "$lib/stores/toast.svelte";
   import { startTour, type TourStep } from "$lib/stores/tour.svelte";
 
@@ -62,6 +64,10 @@
 
   onMount(() => {
     document.documentElement.style.fontSize = "14px";
+    // Kick off the auto-update check after a short delay so initial render
+    // and auth/sync settle first. The banner appears asynchronously if an
+    // update is found.
+    setTimeout(() => { checkForUpdate(); }, 1500);
   });
 
   $effect(() => {
@@ -156,6 +162,7 @@
   </div>
 {:else}
 <div class="flex flex-col h-screen overflow-hidden bg-background">
+  <UpdateBanner />
   {#if view === "onboarding"}
     <!-- Onboarding takes full width -->
     <div class="flex-1 min-h-0">
