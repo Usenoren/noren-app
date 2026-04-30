@@ -93,17 +93,38 @@ Do not point the website at the updater `.app.tar.gz` files. Those are only for 
 
 ```bash
 mkdir -p /tmp/noren-release-X.Y.Z
+mkdir -p /tmp/noren-pkg-root-X.Y.Z/{aarch64,x64}
 
-productbuild \
+ditto src-tauri/target/release/bundle/macos/Noren.app \
+  /tmp/noren-pkg-root-X.Y.Z/aarch64/Noren.app
+ditto src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
+  /tmp/noren-pkg-root-X.Y.Z/x64/Noren.app
+
+pkgbuild --analyze --root /tmp/noren-pkg-root-X.Y.Z/aarch64 \
+  /tmp/noren-release-X.Y.Z/components-aarch64.plist
+pkgbuild --analyze --root /tmp/noren-pkg-root-X.Y.Z/x64 \
+  /tmp/noren-release-X.Y.Z/components-x64.plist
+
+# Critical: prevent macOS Installer from relocating the app to an old copy in Downloads/Desktop.
+plutil -replace 0.BundleIsRelocatable -bool NO /tmp/noren-release-X.Y.Z/components-aarch64.plist
+plutil -replace 0.BundleIsRelocatable -bool NO /tmp/noren-release-X.Y.Z/components-x64.plist
+
+pkgbuild \
+  --root /tmp/noren-pkg-root-X.Y.Z/aarch64 \
+  --install-location /Applications \
+  --identifier ink.noren.desktop \
+  --version X.Y.Z \
+  --component-plist /tmp/noren-release-X.Y.Z/components-aarch64.plist \
   --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
-  --component src-tauri/target/release/bundle/macos/Noren.app \
-  /Applications \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
 
-productbuild \
+pkgbuild \
+  --root /tmp/noren-pkg-root-X.Y.Z/x64 \
+  --install-location /Applications \
+  --identifier ink.noren.desktop \
+  --version X.Y.Z \
+  --component-plist /tmp/noren-release-X.Y.Z/components-x64.plist \
   --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
-  --component src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
-  /Applications \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
 ```
 
@@ -129,8 +150,10 @@ spctl -a -vv -t install /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
 
 For the `v1.0.1` installer rebuild, the public package hashes were:
 
-- `Noren_1.0.1_aarch64.pkg` -> `ede2a63744c7a6c17d44091a7540c6389b3850354e3a1bb6854ac5509dc14380`
-- `Noren_1.0.1_x64.pkg` -> `16b5482b98e26675467801f059c1b5fee79952fef53e8a56d2a7417918aadbf1`
+- `Noren_1.0.1_aarch64.pkg` -> `0f692e9e583b8ae20a20e003fbb9649972da3c148c7c77d7f9759132dd8f80c8`
+- `Noren_1.0.1_x64.pkg` -> `c216640b9352cfebc9deb4106012bd1ef6ef152c1d0d60095de73243f9fa5cf3`
+
+The fixed `v1.0.1` packages have `install-location="/Applications"`, `relocatable="false"`, and an empty `<relocate/>` block in `PackageInfo`.
 
 ## 7. Locate updater signatures
 
@@ -257,6 +280,10 @@ curl -L -o /tmp/Noren_X.Y.Z_x64.pkg \
 
 spctl -a -vv -t install /tmp/Noren_X.Y.Z_aarch64.pkg
 spctl -a -vv -t install /tmp/Noren_X.Y.Z_x64.pkg
+
+pkgutil --expand-full /tmp/Noren_X.Y.Z_aarch64.pkg /tmp/Noren_X.Y.Z_aarch64-expanded
+grep -E 'install-location|relocatable|relocate' /tmp/Noren_X.Y.Z_aarch64-expanded/PackageInfo
+# Expect install-location="/Applications", relocatable="false", and <relocate/>
 ```
 
 Install the previous version locally, launch it, and confirm the in-app update prompt appears within ~30s of launch and the new build installs cleanly.

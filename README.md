@@ -178,15 +178,34 @@ Build public installer packages from the signed `.app` bundles:
 
 ```bash
 mkdir -p /tmp/noren-release-X.Y.Z
-productbuild --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
-  --component src-tauri/target/release/bundle/macos/Noren.app \
-  /Applications \
+mkdir -p /tmp/noren-pkg-root-X.Y.Z/{aarch64,x64}
+ditto src-tauri/target/release/bundle/macos/Noren.app \
+  /tmp/noren-pkg-root-X.Y.Z/aarch64/Noren.app
+ditto src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
+  /tmp/noren-pkg-root-X.Y.Z/x64/Noren.app
+pkgbuild --analyze --root /tmp/noren-pkg-root-X.Y.Z/aarch64 \
+  /tmp/noren-release-X.Y.Z/components-aarch64.plist
+pkgbuild --analyze --root /tmp/noren-pkg-root-X.Y.Z/x64 \
+  /tmp/noren-release-X.Y.Z/components-x64.plist
+plutil -replace 0.BundleIsRelocatable -bool NO /tmp/noren-release-X.Y.Z/components-aarch64.plist
+plutil -replace 0.BundleIsRelocatable -bool NO /tmp/noren-release-X.Y.Z/components-x64.plist
+pkgbuild --root /tmp/noren-pkg-root-X.Y.Z/aarch64 \
+  --install-location /Applications \
+  --identifier ink.noren.desktop \
+  --version X.Y.Z \
+  --component-plist /tmp/noren-release-X.Y.Z/components-aarch64.plist \
+  --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
-productbuild --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
-  --component src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
-  /Applications \
+pkgbuild --root /tmp/noren-pkg-root-X.Y.Z/x64 \
+  --install-location /Applications \
+  --identifier ink.noren.desktop \
+  --version X.Y.Z \
+  --component-plist /tmp/noren-release-X.Y.Z/components-x64.plist \
+  --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
 ```
+
+Keep `BundleIsRelocatable` set to `false`; otherwise macOS Installer can update an old copy outside `/Applications`.
 
 Current public GitHub release assets expected by the website are:
 
