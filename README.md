@@ -130,7 +130,7 @@ cargo tauri dev
 cargo tauri build
 ```
 
-The dev build creates a popup window (triggered by global hotkey) and a main app window. The production build outputs `Noren.app` and a `.dmg` installer.
+The dev build creates a popup window (triggered by global hotkey) and a main app window. The production build outputs `Noren.app`; public user downloads are signed, notarized `.pkg` installers built from that app bundle.
 
 ### Release notes for macOS builds
 
@@ -157,10 +157,10 @@ cp src-tauri/target/x86_64-apple-darwin/release/noren-keychain-host src-tauri/bi
 Release build flow:
 
 ```bash
-# ARM app + dmg
+# ARM app
 cargo tauri build
 
-# Intel app + dmg
+# Intel app
 cargo tauri build --target x86_64-apple-darwin
 ```
 
@@ -174,20 +174,26 @@ For local signed + notarized builds, the machine must have:
   - `TAURI_SIGNING_PRIVATE_KEY`
   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 
-If the Intel `.dmg` bundle step is unavailable or flaky, create it manually from the built `.app`:
+Build public installer packages from the signed `.app` bundles:
 
 ```bash
-mkdir -p src-tauri/target/x86_64-apple-darwin/release/bundle/dmg
-cd src-tauri/target/x86_64-apple-darwin/release/bundle
-hdiutil create -volname Noren -srcfolder macos/Noren.app -ov -format UDZO dmg/Noren_1.0.0_x64.dmg
+mkdir -p /tmp/noren-release-X.Y.Z
+productbuild --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
+  --component src-tauri/target/release/bundle/macos/Noren.app \
+  /Applications \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
+productbuild --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
+  --component src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
+  /Applications \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
 ```
 
 Current public GitHub release assets expected by the website are:
 
-- `Noren_1.0.0_aarch64.dmg`
-- `Noren_1.0.0_x64.dmg`
+- `Noren_X.Y.Z_aarch64.pkg`
+- `Noren_X.Y.Z_x64.pkg`
 
-After building, upload the matching DMGs to the `v1.0.0` GitHub release with `gh release upload ... --clobber`.
+After building, notarize and staple the packages, then upload them to the matching GitHub release with `gh release upload ... --clobber`.
 
 ### Install
 
@@ -197,7 +203,7 @@ Current release builds are intended to be:
 - notarized by Apple
 - stapled before distribution
 
-Users should be able to download the DMG, drag `Noren.app` into `/Applications`, and open it normally without the old unsigned-app workaround.
+Users should be able to download the `.pkg`, run the standard macOS Installer, and open `Noren.app` from `/Applications` without unsigned-app warnings.
 
 ### Inference modes
 

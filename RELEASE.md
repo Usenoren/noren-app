@@ -9,7 +9,9 @@ Branch: `develop`. Submodule pointer in the parent repo gets bumped at the end.
 ```bash
 # Confirm signing identity
 security find-identity -v -p codesigning
-# Expect: 1 valid identity, "Developer ID Application: Okajevo Onome (YZ64BWQC3R)"
+# Expect:
+# - "Developer ID Application: Okajevo Onome (YZ64BWQC3R)" for .app signing
+# - "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" for public .pkg installers
 
 # Confirm notarytool credentials reach Apple
 xcrun notarytool history --keychain-profile noren-notary | head -5
@@ -63,7 +65,7 @@ done
 cargo tauri build
 ```
 
-Expected output: `src-tauri/target/release/bundle/macos/Noren.app` (signed) and `src-tauri/target/release/bundle/dmg/Noren_X.Y.Z_aarch64.dmg`. Tauri runs notarization automatically when the env vars are set. Watch for `Successfully signed and notarized`.
+Expected output: `src-tauri/target/release/bundle/macos/Noren.app` (signed), plus updater artifacts under the macOS bundle directory. Tauri may also produce a DMG, but the public website installer is the `.pkg` built in step 6.
 
 ## 4. Build Intel
 
@@ -71,17 +73,7 @@ Expected output: `src-tauri/target/release/bundle/macos/Noren.app` (signed) and 
 cargo tauri build --target x86_64-apple-darwin
 ```
 
-Expected output: `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Noren_X.Y.Z_x64.dmg`.
-
-If the Intel `.dmg` step is flaky, build the DMG manually from the signed `.app`:
-
-```bash
-mkdir -p src-tauri/target/x86_64-apple-darwin/release/bundle/dmg
-hdiutil create -volname Noren \
-  -srcfolder src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
-  -ov -format UDZO \
-  src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Noren_X.Y.Z_x64.dmg
-```
+Expected output: `src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app` (signed), plus updater artifacts under the macOS bundle directory. Tauri may also produce a DMG, but do not use it as the public website installer.
 
 ## 5. Verify signing and notarization
 
@@ -93,16 +85,63 @@ spctl -a -t exec -vvv src-tauri/target/release/bundle/macos/Noren.app
 
 Repeat for the Intel `.app` under `src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app`.
 
-## 6. Locate updater signatures
+## 6. Build public installer packages
+
+The public website download should be a signed, notarized, stapled `.pkg` installer. The `.pkg` installs `Noren.app` into `/Applications` and gives users the normal macOS Installer flow.
+
+Do not point the website at the updater `.app.tar.gz` files. Those are only for Tauri auto-update.
+
+```bash
+mkdir -p /tmp/noren-release-X.Y.Z
+
+productbuild \
+  --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
+  --component src-tauri/target/release/bundle/macos/Noren.app \
+  /Applications \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
+
+productbuild \
+  --sign "Developer ID Installer: Okajevo Onome (YZ64BWQC3R)" \
+  --component src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app \
+  /Applications \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
+```
+
+Notarize, staple, and verify both installer packages:
+
+```bash
+source ~/.noren-release.env
+
+xcrun notarytool submit /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg \
+  --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+xcrun notarytool submit /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg \
+  --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+
+xcrun stapler staple /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
+xcrun stapler staple /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
+
+pkgutil --check-signature /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
+pkgutil --check-signature /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
+spctl -a -vv -t install /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg
+spctl -a -vv -t install /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg
+# Expect: accepted, source=Notarized Developer ID
+```
+
+For the `v1.0.1` installer rebuild, the public package hashes were:
+
+- `Noren_1.0.1_aarch64.pkg` -> `ede2a63744c7a6c17d44091a7540c6389b3850354e3a1bb6854ac5509dc14380`
+- `Noren_1.0.1_x64.pkg` -> `16b5482b98e26675467801f059c1b5fee79952fef53e8a56d2a7417918aadbf1`
+
+## 7. Locate updater signatures
 
 Tauri produces an `.app.tar.gz` and a `.app.tar.gz.sig` for each target. They live alongside the bundles:
 
 - `src-tauri/target/release/bundle/macos/Noren.app.tar.gz{,.sig}`
 - `src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz{,.sig}`
 
-Capture both `.sig` contents for the server manifest in step 9.
+Capture both `.sig` contents for the server manifest in step 11.
 
-## 7. Commit, tag, push
+## 8. Commit, tag, push
 
 ```bash
 git add src-tauri/tauri.conf.json src-tauri/Cargo.toml Cargo.lock
@@ -112,14 +151,12 @@ git push origin develop
 git push origin vX.Y.Z
 ```
 
-## 8. GitHub release
+## 9. GitHub release
 
-Both architectures produce a file literally named `Noren.app.tar.gz` and `Noren.app.tar.gz.sig`. GitHub release assets must have unique names, so stage renamed copies first.
+Both architectures produce a file literally named `Noren.app.tar.gz` and `Noren.app.tar.gz.sig`. GitHub release assets must have unique names, so stage renamed copies first. Upload both public `.pkg` installers and both updater `.app.tar.gz` artifacts.
 
 ```bash
 mkdir -p /tmp/noren-release-X.Y.Z
-cp src-tauri/target/release/bundle/dmg/Noren_X.Y.Z_aarch64.dmg /tmp/noren-release-X.Y.Z/
-cp src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Noren_X.Y.Z_x64.dmg /tmp/noren-release-X.Y.Z/
 cp src-tauri/target/release/bundle/macos/Noren.app.tar.gz \
    /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz
 cp src-tauri/target/release/bundle/macos/Noren.app.tar.gz.sig \
@@ -132,15 +169,25 @@ cp src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Noren.app.tar.gz.si
 gh release create vX.Y.Z \
   --title "vX.Y.Z" \
   --notes "Release notes here" \
-  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.dmg \
-  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.dmg \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.pkg \
+  /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.pkg \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_aarch64.app.tar.gz.sig \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.app.tar.gz \
   /tmp/noren-release-X.Y.Z/Noren_X.Y.Z_x64.app.tar.gz.sig
 ```
 
-## 9. Update the server updater manifest
+## 10. Update the website download links
+
+The website should point users to the `.pkg` installers:
+
+- `website/lib/download-config.ts`
+  - `DOWNLOAD_URLS.macOS.arm64` -> `Noren_X.Y.Z_aarch64.pkg`
+  - `DOWNLOAD_URLS.macOS.x64` -> `Noren_X.Y.Z_x64.pkg`
+
+The download page format label should say `.pkg installer`, not `.dmg`.
+
+## 11. Update the server updater manifest
 
 The desktop auto-updater hits `https://api.usenoren.ai/v1/update/{target}/{current_version}`. Without this step, clients on the previous version are never prompted, no matter what was uploaded to GitHub.
 
@@ -189,15 +236,27 @@ curl -sS -o /dev/null -w "%{http_code}\n" \
   https://api.usenoren.ai/v1/update/darwin-aarch64/X.Y.Z
 ```
 
-## 10. Bump submodule pointer in the parent repo
+## 12. Bump submodule pointer in the parent repo
 
 ```bash
 cd /Users/onomeokajevo/noren
-git add app
-git commit -m "App: bump to vX.Y.Z"
+git add app website server
+git commit -m "Ship vX.Y.Z app release"
 git push origin develop
 ```
 
-## 11. Sanity check the auto-updater
+## 13. Sanity check installers and auto-updater
+
+Re-download the public `.pkg` installers from GitHub and verify Gatekeeper acceptance:
+
+```bash
+curl -L -o /tmp/Noren_X.Y.Z_aarch64.pkg \
+  https://github.com/Usenoren/noren-app/releases/download/vX.Y.Z/Noren_X.Y.Z_aarch64.pkg
+curl -L -o /tmp/Noren_X.Y.Z_x64.pkg \
+  https://github.com/Usenoren/noren-app/releases/download/vX.Y.Z/Noren_X.Y.Z_x64.pkg
+
+spctl -a -vv -t install /tmp/Noren_X.Y.Z_aarch64.pkg
+spctl -a -vv -t install /tmp/Noren_X.Y.Z_x64.pkg
+```
 
 Install the previous version locally, launch it, and confirm the in-app update prompt appears within ~30s of launch and the new build installs cleanly.
