@@ -537,27 +537,6 @@ export async function getRefreshHistory(limit?: number, offset?: number): Promis
   return invoke("get_refresh_history", { limit: limit ?? 20, offset: offset ?? 0 });
 }
 
-// --- Sync ---
-
-export interface SyncStatus {
-  has_remote: boolean;
-  remote_version: number | null;
-  updated_at: string | null;
-  local_checksum: string;
-}
-
-export async function syncProfileUp(): Promise<string> {
-  return invoke("sync_profile_up");
-}
-
-export async function syncProfileDown(): Promise<string> {
-  return invoke("sync_profile_down");
-}
-
-export async function getSyncStatus(): Promise<SyncStatus> {
-  return invoke("get_sync_status");
-}
-
 // --- Profiles ---
 
 export interface VoiceOverview {
@@ -641,8 +620,11 @@ export async function saveProfileEdit(params: {
   });
 }
 
-export async function migrateProfileToServer(): Promise<string> {
-  return invoke("migrate_profile_to_server");
+export async function cleanupLocalProfileStorage(canExport?: boolean): Promise<{
+  removed_profile: boolean;
+  removed_quality_report: boolean;
+}> {
+  return invoke("cleanup_local_profile_storage", { canExport: canExport ?? null });
 }
 
 export async function exportProfile(): Promise<string> {

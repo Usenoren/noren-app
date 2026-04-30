@@ -8,12 +8,11 @@ use crate::error::EngineError;
 /// Creates:
 /// - `{profile_dir}/core-identity.md`
 /// - `{profile_dir}/contexts/{format}.md` for each context
-/// - `{profile_dir}/quality-check-results.md`
 pub fn save_profile(
     profile_dir: &Path,
     core_identity: &str,
     contexts: &HashMap<String, String>,
-    quality_check: &str,
+    _quality_check: &str,
 ) -> Result<PathBuf, EngineError> {
     std::fs::create_dir_all(profile_dir)?;
     let contexts_dir = profile_dir.join("contexts");
@@ -25,10 +24,38 @@ pub fn save_profile(
         std::fs::write(contexts_dir.join(format!("{}.md", format)), content)?;
     }
 
-    std::fs::write(
-        profile_dir.join("quality-check-results.md"),
-        quality_check,
-    )?;
+    let quality_path = profile_dir.join("quality-check-results.md");
+    if quality_path.exists() {
+        std::fs::remove_file(quality_path)?;
+    }
+
+    Ok(profile_dir.to_path_buf())
+}
+
+/// Save a server-exported profile for local BYOK use.
+pub fn save_profile_for_byok_seed(
+    profile_dir: &Path,
+    core_identity: &str,
+    contexts: &HashMap<String, String>,
+) -> Result<PathBuf, EngineError> {
+    std::fs::create_dir_all(profile_dir)?;
+
+    let contexts_dir = profile_dir.join("contexts");
+    if contexts_dir.exists() {
+        std::fs::remove_dir_all(&contexts_dir)?;
+    }
+    std::fs::create_dir_all(&contexts_dir)?;
+
+    std::fs::write(profile_dir.join("core-identity.md"), core_identity)?;
+
+    for (format, content) in contexts {
+        std::fs::write(contexts_dir.join(format!("{}.md", format)), content)?;
+    }
+
+    let quality_path = profile_dir.join("quality-check-results.md");
+    if quality_path.exists() {
+        std::fs::remove_file(quality_path)?;
+    }
 
     Ok(profile_dir.to_path_buf())
 }
@@ -36,13 +63,12 @@ pub fn save_profile(
 /// Load a voice profile from disk.
 ///
 /// Returns the core identity and a map of format → context content.
-pub fn load_profile(
-    profile_dir: &Path,
-) -> Result<(String, HashMap<String, String>), EngineError> {
+pub fn load_profile(profile_dir: &Path) -> Result<(String, HashMap<String, String>), EngineError> {
     let core_path = profile_dir.join("core-identity.md");
     if !core_path.exists() {
         return Err(EngineError::Profile(
-            "No voice profile found. Create one in Profiles or upgrade to Pro for AI extraction.".to_string()
+            "No voice profile found. Create one in Profiles or upgrade to Pro for AI extraction."
+                .to_string(),
         ));
     }
 
@@ -137,6 +163,7 @@ mod tests {
         assert_eq!(loaded_contexts.len(), 2);
         assert_eq!(loaded_contexts["twitter"], "Twitter context content");
         assert_eq!(loaded_contexts["email"], "Email context content");
+        assert!(!profile_dir.join("quality-check-results.md").exists());
     }
 
     #[test]
@@ -144,7 +171,10 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let result = load_profile(&tmp.path().join("nonexistent"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No voice profile found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No voice profile found"));
     }
 
     #[test]
@@ -161,6 +191,29 @@ mod tests {
 
         let formats = list_formats(&profile_dir);
         assert_eq!(formats, vec!["email", "longform", "twitter"]);
+    }
+
+    #[test]
+    fn byok_seed_omits_quality_report_and_removes_stale_file() {
+        let tmp = TempDir::new().unwrap();
+        let profile_dir = tmp.path().join("profile");
+
+        let mut old_contexts = HashMap::new();
+        old_contexts.insert("twitter".to_string(), "old".to_string());
+        save_profile(&profile_dir, "old core", &old_contexts, "internal qc").unwrap();
+        std::fs::write(profile_dir.join("quality-check-results.md"), "internal qc").unwrap();
+
+        let mut contexts = HashMap::new();
+        contexts.insert("email".to_string(), "Email context".to_string());
+
+        save_profile_for_byok_seed(&profile_dir, "Exported core", &contexts).unwrap();
+
+        let (core, loaded_contexts) = load_profile(&profile_dir).unwrap();
+        assert_eq!(core, "Exported core");
+        assert_eq!(loaded_contexts.len(), 1);
+        assert_eq!(loaded_contexts["email"], "Email context");
+        assert!(!profile_dir.join("contexts/twitter.md").exists());
+        assert!(!profile_dir.join("quality-check-results.md").exists());
     }
 
     #[test]

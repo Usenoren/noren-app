@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
-  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
+  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, cleanupLocalProfileStorage } from "$lib/api/tauri";
   import { syncThemeFromConfig } from "$lib/stores/theme.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import GenerateView from "./GenerateView.svelte";
@@ -56,6 +56,7 @@
         hasPermissions = ok;
       });
       refreshApiKeyStatus();
+      cleanupLocalProfileStorage().catch(() => {});
       refreshSubscription();
     }).then((fn) => cleanups.push(fn))
 
@@ -65,6 +66,7 @@
 
     // Sync theme from persisted config
     syncThemeFromConfig();
+    cleanupLocalProfileStorage().catch(() => {});
     // Check profile status and API key availability
     Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
       hasProfile = profile.exists;
@@ -81,13 +83,6 @@
       // Load subscription status for feature gating
       if (settings.noren_pro_logged_in) {
         refreshSubscription();
-
-        // Auto-migrate local profile to server for Pro users
-        if (settings.noren_pro_logged_in && profile.exists && !profile.is_server) {
-          migrateProfileToServer().catch(() => {
-            // Migration failed silently — user can retry manually
-          });
-        }
       }
     });
 

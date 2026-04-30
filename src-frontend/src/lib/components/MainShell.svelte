@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
-  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, migrateProfileToServer } from "$lib/api/tauri";
+  import { checkPermissions, requestPermissions, getSettings, getProfileOverview, cleanupLocalProfileStorage } from "$lib/api/tauri";
   import { syncThemeFromConfig } from "$lib/stores/theme.svelte";
   import { refresh as refreshSubscription, canExtract } from "$lib/stores/subscription.svelte";
   import { isRefreshAvailable } from "$lib/stores/patches.svelte";
@@ -34,7 +34,6 @@
   import SpotlightTour from "./SpotlightTour.svelte";
   import UpdateBanner from "./UpdateBanner.svelte";
   import { checkForUpdate } from "$lib/stores/updater.svelte";
-  import { toastWarning } from "$lib/stores/toast.svelte";
   import { startTour, type TourStep } from "$lib/stores/tour.svelte";
 
   const appTourSteps: TourStep[] = [
@@ -81,6 +80,7 @@
       checkPermissions().then((ok) => {
         hasPermissions = ok;
       });
+      cleanupLocalProfileStorage().catch(() => {});
       refreshSubscription();
     }).then((fn) => cleanups.push(fn));
 
@@ -89,6 +89,7 @@
     });
 
     syncThemeFromConfig();
+    cleanupLocalProfileStorage().catch(() => {});
     Promise.all([getSettings(), getProfileOverview()]).then(([settings, profile]) => {
       if (!profile.exists) {
         needsOnboarding = true;
@@ -105,10 +106,6 @@
 
       if (settings.noren_pro_logged_in) {
         refreshSubscription();
-
-        if (settings.noren_pro_logged_in && profile.exists && !profile.is_server) {
-          migrateProfileToServer().catch(() => toastWarning("Profile sync to server failed"));
-        }
       }
     }).catch(() => {
       loading = false;

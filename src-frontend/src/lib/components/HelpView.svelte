@@ -109,7 +109,7 @@
         </div>
         <div class="flex items-start gap-3 p-3.5 bg-surface border border-border rounded-lg shadow-card">
           <span class="font-heading italic text-lg text-accent opacity-35 leading-none min-w-[22px] pt-px">04</span>
-          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Chrome Extension:</strong> Highlight text on any page to reply, rewrite, or fix it in your voice. Pro users get automatic profile sync.</p>
+          <p class="text-[13px] text-foreground leading-relaxed"><strong class="font-medium">Chrome Extension:</strong> Highlight text on any page to reply, rewrite, or fix it in your voice.</p>
         </div>
       </div>
     </section>

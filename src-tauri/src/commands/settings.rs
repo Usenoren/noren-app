@@ -1043,11 +1043,8 @@ pub fn factory_reset(state: State<'_, AppState>) -> Result<(), String> {
     for account in keychain_accounts {
         let _ = keychain::delete_api_key(account);
     }
-    // Intentionally NOT deleting the encryption key here. The local key is
-    // the only thing that can decrypt the encrypted sync blob on the server,
-    // so wiping it locks the user out of their cloud-synced profile copy
-    // forever. Pro profiles are recoverable via /v1/profile/voice regardless,
-    // but losing the sync key on every factory reset is needless damage.
+    // Keep the prompt-cache key so regenerated cache entries can continue to
+    // use the stable keychain secret.
 
     // Reset in-memory config to defaults
     let mut config = state.config.lock().unwrap();

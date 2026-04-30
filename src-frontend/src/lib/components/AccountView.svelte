@@ -552,7 +552,7 @@
         <button class="card av-upgrade-card" onclick={() => handleUpgrade("pro")}>
           <div>
             <div class="av-upgrade-title">Subscribe to Pro</div>
-            <div class="av-upgrade-sub">Bundled inference, living profile, sync, and export</div>
+            <div class="av-upgrade-sub">Bundled inference, living profile, and export</div>
           </div>
           <div class="av-upgrade-price">$7<span class="av-upgrade-per">/mo</span></div>
         </button>
@@ -732,7 +732,7 @@
             </li>
             <li class="av-pitch-item">
               <svg class="av-pitch-check" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-              Cloud sync across devices.
+              Server-backed profile for Pro inference.
             </li>
             <li class="av-pitch-item">
               <svg class="av-pitch-check" fill="none" viewBox="0 0 24 24" stroke="var(--color-accent)" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -742,7 +742,7 @@
           <div class="divider-thread" style="margin-top: 20px; margin-bottom: 14px;"></div>
           <p class="text-subhead text-secondary">$7/mo <span class="text-xs text-muted font-normal" style="font-style: normal;">founding member pricing</span></p>
           {#if canExtract()}
-            <p class="text-[11px] text-muted mt-2">You have extraction. Pro adds inference, living profile, sync.</p>
+            <p class="text-[11px] text-muted mt-2">You have extraction. Pro adds inference and living profile.</p>
           {/if}
         </div>
 

@@ -1,4 +1,5 @@
 import {
+  cleanupLocalProfileStorage,
   getSubscriptionStatus,
   hasExtractionReceipt,
   type SubscriptionStatus,
@@ -26,10 +27,6 @@ export function canExtract(): boolean {
 
 export function canLivingProfile(): boolean {
   return status?.can_living_profile ?? false;
-}
-
-export function canSync(): boolean {
-  return status?.can_sync ?? false;
 }
 
 export function canExport(): boolean {
@@ -71,6 +68,9 @@ export async function refresh(): Promise<void> {
   // Check server status (requires auth; signed-out BYOK users will fail here)
   try {
     status = await getSubscriptionStatus();
+    cleanupLocalProfileStorage(status.can_export).catch((e) => {
+      console.error("cleanupLocalProfileStorage failed:", e);
+    });
   } catch (e) {
     console.error("getSubscriptionStatus failed:", e);
   }

@@ -22,7 +22,6 @@
     scrapeTwitter,
     scrapeBlog,
     scrapeReddit,
-    syncProfileDown,
     getProfileMetadataInfo,
     type FormatGroup,
   } from "$lib/api/tauri";
@@ -506,21 +505,6 @@
 
   async function afterAuth() {
     await refreshSubscription();
-
-    // Returning user: if a profile already exists on the server, pull it
-    // down, show a brief welcome-back flash, then complete onboarding.
-    //
-    // The encrypted sync blob and the authoritative Pro profile are two
-    // separate stores. A sync-down failure (e.g. the local encryption key
-    // was reset and the blob can't be decrypted) must NOT prevent us from
-    // checking the authoritative profile metadata — otherwise returning
-    // Pro users get sent through extraction even though their profile is
-    // intact on the server.
-    try {
-      await syncProfileDown();
-    } catch {
-      // Best-effort. The metadata check below is the source of truth.
-    }
 
     try {
       const meta = await getProfileMetadataInfo();
@@ -1456,7 +1440,7 @@
               <span style="font-size:13px; font-weight:600; line-height:1.3">Start Pro</span>
               <span style="font-size:12px; font-weight:400">$7<span style="font-size:10px; opacity:0.6">/mo</span></span>
             </div>
-            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.5">Extraction, inference, living profile, sync. Everything.</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.5">Extraction, inference, living profile. Everything.</div>
           </div>
         </button>
 

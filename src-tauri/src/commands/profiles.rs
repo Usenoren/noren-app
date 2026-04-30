@@ -14,6 +14,12 @@ pub struct ProfileOverview {
     pub voice_overview: Option<serde_json::Value>,
 }
 
+#[derive(Serialize)]
+pub struct LocalProfileCleanupResult {
+    pub removed_profile: bool,
+    pub removed_quality_report: bool,
+}
+
 #[derive(Deserialize)]
 struct ServerProfileMetadata {
     has_profile: bool,
@@ -29,7 +35,6 @@ struct ServerProfileMetadata {
 pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileOverview, String> {
     let config = state.config.lock().unwrap().clone();
 
-    // Pro path: check server for profile
     if config.inference_mode == noren_engine::InferenceMode::NorenPro {
         if crate::keychain::get_api_key("noren-pro-token").is_some() {
             let server_url = config
@@ -57,10 +62,24 @@ pub async fn get_profile_overview(state: State<'_, AppState>) -> Result<ProfileO
                     });
                 }
                 _ => {
-                    // Debug mode or server unreachable — fall through to local check
+                    return Ok(ProfileOverview {
+                        exists: false,
+                        path: String::new(),
+                        formats: vec![],
+                        is_server: true,
+                        voice_overview: None,
+                    });
                 }
             }
         }
+
+        return Ok(ProfileOverview {
+            exists: false,
+            path: String::new(),
+            formats: vec![],
+            is_server: true,
+            voice_overview: None,
+        });
     }
 
     // BYOK / fallback: check local profile
@@ -94,23 +113,17 @@ pub fn read_profile_content(
 ) -> Result<noren_engine::ProfileContent, String> {
     let config = state.config.lock().unwrap();
 
-    // Server profiles can't be read locally — use Export to download first
-    if config.inference_mode == noren_engine::InferenceMode::NorenPro
-        && !config.profile_dir.join("core-identity.md").exists()
-    {
+    if config.inference_mode == noren_engine::InferenceMode::NorenPro {
         return Err("Profile is stored on Noren servers. Use Export to download.".to_string());
     }
 
     let (core_identity, contexts) =
         noren_engine::load_profile(&config.profile_dir).map_err(|e| e.to_string())?;
 
-    let qc_path = config.profile_dir.join("quality-check-results.md");
-    let quality_check = std::fs::read_to_string(qc_path).ok();
-
     Ok(noren_engine::ProfileContent {
         core_identity,
         contexts,
-        quality_check,
+        quality_check: None,
     })
 }
 
@@ -122,6 +135,10 @@ pub fn save_profile_edit(
     context_content: Option<String>,
 ) -> Result<(), String> {
     let config = state.config.lock().unwrap();
+    if config.inference_mode == noren_engine::InferenceMode::NorenPro {
+        return Err("Local profile edits are only available in BYOK mode.".to_string());
+    }
+
     let dir = &config.profile_dir;
 
     std::fs::create_dir_all(dir)
@@ -140,50 +157,29 @@ pub fn save_profile_edit(
     Ok(())
 }
 
-/// Migrate a local profile to Noren servers.
-/// Uploads the local profile, then deletes the local copy.
 #[tauri::command]
-pub async fn migrate_profile_to_server(
+pub fn cleanup_local_profile_storage(
     state: State<'_, AppState>,
-) -> Result<String, String> {
+    can_export: Option<bool>,
+) -> Result<LocalProfileCleanupResult, String> {
     let config = state.config.lock().unwrap().clone();
+    let remove_profile =
+        config.inference_mode == noren_engine::InferenceMode::NorenPro && can_export == Some(false);
 
-    let server_url = config
-        .server_url
-        .as_deref()
-        .unwrap_or("https://api.usenoren.ai");
+    let mut removed_profile = false;
+    let mut removed_quality_report = false;
 
-    // Load local profile
-    let (core_identity, contexts) =
-        noren_engine::load_profile(&config.profile_dir).map_err(|e| e.to_string())?;
-
-    let qc_path = config.profile_dir.join("quality-check-results.md");
-    let quality_report = std::fs::read_to_string(qc_path).ok();
-
-    // Upload to server
-    let upload_url = format!("{}/v1/profile/voice", server_url.trim_end_matches('/'));
-    let payload = serde_json::json!({
-        "core_identity": core_identity,
-        "contexts": contexts,
-        "quality_report": quality_report,
-    });
-    let resp = crate::auth_client::authed_request(server_url, |client, token| {
-        client
-            .put(&upload_url)
-            .header("Authorization", format!("Bearer {}", token))
-            .json(&payload)
-    })
-    .await?;
-
-    if !resp.status().is_success() {
-        let text = resp.text().await.unwrap_or_default();
-        return Err(format!("Server rejected profile upload: {}", text));
+    let dirs = cleanup_candidate_dirs(&config.profile_dir);
+    for dir in dirs {
+        let result = cleanup_profile_dir(&dir, remove_profile)?;
+        removed_profile |= result.removed_profile;
+        removed_quality_report |= result.removed_quality_report;
     }
 
-    // Delete local profile
-    let _ = std::fs::remove_dir_all(&config.profile_dir);
-
-    Ok("Profile migrated to Noren servers".to_string())
+    Ok(LocalProfileCleanupResult {
+        removed_profile,
+        removed_quality_report,
+    })
 }
 
 /// Export server-side profile to a user-chosen location as Markdown.
@@ -199,7 +195,10 @@ pub async fn export_profile(
         .as_deref()
         .unwrap_or("https://api.usenoren.ai");
 
-    let export_url = format!("{}/v1/profile/voice/export", server_url.trim_end_matches('/'));
+    let export_url = format!(
+        "{}/v1/profile/voice/export",
+        server_url.trim_end_matches('/')
+    );
     let resp = crate::auth_client::authed_request(server_url, |client, token| {
         client
             .post(&export_url)
@@ -216,8 +215,6 @@ pub async fn export_profile(
     struct ExportResponse {
         core_identity: String,
         contexts: std::collections::HashMap<String, String>,
-        #[allow(dead_code)]
-        quality_report: Option<String>,
     }
 
     let export: ExportResponse = resp
@@ -260,12 +257,10 @@ pub async fn export_profile(
     std::fs::write(path.as_path().unwrap(), md.as_bytes())
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
-    // Also save to internal profile directory for local BYOK use
-    noren_engine::save_profile(
+    noren_engine::save_profile_for_byok_seed(
         &config.profile_dir,
         &export.core_identity,
         &export.contexts,
-        &export.quality_report.unwrap_or_default(),
     )
     .map_err(|e| e.to_string())?;
 
@@ -372,10 +367,11 @@ fn build_local_voice_overview(profile_dir: &std::path::Path) -> Option<serde_jso
 }
 
 /// Fetch profile metadata from the Noren server.
-async fn fetch_server_profile_metadata(
-    server_url: &str,
-) -> Result<ServerProfileMetadata, String> {
-    let url = format!("{}/v1/profile/voice/metadata", server_url.trim_end_matches('/'));
+async fn fetch_server_profile_metadata(server_url: &str) -> Result<ServerProfileMetadata, String> {
+    let url = format!(
+        "{}/v1/profile/voice/metadata",
+        server_url.trim_end_matches('/')
+    );
     let resp = crate::auth_client::authed_request(server_url, |client, token| {
         client
             .get(&url)
@@ -390,4 +386,113 @@ async fn fetch_server_profile_metadata(
     resp.json::<ServerProfileMetadata>()
         .await
         .map_err(|e| e.to_string())
+}
+
+fn cleanup_candidate_dirs(profile_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut dirs = vec![profile_dir.to_path_buf()];
+    if let Some(parent) = profile_dir.parent() {
+        let legacy = parent.join("profile_dir");
+        if legacy != profile_dir {
+            dirs.push(legacy);
+        }
+    }
+    dirs
+}
+
+fn cleanup_profile_dir(
+    profile_dir: &std::path::Path,
+    remove_profile: bool,
+) -> Result<LocalProfileCleanupResult, String> {
+    let quality_path = profile_dir.join("quality-check-results.md");
+    let mut removed_quality_report = false;
+    if quality_path.exists() {
+        std::fs::remove_file(&quality_path)
+            .map_err(|e| format!("Failed to remove quality report: {}", e))?;
+        removed_quality_report = true;
+    }
+
+    let mut removed_profile = false;
+    if remove_profile {
+        for path in [
+            profile_dir.join("core-identity.md"),
+            profile_dir.join("calibration.json"),
+            profile_dir.join("voice-metadata.json"),
+            profile_dir.join("voice-summary.txt"),
+        ] {
+            if path.exists() {
+                std::fs::remove_file(&path)
+                    .map_err(|e| format!("Failed to remove profile file: {}", e))?;
+                removed_profile = true;
+            }
+        }
+
+        let contexts_dir = profile_dir.join("contexts");
+        if contexts_dir.exists() {
+            std::fs::remove_dir_all(&contexts_dir)
+                .map_err(|e| format!("Failed to remove profile contexts: {}", e))?;
+            removed_profile = true;
+        }
+
+        if profile_dir
+            .read_dir()
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(false)
+        {
+            let _ = std::fs::remove_dir(profile_dir);
+        }
+    }
+
+    Ok(LocalProfileCleanupResult {
+        removed_profile,
+        removed_quality_report,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_profile_dir(name: &str) -> std::path::PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("noren-profile-cleanup-{}-{}", name, suffix))
+    }
+
+    #[test]
+    fn cleanup_removes_quality_report_without_profile_content() {
+        let dir = temp_profile_dir("quality");
+        std::fs::create_dir_all(dir.join("contexts")).unwrap();
+        std::fs::write(dir.join("core-identity.md"), "core").unwrap();
+        std::fs::write(dir.join("contexts/email.md"), "email").unwrap();
+        std::fs::write(dir.join("quality-check-results.md"), "quality").unwrap();
+
+        let result = cleanup_profile_dir(&dir, false).unwrap();
+        assert!(result.removed_quality_report);
+        assert!(!result.removed_profile);
+        assert!(dir.join("core-identity.md").exists());
+        assert!(dir.join("contexts/email.md").exists());
+        assert!(!dir.join("quality-check-results.md").exists());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cleanup_removes_profile_content_when_requested() {
+        let dir = temp_profile_dir("profile");
+        std::fs::create_dir_all(dir.join("contexts")).unwrap();
+        std::fs::write(dir.join("core-identity.md"), "core").unwrap();
+        std::fs::write(dir.join("contexts/email.md"), "email").unwrap();
+        std::fs::write(dir.join("voice-metadata.json"), "{}").unwrap();
+
+        let result = cleanup_profile_dir(&dir, true).unwrap();
+        assert!(result.removed_profile);
+        assert!(!dir.join("core-identity.md").exists());
+        assert!(!dir.join("contexts").exists());
+        assert!(!dir.join("voice-metadata.json").exists());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

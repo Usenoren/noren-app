@@ -56,11 +56,10 @@ pub async fn run_extraction(
             config.profile_dir.clone()
         };
 
-        noren_engine::save_profile(
+        noren_engine::save_profile_for_byok_seed(
             &profile_dir,
             &result.core_identity,
             &result.contexts,
-            &result.quality_check,
         )
         .map_err(|e| e.to_string())?;
 
@@ -232,11 +231,10 @@ fn handle_extraction_result(
             },
         );
     } else {
-        match noren_engine::save_profile(
+        match noren_engine::save_profile_for_byok_seed(
             profile_dir,
             &result.core_identity,
             &result.contexts,
-            &result.quality_check,
         ) {
             Ok(_) => {
                 let _ = app.emit(

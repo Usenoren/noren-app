@@ -10,9 +10,6 @@
     getProfileMetadataInfo,
     rollbackProfile,
     getRefreshHistory,
-    syncProfileUp,
-    syncProfileDown,
-    getSyncStatus,
     exportProfile,
     createCheckout,
     createExportUnlockCheckout,
@@ -26,13 +23,12 @@
     type ExternalSample,
     type RefreshHistoryEntry,
     type SectionDiff,
-    type SyncStatus,
     type VoiceOverview,
     type GuidedEditResponse,
   } from "$lib/api/tauri";
   import { emit } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
-  import { canLivingProfile, canSync, canExport, exportUnlockRemainingCents, exportUnlockProgress, isPro } from "$lib/stores/subscription.svelte";
+  import { canLivingProfile, canExport, exportUnlockRemainingCents, exportUnlockProgress, isPro } from "$lib/stores/subscription.svelte";
   import { setRefreshAvailable } from "$lib/stores/patches.svelte";
   import { refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
   import { friendlyError } from "$lib/utils/errors";
@@ -56,6 +52,10 @@
   let isSaving = $state(false);
   let error = $state("");
   let saveSuccess = $state(false);
+  let showAddContext = $state(false);
+  let newContextFormat = $state("");
+  let newContextContent = $state("");
+  let isAddingContext = $state(false);
 
   // Living profile state
   let livingStatus = $state<LivingProfileStatus | null>(null);
@@ -70,16 +70,10 @@
   // Evolution timeline
   let refreshHistory = $state<RefreshHistoryEntry[]>([]);
   let expandedEntryId = $state<string | null>(null);
-  let expandedDiffSection = $state<string | null>(null);
 
   // Sample submission (server profile)
   let showSampleInput = $state(false);
   let isSubmittingSample = $state(false);
-
-  // Sync state
-  let syncStatus = $state<SyncStatus | null>(null);
-  let isSyncing = $state(false);
-  let syncMessage = $state("");
 
   // Export state (server profiles)
   let isExporting = $state(false);
@@ -91,7 +85,6 @@
   let isGuidedEditing = $state(false);
   let guidedResult = $state<GuidedEditResponse | null>(null);
   let guidedError = $state("");
-  let showGuidedDiff = $state(false);
 
   // Voice card collapse (persisted)
   let voiceCardOpen = $state(localStorage.getItem("noren-voice-expanded") === "true");
@@ -161,11 +154,6 @@
 
   function toggleEntry(id: string) {
     expandedEntryId = expandedEntryId === id ? null : id;
-    expandedDiffSection = null;
-  }
-
-  function toggleDiffSection(section: string) {
-    expandedDiffSection = expandedDiffSection === section ? null : section;
   }
 
   function formatDate(iso: string): string {
@@ -228,10 +216,6 @@
         const nextRefresh = profileMeta?.next_refresh_available;
         setRefreshAvailable(!nextRefresh || new Date(nextRefresh).getTime() <= Date.now());
       } catch { /* not logged in or not available */ }
-      // Load sync status
-      try {
-        syncStatus = await getSyncStatus();
-      } catch { /* not logged in or not available */ }
     } catch (e) {
       error = friendlyError(e);
     }
@@ -287,8 +271,71 @@
     }
   }
 
+  function normalizeContextFormat(input: string): string {
+    return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  function startAddContext() {
+    if (isEditing) cancelEditing();
+    showAddContext = true;
+    newContextFormat = "";
+    newContextContent = "";
+    error = "";
+    saveSuccess = false;
+  }
+
+  function cancelAddContext() {
+    showAddContext = false;
+    newContextFormat = "";
+    newContextContent = "";
+    error = "";
+  }
+
+  async function handleAddContext() {
+    const fmt = normalizeContextFormat(newContextFormat);
+    const content = newContextContent.trim();
+    if (!fmt) {
+      error = "Enter a context name.";
+      return;
+    }
+    if (fmt === "core" || fmt === "living") {
+      error = "Choose a different context name.";
+      return;
+    }
+    if (overview?.formats.includes(fmt)) {
+      error = `Context "${fmt}" already exists.`;
+      return;
+    }
+    if (!content) {
+      error = "Add context details before saving.";
+      return;
+    }
+
+    isAddingContext = true;
+    error = "";
+    saveSuccess = false;
+    try {
+      await saveProfileEdit({
+        coreIdentity: profile?.core_identity ?? "",
+        contextFormat: fmt,
+        contextContent: content,
+      });
+      await loadProfile();
+      activeTab = fmt;
+      showAddContext = false;
+      newContextFormat = "";
+      newContextContent = "";
+      saveSuccess = true;
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      isAddingContext = false;
+    }
+  }
+
   function switchTab(tab: string) {
     if (isEditing) cancelEditing();
+    if (showAddContext) cancelAddContext();
     activeTab = tab;
     saveSuccess = false;
     refreshMessage = "";
@@ -366,37 +413,6 @@
     }
   }
 
-  async function handleSyncUp() {
-    isSyncing = true;
-    syncMessage = "";
-    error = "";
-    try {
-      const result = await syncProfileUp();
-      syncMessage = result;
-      syncStatus = await getSyncStatus();
-    } catch (e) {
-      error = friendlyError(e);
-    } finally {
-      isSyncing = false;
-    }
-  }
-
-  async function handleSyncDown() {
-    isSyncing = true;
-    syncMessage = "";
-    error = "";
-    try {
-      const result = await syncProfileDown();
-      syncMessage = result;
-      syncStatus = await getSyncStatus();
-      await loadProfile(); // Reload profile after pull
-    } catch (e) {
-      error = friendlyError(e);
-    } finally {
-      isSyncing = false;
-    }
-  }
-
   async function handleExport() {
     isExporting = true;
     error = "";
@@ -432,7 +448,6 @@
     if (!guidedInstruction.trim()) return;
     guidedError = "";
     guidedResult = null;
-    showGuidedDiff = false;
     isGuidedEditing = true;
     try {
       const result = await guidedProfileEdit({
@@ -749,19 +764,6 @@
               <span class="ge-result-msg" class:text-signal={guidedResult.edited} class:text-muted={!guidedResult.edited}>
                 {guidedResult.message}
               </span>
-              {#if guidedResult.edited}
-                <button class="ge-result-toggle" onclick={() => { showGuidedDiff = !showGuidedDiff; }}>
-                  {showGuidedDiff ? "Hide" : "Show"} changes
-                </button>
-                {#if showGuidedDiff}
-                  <div class="ge-diff">
-                    <span class="ge-diff-label">Before</span>
-                    <pre class="ge-diff-block ge-diff-old">{guidedResult.original.slice(0, 400)}{guidedResult.original.length > 400 ? "..." : ""}</pre>
-                    <span class="ge-diff-label">After</span>
-                    <pre class="ge-diff-block ge-diff-new">{guidedResult.updated.slice(0, 400)}{guidedResult.updated.length > 400 ? "..." : ""}</pre>
-                  </div>
-                {/if}
-              {/if}
             </div>
           {/if}
           {#if guidedError}
@@ -933,38 +935,14 @@
                             </div>
                           </div>
                         {/if}
-                        {#if entry.diffs.length > 0}
+                        {#if entry.sections_updated.length > 0}
                           <div>
                             <span class="text-[9px] uppercase tracking-wide text-muted font-medium">Changes</span>
-                            <div class="mt-1 flex flex-col gap-1">
-                              {#each entry.diffs as diff}
-                                {@const isDiffOpen = expandedDiffSection === diff.section}
-                                <div>
-                                  <button
-                                    onclick={() => toggleDiffSection(diff.section)}
-                                    class="flex items-center gap-1.5 text-[10px] text-foreground cursor-pointer hover:text-secondary transition-colors py-0.5 w-full text-left"
-                                  >
-                                    <svg
-                                      class="w-[7px] h-[7px] shrink-0 transition-transform duration-150"
-                                      class:rotate-90={isDiffOpen}
-                                      viewBox="0 0 7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                                    ><path d="M2.5 1l2.5 2.5-2.5 2.5"/></svg>
-                                    {formatSectionName(diff.section)}
-                                  </button>
-                                  {#if isDiffOpen}
-                                    <div class="ml-3 mt-1 flex flex-col gap-1.5">
-                                      <div class="relative overflow-hidden rounded" style="max-height: 80px">
-                                        <pre class="text-[10px] font-mono text-muted p-2 leading-relaxed whitespace-pre-wrap" style="opacity: 0.6">{diff.before.slice(0, 500)}{diff.before.length > 500 ? "..." : ""}</pre>
-                                        <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
-                                      </div>
-                                      <div class="w-full h-px" style="background: var(--color-border)"></div>
-                                      <div class="relative overflow-hidden rounded" style="max-height: 80px">
-                                        <pre class="text-[10px] font-mono text-secondary p-2 leading-relaxed whitespace-pre-wrap">{diff.after.slice(0, 500)}{diff.after.length > 500 ? "..." : ""}</pre>
-                                        <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
-                                      </div>
-                                    </div>
-                                  {/if}
-                                </div>
+                            <div class="mt-1 flex flex-wrap gap-1.5">
+                              {#each entry.sections_updated as section}
+                                <span class="px-2 py-1 rounded-md border border-border text-[10px] text-muted">
+                                  {formatSectionName(section)}
+                                </span>
                               {/each}
                             </div>
                           </div>
@@ -1059,6 +1037,12 @@
         </button>
       {/each}
       <button
+        onclick={startAddContext}
+        class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide border-b-2 border-transparent text-muted hover:text-foreground"
+      >
+        + Context
+      </button>
+      <button
         onclick={() => switchTab("living")}
         class="px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors cursor-pointer uppercase tracking-wide relative
           {activeTab === 'living'
@@ -1071,6 +1055,38 @@
         {/if}
       </button>
     </div>
+
+    {#if showAddContext}
+      <div class="p-3 bg-tint border border-border rounded-xl shrink-0 flex flex-col gap-2">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input
+            bind:value={newContextFormat}
+            placeholder="Context name, e.g. email"
+            class="flex-1 px-3 py-2 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          />
+          <div class="flex gap-1">
+            <button
+              onclick={cancelAddContext}
+              class="px-3 py-2 text-xs border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md"
+            >
+              Cancel
+            </button>
+            <button
+              onclick={handleAddContext}
+              disabled={isAddingContext}
+              class="px-3 py-2 text-xs bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md font-medium"
+            >
+              {isAddingContext ? "Adding..." : "Add"}
+            </button>
+          </div>
+        </div>
+        <textarea
+          bind:value={newContextContent}
+          placeholder="Describe how you write in this context."
+          class="min-h-[120px] p-3 text-xs leading-relaxed border border-border bg-surface text-foreground resize-y rounded-md focus:outline-none focus:border-secondary"
+        ></textarea>
+      </div>
+    {/if}
 
     {#if canLivingProfile() && activeTab !== "living"}
       <div class="flex items-center gap-1.5 shrink-0">
@@ -1145,15 +1161,10 @@
     {#if activeTab !== "living"}
       <div class="flex items-center justify-between shrink-0">
         <span class="text-[10px] text-muted">
-          {#if syncMessage}
-            <span class="text-signal">{syncMessage}</span>
-          {:else if saveSuccess}
+          {#if saveSuccess}
             <span class="text-signal">Saved</span>
           {:else}
             {activeTab === "core" ? "Core Identity" : activeTab} &middot; {displayContent.split("\n").length} lines
-            {#if syncStatus?.has_remote}
-              &middot; <span class="text-secondary">synced v{syncStatus.remote_version}</span>
-            {/if}
           {/if}
         </span>
         <div class="flex gap-1">
@@ -1178,34 +1189,6 @@
             >
               Edit
             </button>
-            {#if canSync()}
-              <button
-                onclick={handleSyncUp}
-                disabled={isSyncing}
-                class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md uppercase tracking-wide"
-                title="Push profile to cloud"
-              >
-                {isSyncing ? "..." : "Push"}
-              </button>
-              {#if syncStatus?.has_remote}
-                <button
-                  onclick={handleSyncDown}
-                  disabled={isSyncing}
-                  class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground disabled:opacity-50 rounded-md uppercase tracking-wide"
-                  title="Pull profile from cloud"
-                >
-                  Pull
-                </button>
-              {/if}
-            {:else}
-              <button
-                onclick={() => handleUpgrade("pro")}
-                class="px-2 py-1.5 text-[10px] border border-border hover:border-secondary transition-colors cursor-pointer text-muted hover:text-foreground rounded-md uppercase tracking-wide"
-                title="Sync requires Pro"
-              >
-                Sync <span class="text-[8px] text-secondary font-medium">PRO</span>
-              </button>
-            {/if}
           {/if}
         </div>
       </div>
@@ -1374,39 +1357,14 @@
                         </div>
                       {/if}
 
-                      <!-- Diff sections -->
-                      {#if entry.diffs.length > 0}
+                      {#if entry.sections_updated.length > 0}
                         <div>
                           <span class="text-[9px] uppercase tracking-wide text-muted font-medium">Changes</span>
-                          <div class="mt-1 flex flex-col gap-1">
-                            {#each entry.diffs as diff}
-                              {@const isDiffOpen = expandedDiffSection === diff.section}
-                              <div>
-                                <button
-                                  onclick={() => toggleDiffSection(diff.section)}
-                                  class="flex items-center gap-1.5 text-[10px] text-foreground cursor-pointer hover:text-secondary transition-colors py-0.5 w-full text-left"
-                                >
-                                  <svg
-                                    class="w-[7px] h-[7px] shrink-0 transition-transform duration-150"
-                                    class:rotate-90={isDiffOpen}
-                                    viewBox="0 0 7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                                  ><path d="M2.5 1l2.5 2.5-2.5 2.5"/></svg>
-                                  {formatSectionName(diff.section)}
-                                </button>
-                                {#if isDiffOpen}
-                                  <div class="ml-3 mt-1 flex flex-col gap-1.5">
-                                    <div class="relative overflow-hidden rounded" style="max-height: 80px">
-                                      <pre class="text-[10px] font-mono text-muted p-2 leading-relaxed whitespace-pre-wrap" style="opacity: 0.6">{diff.before.slice(0, 500)}{diff.before.length > 500 ? "..." : ""}</pre>
-                                      <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
-                                    </div>
-                                    <div class="w-full h-px" style="background: var(--color-border)"></div>
-                                    <div class="relative overflow-hidden rounded" style="max-height: 80px">
-                                      <pre class="text-[10px] font-mono text-secondary p-2 leading-relaxed whitespace-pre-wrap">{diff.after.slice(0, 500)}{diff.after.length > 500 ? "..." : ""}</pre>
-                                      <div class="absolute bottom-0 left-0 right-0 h-4" style="background: linear-gradient(transparent, var(--color-background))"></div>
-                                    </div>
-                                  </div>
-                                {/if}
-                              </div>
+                          <div class="mt-1 flex flex-wrap gap-1.5">
+                            {#each entry.sections_updated as section}
+                              <span class="px-2 py-1 rounded-md border border-border text-[10px] text-muted">
+                                {formatSectionName(section)}
+                              </span>
                             {/each}
                           </div>
                         </div>
@@ -1593,84 +1551,6 @@
   .pv-setting-label { font-size: 13px; font-weight: 600; }
   .pv-setting-desc { font-size: 11px; color: var(--color-muted); margin-top: 2px; }
 
-  /* Export unlock card */
-  .pv-export-card {
-    position: relative;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    box-shadow: var(--shadow-card);
-    padding: 14px 16px;
-    overflow: hidden;
-  }
-  .pv-export-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 12px; right: 12px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--color-warning), transparent);
-    opacity: 0.35;
-    border-radius: 1px;
-  }
-  .pv-export-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-size: 11px;
-    color: var(--color-muted);
-    margin-bottom: 10px;
-  }
-  .pv-export-row strong {
-    font-weight: 600;
-    color: var(--color-foreground);
-  }
-  .pv-export-bar {
-    height: 6px;
-    background: var(--color-border);
-    border-radius: 100px;
-    overflow: hidden;
-  }
-  .pv-export-bar-fill {
-    height: 100%;
-    border-radius: 100px;
-    background: linear-gradient(90deg, var(--color-warning), var(--color-secondary));
-    width: 0;
-    animation: pv-export-grow 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
-  }
-  @keyframes pv-export-grow {
-    to { width: var(--pct); }
-  }
-  .pv-export-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 12px;
-    gap: 8px;
-  }
-  .pv-export-hint {
-    font-size: 10px;
-    color: var(--color-muted);
-    line-height: 1.4;
-    flex: 1;
-  }
-  .pv-export-pay {
-    padding: 6px 14px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-secondary);
-    border: 1px solid var(--color-secondary);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    white-space: nowrap;
-    background: transparent;
-    flex-shrink: 0;
-  }
-  .pv-export-pay:hover {
-    background: var(--color-secondary);
-    color: white;
-  }
-
   /* Voice Card (collapsible) */
   .pv-voice-card {
     background: var(--color-surface);
@@ -1764,9 +1644,6 @@
     display: flex; align-items: center; justify-content: space-between;
     flex-shrink: 0;
   }
-  .pv-footer-left {
-    display: flex; align-items: center; gap: 6px;
-  }
   .pv-footer-btn {
     padding: 5px 10px; font-size: 10px; font-weight: 500; font-family: inherit;
     border: 1px solid var(--color-border); border-radius: 6px;
@@ -1775,9 +1652,6 @@
   }
   .pv-footer-btn:hover { border-color: var(--color-secondary); color: var(--color-foreground); }
   .pv-footer-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .pv-footer-sep {
-    width: 1px; height: 16px; background: var(--color-border); margin: 0 4px;
-  }
   .pv-footer-export {
     padding: 6px 14px; font-size: 11px; font-weight: 600; font-family: inherit;
     color: white; background: var(--color-primary); border: none; border-radius: 8px;
@@ -1909,13 +1783,6 @@
     flex-shrink: 0;
   }
 
-  .pv-rhythm-stats {
-    display: flex;
-    gap: 16px;
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid var(--color-border);
-  }
   .pv-rhythm-stat {
     display: flex;
     flex-direction: column;
@@ -2060,45 +1927,4 @@
     border: 1px solid var(--color-border);
   }
   .ge-result-msg { font-size: 11px; font-weight: 500; }
-  .ge-result-toggle {
-    font-size: 10px;
-    color: var(--color-secondary);
-    cursor: pointer;
-    margin-top: 6px;
-    background: none;
-    border: none;
-    font-family: inherit;
-    padding: 0;
-  }
-  .ge-result-toggle:hover { text-decoration: underline; }
-  .ge-diff { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-  .ge-diff-label {
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-muted);
-    font-weight: 600;
-  }
-  .ge-diff-old, .ge-diff-new {
-    font-size: 10px;
-    font-family: monospace;
-    padding: 8px;
-    border-radius: 6px;
-    line-height: 1.6;
-    max-height: 80px;
-    overflow: hidden;
-    white-space: pre-wrap;
-    word-break: break-word;
-    position: relative;
-  }
-  .ge-diff-old {
-    background: #fdf0f0;
-    color: var(--color-muted);
-    border: 1px solid #e8d4d4;
-  }
-  .ge-diff-new {
-    background: #f0fdf4;
-    color: var(--color-foreground);
-    border: 1px solid #d4e8d4;
-  }
 </style>
