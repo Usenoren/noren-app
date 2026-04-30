@@ -1,50 +1,32 @@
-/**
- * Auto-updater state machine for the desktop app.
- *
- * idle      -> no update, or check hasn't run yet
- * available -> server returned a new version, banner offers Install/Later
- * downloading -> user clicked Install, .app.tar.gz is downloading
- * ready     -> install + relaunch pending; banner shows Restart
- *
- * Transitions:
- *   idle -> available  (check() returns update.available)
- *   available -> downloading (user clicks Install)
- *   downloading -> ready (download + install finished, awaiting restart)
- *   any -> idle (user clicks Later -> dismissedThisSession = true)
- *
- * Later semantics: hides the banner for the rest of the session only.
- * On next launch, check() runs again and the banner reappears if applicable.
- */
-
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { toastError } from "$lib/stores/toast.svelte";
 
-export type UpdateStatus = "idle" | "available" | "downloading" | "ready" | "error";
+export type UpdateStatus = "idle" | "available" | "downloading" | "ready";
 
 interface UpdaterState {
   status: UpdateStatus;
   version: string | null;
   progress: number; // 0..100
-  error: string | null;
 }
 
 const state = $state<UpdaterState>({
   status: "idle",
   version: null,
   progress: 0,
-  error: null,
 });
 
+// Hide the banner for the rest of this session only. Next launch checks again.
 let dismissedThisSession = false;
 let pendingUpdate: Update | null = null;
 
 export function getStatus(): UpdateStatus { return state.status; }
 export function getVersion(): string | null { return state.version; }
 export function getProgress(): number { return state.progress; }
-export function getError(): string | null { return state.error; }
 
 export async function checkForUpdate(): Promise<void> {
+  if (import.meta.env.DEV) return;
   if (dismissedThisSession) return;
+  if (state.status !== "idle") return;
   try {
     const update = await check();
     if (update?.available) {
@@ -54,7 +36,7 @@ export async function checkForUpdate(): Promise<void> {
     }
   } catch (e) {
     // Network failures, server 5xx, signature mismatches all land here.
-    // Stay silent on first check, log to console for debugging.
+    // Stay silent — a missed prompt is better than a scary one for a transient blip.
     console.warn("[updater] check failed:", e);
   }
 }
@@ -74,7 +56,8 @@ export async function installAndRestart(): Promise<void> {
         case "Progress":
           downloaded += event.data.chunkLength;
           if (total > 0) {
-            state.progress = Math.min(99, Math.round((downloaded / total) * 100));
+            const next = Math.min(99, Math.round((downloaded / total) * 100));
+            if (next !== state.progress) state.progress = next;
           }
           break;
         case "Finished":
@@ -83,11 +66,12 @@ export async function installAndRestart(): Promise<void> {
           break;
       }
     });
-    // downloadAndInstall completes after Finished. relaunch() ends the process.
-    await relaunch();
+    // Wait for the user to click Restart. The banner's ready state owns relaunch().
   } catch (e) {
-    state.status = "error";
-    state.error = String(e);
+    pendingUpdate = null;
+    state.status = "idle";
+    toastError("Update couldn't be installed. Please try again.");
+    console.warn("[updater] install failed:", e);
   }
 }
 

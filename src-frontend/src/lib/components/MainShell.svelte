@@ -64,10 +64,6 @@
 
   onMount(() => {
     document.documentElement.style.fontSize = "14px";
-    // Kick off the auto-update check after a short delay so initial render
-    // and auth/sync settle first. The banner appears asynchronously if an
-    // update is found.
-    setTimeout(() => { checkForUpdate(); }, 1500);
   });
 
   $effect(() => {
@@ -105,6 +101,7 @@
         view = "settings";
       }
       loading = false;
+      checkForUpdate();
 
       if (settings.noren_pro_logged_in) {
         refreshSubscription();

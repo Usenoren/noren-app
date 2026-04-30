@@ -7,10 +7,6 @@
     dismiss,
   } from "$lib/stores/updater.svelte";
   import { relaunch } from "@tauri-apps/plugin-process";
-
-  function onInstall() { installAndRestart(); }
-  function onLater() { dismiss(); }
-  function onRestart() { relaunch(); }
 </script>
 
 {#if getStatus() !== "idle"}
@@ -21,10 +17,10 @@
       <span class="banner-text">A new version of Noren is ready</span>
       <span class="v-pill">v{getVersion()}</span>
       <span class="banner-spacer"></span>
-      <button class="banner-cta" onclick={onInstall}>
+      <button class="banner-cta" onclick={installAndRestart}>
         <span>Install and restart</span>
       </button>
-      <button class="banner-later" onclick={onLater}>Later</button>
+      <button class="banner-later" onclick={dismiss}>Later</button>
 
     {:else if getStatus() === "downloading"}
       <span class="dot pulse" aria-hidden="true"></span>
@@ -39,15 +35,9 @@
       <span class="dot" aria-hidden="true"></span>
       <span class="banner-text">v{getVersion()} ready. Restart Noren to finish.</span>
       <span class="banner-spacer"></span>
-      <button class="banner-cta" onclick={onRestart}>
+      <button class="banner-cta" onclick={relaunch}>
         <span>Restart now</span>
       </button>
-
-    {:else if getStatus() === "error"}
-      <span class="dot" aria-hidden="true" style="background: rgba(200,212,221,0.4); box-shadow: none;"></span>
-      <span class="banner-text">Update couldn't be installed. Please try again.</span>
-      <span class="banner-spacer"></span>
-      <button class="banner-later" onclick={onLater}>Dismiss</button>
     {/if}
 
   </div>
@@ -63,9 +53,8 @@
     gap: 12px;
     padding: 0 16px 0 18px;
     color: var(--color-primary);
-    background:
-      linear-gradient(90deg, rgba(196,74,47,0.06), rgba(196,74,47,0.04) 60%, rgba(196,74,47,0.05)),
-      var(--color-background);
+    background-color: var(--color-background);
+    background-image: linear-gradient(90deg, var(--color-accent-wash), var(--color-accent-wash));
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -83,7 +72,7 @@
     position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
     background: linear-gradient(90deg,
       transparent,
-      rgba(196,74,47,0.25) 30%,
+      var(--color-accent-glow) 30%,
       rgba(200,212,221,0.18) 70%,
       transparent);
     pointer-events: none;
@@ -93,25 +82,28 @@
   .dot {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--color-accent);
-    box-shadow: 0 0 0 4px rgba(196,74,47,0.18);
+    box-shadow: 0 0 0 4px var(--color-accent-wash);
     flex-shrink: 0;
   }
   .dot.glow {
     box-shadow:
-      0 0 0 4px rgba(196,74,47,0.18),
-      0 0 14px rgba(196,74,47,0.55);
-    animation: dot-glow 2.4s ease-in-out infinite;
+      0 0 0 4px var(--color-accent-wash),
+      0 0 14px var(--color-accent-glow);
   }
-  .dot.pulse {
-    animation: dot-pulse 1.4s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dot.glow { animation: dot-glow 2.4s ease-in-out infinite; }
+    .dot.pulse { animation: dot-pulse 1.4s ease-in-out infinite; }
+    .strand::after { animation: strand-sweep 1.6s ease-in-out infinite; }
   }
+
   @keyframes dot-glow {
-    0%, 100% { box-shadow: 0 0 0 4px rgba(196,74,47,0.18), 0 0 10px rgba(196,74,47,0.5); }
-    50%      { box-shadow: 0 0 0 5px rgba(196,74,47,0.22), 0 0 20px rgba(196,74,47,0.75); }
+    0%, 100% { box-shadow: 0 0 0 4px var(--color-accent-wash), 0 0 10px var(--color-accent-glow); }
+    50%      { box-shadow: 0 0 0 5px var(--color-accent-glow), 0 0 20px var(--color-accent-glow); }
   }
   @keyframes dot-pulse {
-    0%, 100% { transform: scale(1);    box-shadow: 0 0 0 4px rgba(196,74,47,0.16); }
-    50%      { transform: scale(1.18); box-shadow: 0 0 0 6px rgba(196,74,47,0.30); }
+    0%, 100% { transform: scale(1);    box-shadow: 0 0 0 4px var(--color-accent-wash); }
+    50%      { transform: scale(1.18); box-shadow: 0 0 0 6px var(--color-accent-glow); }
   }
 
   .banner-text {
@@ -128,9 +120,9 @@
     font-size: 10.5px;
     font-weight: 500;
     letter-spacing: 0.4px;
-    color: #f4d4cc;
-    background: rgba(196,74,47,0.18);
-    border: 1px solid rgba(196,74,47,0.42);
+    color: var(--color-accent);
+    background: var(--color-accent-wash);
+    border: 1px solid var(--color-accent-glow);
     border-radius: 999px;
     padding: 2px 9px 3px;
     flex-shrink: 0;
@@ -159,7 +151,7 @@
   .banner-cta::before {
     content: "";
     position: absolute; inset: 0;
-    background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, var(--color-accent-wash) 11px, var(--color-accent-wash) 12px);
+    background-image: repeating-linear-gradient(90deg, transparent, transparent 11px, rgba(255,255,255,0.10) 11px, rgba(255,255,255,0.10) 12px);
     pointer-events: none;
     opacity: 0.85;
   }
@@ -178,12 +170,12 @@
     font-size: 10.5px;
     letter-spacing: 1px;
     text-transform: uppercase;
-    color: rgba(200,212,221,0.5);
+    color: var(--color-muted);
     padding: 6px 4px;
     transition: color 0.15s;
     flex-shrink: 0;
   }
-  .banner-later:hover { color: var(--color-primary); }
+  .banner-later:hover { color: var(--color-foreground); }
 
   .progress {
     display: flex; align-items: center; gap: 10px;
@@ -199,7 +191,6 @@
     content: ""; position: absolute; inset: 0;
     background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
     transform: translateX(-100%);
-    animation: strand-sweep 1.6s ease-in-out infinite;
   }
   @keyframes strand-sweep {
     0%   { transform: translateX(-100%); }
