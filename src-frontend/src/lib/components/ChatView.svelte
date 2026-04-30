@@ -1,9 +1,7 @@
 <script lang="ts">
   import {
     chatSend,
-    getProfileOverview,
     getSettings,
-    listFormats,
     saveChat,
     listChats,
     loadChat,
@@ -36,7 +34,6 @@
   let isLoading = $state(false);
   let error = $state("");
   let format = $state("general");
-  let formats = $state<string[]>([]);
   let totalTokens = $state(0);
   let messagesContainer: HTMLDivElement | undefined = $state();
 
@@ -44,7 +41,6 @@
   let attachedFiles = $state<{ name: string; content: string }[]>([]);
 
   // Empty state awareness
-  let hasProfile = $state(true);
   let noApiKey = $state(false);
 
   // History state
@@ -55,27 +51,6 @@
 
   // --- Init ---
   $effect(() => {
-    getProfileOverview().then((overview) => {
-      hasProfile = overview.exists;
-      let f = overview.formats;
-      if (!f.includes("general")) {
-        f = ["general", ...f];
-      }
-      formats = f;
-      if (!f.includes(format)) {
-        format = f[0];
-      }
-    });
-
-    listFormats().then((f) => {
-      if (formats.length <= 1) {
-        if (!f.includes("general")) {
-          f = ["general", ...f];
-        }
-        formats = f;
-      }
-    });
-
     getSettings().then((settings) => {
       if (settings.inference_mode === "byok" && !settings.has_key && settings.provider.requiresKey) {
         noApiKey = true;
@@ -285,7 +260,6 @@
       const conv = await loadChat(id);
       conversationId = conv.id;
       conversationCreatedAt = conv.created_at;
-      format = conv.format;
       totalTokens = conv.total_tokens;
       messages = conv.messages;
       showHistory = false;
@@ -373,12 +347,6 @@
         </div>
       {/if}
     </div>
-
-    <select bind:value={format} class="c-toolbar-select">
-      {#each formats as fmt}
-        <option value={fmt}>{fmt}</option>
-      {/each}
-    </select>
 
     <div class="c-toolbar-spacer"></div>
 
@@ -563,26 +531,6 @@
   .c-toolbar-pill:disabled { opacity: 0.4; cursor: not-allowed; }
   .c-toolbar-pill .pill-icon { width: 12px; height: 12px; opacity: 0.7; }
   .c-toolbar-pill .pill-badge { font-size: 9px; color: var(--color-secondary); font-weight: 600; }
-  .c-toolbar-select {
-    padding: 5px 10px;
-    padding-right: 26px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--color-muted);
-    font-size: 11px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 150ms ease;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    background-size: 10px 6px;
-  }
-  .c-toolbar-select:hover { border-color: var(--color-muted); color: var(--color-foreground); }
-  .c-toolbar-select option { background: var(--color-surface); color: var(--color-foreground); }
   .c-toolbar-spacer { flex: 1; }
   .c-toolbar-tokens { font-size: 10px; color: var(--color-muted); opacity: 0.7; }
 
