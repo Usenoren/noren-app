@@ -208,6 +208,14 @@ export async function requestPasswordReset(email: string): Promise<string> {
   return invoke("request_password_reset", { email });
 }
 
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<string> {
+  return invoke("reset_password", { email, code, newPassword });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<string> {
+  return invoke("change_password", { currentPassword, newPassword });
+}
+
 export async function requestDeleteAccount(): Promise<string> {
   return invoke("request_delete_account");
 }
@@ -298,6 +306,7 @@ export interface SubscriptionStatus {
   tier: "free" | "pro" | "teams";
   active: boolean;
   email_verified: boolean;
+  is_founding_member: boolean;
   can_extract: boolean;
   can_generate_bundled: boolean;
   can_living_profile: boolean;
@@ -310,6 +319,7 @@ export interface SubscriptionStatus {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   one_time_purchases: string[];
+  extraction_credits_remaining: number | null;
   export_unlock_remaining_cents: number | null;
   export_unlock_progress: number | null;
 }
@@ -319,12 +329,31 @@ export interface CheckoutResult {
   session_id: string;
 }
 
+export interface BillingPublicConfig {
+  pro_monthly_amount_label: string;
+  pro_monthly_interval_label: string;
+  pro_monthly_full_label: string;
+  pro_pricing_note: string;
+  pro_founding_monthly_amount_label: string;
+  pro_founding_monthly_full_label: string;
+  pro_founding_pricing_note: string;
+  extraction_amount_label: string;
+  extraction_cta_label: string;
+  extraction_founding_amount_label: string;
+  extraction_founding_cta_label: string;
+  default_trial_days: number;
+}
+
+export async function getBillingPublicConfig(): Promise<BillingPublicConfig> {
+  return invoke("get_billing_public_config");
+}
+
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
   return invoke("get_subscription_status");
 }
 
 export async function createCheckout(tier: string, couponCode?: string): Promise<CheckoutResult> {
-  return invoke("create_checkout", { tier, coupon_code: couponCode || undefined });
+  return invoke("create_checkout", { tier, couponCode: couponCode || undefined });
 }
 
 export async function createExportUnlockCheckout(): Promise<CheckoutResult> {

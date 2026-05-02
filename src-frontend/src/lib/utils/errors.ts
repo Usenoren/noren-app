@@ -3,6 +3,7 @@
  */
 export function friendlyError(raw: unknown): string {
   const msg = extractMessage(raw);
+  const lower = msg.toLowerCase();
 
   // Generation limit (server-enforced monthly cap)
   if (msg.includes("Monthly generation limit")) {
@@ -52,7 +53,7 @@ export function friendlyError(raw: unknown): string {
   }
 
   // Auth errors
-  if (msg.includes("Email not verified")) {
+  if (lower.includes("email not verified")) {
     return "Verify your email to continue.";
   }
   if (msg.includes("401") || msg.includes("Unauthorized") || msg.includes("invalid_api_key") || msg.includes("Invalid API key")) {

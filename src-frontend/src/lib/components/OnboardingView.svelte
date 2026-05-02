@@ -6,6 +6,7 @@
     getSettings,
     norenProLogin,
     norenProSignup,
+    norenProLogout,
     googleOAuthInit,
     googleOAuthPoll,
     getNorenProStatus,
@@ -19,6 +20,8 @@
     readFileAsText,
     verifyEmail,
     resendOtp,
+    requestPasswordReset,
+    resetPassword,
     setInferenceMode,
     getSubscriptionStatus,
     scrapeTwitter,
@@ -30,6 +33,13 @@
   import { open } from "@tauri-apps/plugin-shell";
   import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
   import { canExtract, refresh as refreshSubscription } from "$lib/stores/subscription.svelte";
+  import {
+    refresh as refreshBillingConfig,
+    proMonthlyAmountLabel,
+    proMonthlyIntervalLabel,
+    proMonthlyFullLabel,
+    extractionAmountLabel,
+  } from "$lib/stores/billing-config.svelte";
   import { startQueue as startExtractionQueue } from "$lib/stores/extraction.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import { PALETTES, getTheme, setAndPersistTheme, type PaletteId } from "$lib/stores/theme.svelte";
@@ -39,7 +49,7 @@
   // Events
   let { onComplete }: { onComplete: (targetView?: string) => void } = $props();
 
-  type Step = "welcome-fork" | "welcome-back" | "welcome" | "palette" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
+  type Step = "welcome-fork" | "welcome-back" | "welcome" | "palette" | "auth" | "otp" | "paywall" | "guest-checkout" | "awaiting-payment" | "authenticated-checkout" | "payment-confirmed" | "input-method" | "paste" | "review" | "guided" | "guided-pairs" | "done" | "manual";
   let step: Step = $state("welcome-fork");
   let pendingPath: "paste" | "guided" = $state("paste");
 
@@ -64,6 +74,7 @@
 
   // Pro intent: auto-trigger upgrade after auth
   let proIntent = $state(false);
+  let extractionIntent = $state(false);
 
   // Welcome-back flash (returning user with existing profile)
   let welcomeBackMeta = $state<{ formats: number; lastExtracted: string | null }>({ formats: 0, lastExtracted: null });
@@ -73,8 +84,16 @@
   let authEmail = $state("");
   let authPassword = $state("");
   let authLoading = $state(false);
+  let passwordResetLoading = $state(false);
+  let passwordResetMessage = $state("");
+  let passwordResetOpen = $state(false);
+  let passwordResetEmail = $state("");
+  let passwordResetCode = $state("");
+  let passwordResetNewPassword = $state("");
+  let passwordResetConfirmPassword = $state("");
   let googleLoading = $state(false);
   let isLoggedIn = $state(false);
+  let isFoundingMember = $state(false);
 
   // Stepped sample input (wizard)
   const FORMAT_STEPS = [
@@ -114,6 +133,44 @@
 
   // Error display
   let error = $state("");
+
+  function isEmailVerificationError(raw: unknown): boolean {
+    const msg = String(raw).toLowerCase();
+    return msg.includes("email not verified") || msg.includes("verification code");
+  }
+
+  function isExistingAccountError(raw: unknown): boolean {
+    const msg = String(raw).toLowerCase();
+    return msg.includes("unable to create account") || msg.includes("try logging in");
+  }
+
+  function showOtp(email: string | null | undefined, message = "Enter the verification code we sent to your email.") {
+    authEmail = email || authEmail;
+    authPassword = "";
+    otpMessage = message;
+    error = "";
+    step = "otp";
+  }
+
+  async function ensureVerifiedBeforeCheckout(): Promise<boolean> {
+    const settings = await getSettings();
+    isLoggedIn = settings.noren_pro_logged_in;
+    if (!isLoggedIn) return true;
+
+    const status = await getNorenProStatus();
+    let emailVerified = status.email_verified;
+    try {
+      const subscription = await getSubscriptionStatus();
+      emailVerified = subscription.email_verified;
+      isFoundingMember = subscription.is_founding_member;
+    } catch {}
+
+    if (!emailVerified) {
+      showOtp(status.email, "Verify your email before starting checkout.");
+      return false;
+    }
+    return true;
+  }
 
   // --- Draft persistence ---
   const STORAGE_KEY = "noren:onboarding_draft";
@@ -258,6 +315,7 @@
   ];
 
   onMount(() => {
+    refreshBillingConfig();
     // Check initial auth state
     getSettings().then(async (settings) => {
       isLoggedIn = settings.noren_pro_logged_in;
@@ -265,7 +323,9 @@
         const status = await getNorenProStatus();
         let emailVerified = status.email_verified;
         try {
-          emailVerified = (await getSubscriptionStatus()).email_verified;
+          const subscription = await getSubscriptionStatus();
+          emailVerified = subscription.email_verified;
+          isFoundingMember = subscription.is_founding_member;
         } catch {}
         if (!emailVerified) {
           authEmail = status.email || authEmail;
@@ -354,9 +414,68 @@
         await afterAuth();
       }
     } catch (e) {
-      error = friendlyError(e);
+      if (authMode === "signup" && isExistingAccountError(e)) {
+        authMode = "login";
+        error = "That account already exists. Sign in to continue verification.";
+      } else {
+        error = friendlyError(e);
+      }
     } finally {
       authLoading = false;
+    }
+  }
+
+  async function handlePasswordReset() {
+    const email = authEmail.trim();
+    if (!email) {
+      error = "Enter your email first.";
+      return;
+    }
+    passwordResetLoading = true;
+    passwordResetMessage = "";
+    error = "";
+    try {
+      await requestPasswordReset(email);
+      passwordResetEmail = email;
+      passwordResetOpen = true;
+      passwordResetCode = "";
+      passwordResetNewPassword = "";
+      passwordResetConfirmPassword = "";
+      passwordResetMessage = "If that email exists, a reset code has been sent.";
+    } catch {
+      passwordResetEmail = email;
+      passwordResetOpen = true;
+      passwordResetMessage = "If that email exists, a reset code has been sent.";
+    } finally {
+      passwordResetLoading = false;
+    }
+  }
+
+  async function handleConfirmPasswordReset() {
+    const email = passwordResetEmail.trim();
+    if (!email || !passwordResetCode.trim() || !passwordResetNewPassword || !passwordResetConfirmPassword) {
+      error = "Fill in the reset code and new password.";
+      return;
+    }
+    if (passwordResetNewPassword !== passwordResetConfirmPassword) {
+      error = "New passwords do not match.";
+      return;
+    }
+    passwordResetLoading = true;
+    passwordResetMessage = "";
+    error = "";
+    try {
+      passwordResetMessage = await resetPassword(email, passwordResetCode.trim(), passwordResetNewPassword);
+      passwordResetCode = "";
+      passwordResetNewPassword = "";
+      passwordResetConfirmPassword = "";
+      passwordResetOpen = false;
+      authMode = "login";
+      authPassword = "";
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      passwordResetLoading = false;
     }
   }
 
@@ -405,6 +524,19 @@
     }
   }
 
+  async function handleCancelOtp() {
+    error = "";
+    try {
+      await norenProLogout();
+      await setInferenceMode("byok");
+    } catch {}
+    isLoggedIn = false;
+    authPassword = "";
+    otpCode = "";
+    otpMessage = "";
+    step = "auth";
+  }
+
   async function handleGoogleSignIn() {
     googleLoading = true;
     error = "";
@@ -443,6 +575,7 @@
   async function handleUpgrade(tier: string, promoCode?: string) {
     error = "";
     try {
+      if (!(await ensureVerifiedBeforeCheckout())) return;
       const result = await createCheckout(tier, promoCode);
       if (result.checkout_url === "dev://granted") {
         await refreshSubscription();
@@ -462,7 +595,15 @@
         }
       }
     } catch (e) {
-      error = friendlyError(e);
+      if (isEmailVerificationError(e)) {
+        let email = authEmail;
+        try {
+          email = (await getNorenProStatus()).email || email;
+        } catch {}
+        showOtp(email, "Verify your email before starting checkout.");
+      } else {
+        error = friendlyError(e);
+      }
     }
   }
 
@@ -513,6 +654,12 @@
           // 400 (expired/limit), 409 (already redeemed)
           couponMessage = detail;
         }
+      } else if (isEmailVerificationError(e)) {
+        let email = authEmail;
+        try {
+          email = (await getNorenProStatus()).email || email;
+        } catch {}
+        showOtp(email, "Verify your email before applying this coupon.");
       } else {
         error = friendlyError(e);
       }
@@ -574,6 +721,9 @@
       // Kick off Pro checkout and show the waiting screen
       step = "awaiting-payment";
       handleUpgrade("pro");
+    } else if (extractionIntent) {
+      extractionIntent = false;
+      handleExtractionCheckout();
     } else {
       step = "paywall";
     }
@@ -590,7 +740,71 @@
       step = "auth";
       return;
     }
+    try {
+      const status = await getNorenProStatus();
+      let emailVerified = status.email_verified;
+      try {
+        const subscription = await getSubscriptionStatus();
+        emailVerified = subscription.email_verified;
+        isFoundingMember = subscription.is_founding_member;
+      } catch {}
+      if (!emailVerified) {
+        showOtp(status.email, "Verify your email before starting checkout.");
+        return;
+      }
+    } catch {}
     handleUpgrade("pro");
+  }
+
+  async function handleStartExtractionCheckout() {
+    error = "";
+    const settings = await getSettings();
+    isLoggedIn = settings.noren_pro_logged_in;
+    if (!isLoggedIn) {
+      extractionIntent = true;
+      proIntent = false;
+      step = "auth";
+      return;
+    }
+    handleExtractionCheckout();
+  }
+
+  async function handleExtractionCheckout() {
+    checkoutLoading = true;
+    error = "";
+    try {
+      if (!(await ensureVerifiedBeforeCheckout())) return;
+      const result = await createCheckout("extraction");
+      if (result.checkout_url === "dev://granted") {
+        await refreshSubscription();
+        proceedAfterPayment();
+        return;
+      }
+      await open(result.checkout_url);
+      step = "authenticated-checkout";
+    } catch (e) {
+      error = friendlyError(e);
+      step = "paywall";
+    } finally {
+      checkoutLoading = false;
+    }
+  }
+
+  async function handleAuthenticatedCheckPayment() {
+    checkoutLoading = true;
+    error = "";
+    try {
+      await refreshSubscription();
+      if (canExtract()) {
+        proceedAfterPayment();
+      } else {
+        error = "Payment not yet received. Complete checkout in your browser, then check again.";
+      }
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      checkoutLoading = false;
+    }
   }
 
   // --- Guest checkout ---
@@ -1351,6 +1565,55 @@
           {authMode === "signup" ? "Create account" : "Sign in"}
         {/if}
       </button>
+      {#if authMode === "login"}
+        <button
+          type="button"
+          onclick={handlePasswordReset}
+          disabled={passwordResetLoading || !authEmail.trim()}
+          class="text-xs text-secondary hover:text-foreground text-center cursor-pointer disabled:opacity-50"
+        >
+          {passwordResetLoading ? "Sending..." : "Forgot password?"}
+        </button>
+      {/if}
+      {#if passwordResetMessage}
+        <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{passwordResetMessage}</div>
+      {/if}
+      {#if passwordResetOpen}
+        <input
+          type="text"
+          bind:value={passwordResetCode}
+          class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          placeholder="Reset code"
+          maxlength={6}
+          autocomplete="one-time-code"
+        />
+        <input
+          type="password"
+          bind:value={passwordResetNewPassword}
+          class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          placeholder="New password"
+          autocomplete="new-password"
+        />
+        <input
+          type="password"
+          bind:value={passwordResetConfirmPassword}
+          onkeydown={(e) => { if (e.key === "Enter") handleConfirmPasswordReset(); }}
+          class="w-full px-3 py-1.5 text-xs border border-border bg-surface text-foreground rounded-md focus:outline-none focus:border-secondary"
+          placeholder="Confirm new password"
+          autocomplete="new-password"
+        />
+        <button
+          onclick={handleConfirmPasswordReset}
+          disabled={passwordResetLoading || !passwordResetCode.trim() || !passwordResetNewPassword || !passwordResetConfirmPassword}
+          class="w-full py-2 text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 rounded-md"
+        >
+          {#if passwordResetLoading}
+            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Resetting...</span>
+          {:else}
+            Set new password
+          {/if}
+        </button>
+      {/if}
 
       {#if error}
         <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed">{error}</div>
@@ -1413,7 +1676,7 @@
           {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
         </button>
         <button
-          onclick={() => { step = "auth"; otpCode = ""; error = ""; otpMessage = ""; }}
+          onclick={handleCancelOtp}
           class="text-[10px] text-muted hover:text-foreground transition-colors cursor-pointer"
         >
           Back
@@ -1462,7 +1725,7 @@
           <div class="flex-1 min-w-0 relative z-[1]">
             <div class="flex items-center justify-between">
               <span style="font-size:13px; font-weight:600; line-height:1.3">Start Pro</span>
-              <span style="font-size:12px; font-weight:400">$7<span style="font-size:10px; opacity:0.6">/mo</span></span>
+              <span style="font-size:12px; font-weight:400">{proMonthlyAmountLabel(isFoundingMember)}<span style="font-size:10px; opacity:0.6">{proMonthlyIntervalLabel()}</span></span>
             </div>
             <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.5">Extraction, inference, living profile. Everything.</div>
           </div>
@@ -1470,7 +1733,7 @@
 
         <!-- One-time card (secondary) -->
         <button
-          onclick={() => { step = "guest-checkout"; error = ""; }}
+          onclick={handleStartExtractionCheckout}
           class="rounded-xl flex gap-3.5 items-start text-left w-full cursor-pointer bg-surface text-foreground transition-all duration-200"
           style="
             padding: 16px 18px;
@@ -1487,9 +1750,9 @@
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <span style="font-size:13px; font-weight:600; line-height:1.3">One-time extraction</span>
-              <span class="text-secondary" style="font-size:12px; font-weight:500">$19</span>
+              <span class="text-secondary" style="font-size:12px; font-weight:500">{extractionAmountLabel(isFoundingMember)}</span>
             </div>
-            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">AI extraction without a subscription. No account needed.</div>
+            <div style="font-size:10.5px; line-height:1.5; margin-top:3px; opacity:0.65">AI extraction without a subscription. Account required.</div>
           </div>
         </button>
 
@@ -1563,7 +1826,7 @@
       <div class="shrink-0 text-center bg-surface" style="padding: 32px 32px 24px">
         <h2 class="font-heading text-foreground" style="font-size:18px; font-weight:600; font-style:italic; line-height:1.3">One-time extraction</h2>
         <p class="text-muted mx-auto" style="font-size:11.5px; margin-top:8px; line-height:1.5; max-width:260px">
-          Enter your email for the receipt. No account created.
+          Sign in is required so your extraction purchase can be attached to your account.
         </p>
       </div>
 
@@ -1571,7 +1834,7 @@
         <div class="rounded-xl p-4" style="background: var(--color-tint); border: 1px solid var(--color-border)">
           <div class="flex items-center justify-between mb-3">
             <span class="text-foreground" style="font-size:13px; font-weight:600">AI voice extraction</span>
-            <span class="text-secondary" style="font-size:14px; font-weight:600">$19</span>
+            <span class="text-secondary" style="font-size:14px; font-weight:600">{extractionAmountLabel(isFoundingMember)}</span>
           </div>
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-2">
@@ -1626,6 +1889,50 @@
             &larr; Back
           </button>
         </div>
+      </div>
+    </div>
+
+  {:else if step === "authenticated-checkout"}
+    <div class="flex-1 flex flex-col -m-4 overflow-y-auto">
+      <div class="flex-1 flex flex-col items-center justify-center gap-5 bg-surface" style="padding: 32px">
+        <div class="flex items-center justify-center" style="color: var(--color-secondary)">
+          <svg class="w-10 h-10 animate-spin" style="animation-duration: 3s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="text-center">
+          <h2 class="font-heading text-foreground" style="font-size:16px; font-weight:600; font-style:italic; line-height:1.3">Complete payment in your browser</h2>
+          <p class="text-muted mx-auto" style="font-size:11px; margin-top:8px; line-height:1.5; max-width:240px">
+            Stripe checkout is open in your browser. Come back here when you're done.
+          </p>
+        </div>
+
+        <button
+          onclick={handleAuthenticatedCheckPayment}
+          disabled={checkoutLoading}
+          class="py-2.5 px-6 text-xs font-semibold transition-colors cursor-pointer rounded-xl disabled:opacity-50"
+          style="background: var(--color-accent); color: white"
+          onmouseenter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'var(--color-accent-hover)'; }}
+          onmouseleave={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; }}
+        >
+          {#if checkoutLoading}
+            <span class="inline-flex items-center gap-1"><LoadingSpinner /> Checking...</span>
+          {:else}
+            Check payment status
+          {/if}
+        </button>
+
+        {#if error}
+          <div class="w-full p-2 bg-tint border border-border rounded-xl text-xs text-muted leading-relaxed max-w-[280px]">{error}</div>
+        {/if}
+
+        <button
+          onclick={() => { step = "paywall"; error = ""; }}
+          class="cursor-pointer bg-transparent border-none text-muted opacity-50 transition-opacity hover:opacity-100"
+          style="font-size:10px; padding:4px"
+        >
+          Start over
+        </button>
       </div>
     </div>
 
@@ -2274,7 +2581,7 @@
                   class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
                   style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; letter-spacing:0.8px"
                 >
-                  Extraction $19
+                  Extraction {extractionAmountLabel(isFoundingMember)}
                 </button>
                 <span class="text-muted" style="font-size:10px">or</span>
                 <button
@@ -2282,7 +2589,7 @@
                   class="text-secondary cursor-pointer hover:text-foreground uppercase tracking-wide"
                   style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; letter-spacing:0.8px"
                 >
-                  Pro $7/mo
+                  Pro {proMonthlyFullLabel(isFoundingMember)}
                 </button>
               </div>
             </div>

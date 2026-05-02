@@ -18,6 +18,8 @@
     resendOtp,
     resendSetupEmail,
     requestPasswordReset,
+    resetPassword,
+    changePassword,
     requestDeleteAccount,
     confirmDeleteAccount,
     type SettingsInfo,
@@ -28,6 +30,13 @@
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-shell";
   import { refresh as refreshSubscription, canExtract, isTrial, trialDaysLeft } from "$lib/stores/subscription.svelte";
+  import {
+    refresh as refreshBillingConfig,
+    proMonthlyAmountLabel,
+    proMonthlyIntervalLabel,
+    proMonthlyFullLabel,
+    proPricingNote,
+  } from "$lib/stores/billing-config.svelte";
   import { friendlyError, isAuthSessionError } from "$lib/utils/errors";
   import { toastInfo, toastWarning } from "$lib/stores/toast.svelte";
   import LoadingSpinner from "./LoadingSpinner.svelte";
@@ -51,10 +60,25 @@
   let showResendSetup = $state(false);
   let resendSetupLoading = $state(false);
   let resendSetupMessage = $state("");
+  let signedOutResetLoading = $state(false);
+  let signedOutResetMessage = $state("");
+  let resetPasswordOpen = $state(false);
+  let resetPasswordEmail = $state("");
+  let resetPasswordCode = $state("");
+  let resetNewPassword = $state("");
+  let resetConfirmPassword = $state("");
+  let resetPasswordLoading = $state(false);
+  let resetPasswordMessage = $state("");
   let showCouponInput = $state(false);
   let couponCode = $state("");
   let couponLoading = $state(false);
   let couponMessage = $state("");
+  let changePasswordOpen = $state(false);
+  let currentPassword = $state("");
+  let newPassword = $state("");
+  let confirmNewPassword = $state("");
+  let passwordLoading = $state(false);
+  let passwordMessage = $state("");
   let deleteCode = $state("");
   let deleteStep = $state<"confirm" | "code">("confirm");
   let deleteLoading = $state(false);
@@ -65,12 +89,51 @@
   let hasInference = $derived((proStatus?.generations_limit ?? 0) > 0);
   let effectivelyPro = $derived(subscription?.tier === "pro");
   let effectivelyFree = $derived(!effectivelyPro);
+  let isFoundingMember = $derived(subscription?.is_founding_member ?? false);
+
+  function isEmailVerificationError(raw: unknown): boolean {
+    const msg = String(raw).toLowerCase();
+    return msg.includes("email not verified") || msg.includes("verification code");
+  }
+
+  function isExistingAccountError(raw: unknown): boolean {
+    const msg = String(raw).toLowerCase();
+    return msg.includes("unable to create account") || msg.includes("try logging in");
+  }
+
+  function showPendingVerification(email: string | null | undefined, message = "Enter the verification code we sent to your email.") {
+    pendingVerification = true;
+    proEmail = email || proEmail;
+    proPassword = "";
+    error = "";
+    otpMessage = message;
+    subscription = null;
+  }
+
+  async function ensureVerifiedBeforeCheckout(): Promise<boolean> {
+    const s = await getSettings();
+    if (!s.noren_pro_logged_in) return true;
+
+    const status = await getNorenProStatus();
+    let emailVerified = status.email_verified;
+    try {
+      subscription = await getSubscriptionStatus();
+      emailVerified = subscription.email_verified;
+    } catch {}
+
+    if (!emailVerified) {
+      showPendingVerification(status.email, "Verify your email before starting checkout.");
+      return false;
+    }
+    return true;
+  }
 
   onDestroy(() => {
     if (cooldownInterval) clearInterval(cooldownInterval);
   });
 
   onMount(() => {
+    refreshBillingConfig();
     setTimeout(() => { usageAnimated = true; }, 400);
     let disposed = false;
     const unlistenPromise = listen("usage:refresh", () => {
@@ -157,6 +220,8 @@
       } else {
         proStatus = null;
         subscription = null;
+        pendingVerification = false;
+        error = "";
       }
       settings = s;
     } catch (e) {
@@ -209,7 +274,12 @@
         await refreshSubscription();
       }
     } catch (e) {
-      error = friendlyError(e);
+      if (authMode === "signup" && isExistingAccountError(e)) {
+        authMode = "login";
+        error = "That account already exists. Sign in to continue verification.";
+      } else {
+        error = friendlyError(e);
+      }
     } finally {
       proLoading = false;
     }
@@ -312,6 +382,9 @@
       await norenProLogout();
       proStatus = null;
       subscription = null;
+      pendingVerification = false;
+      otpCode = "";
+      otpMessage = "";
       await setInferenceMode("byok");
       settings = await getSettings();
     } catch (e) {
@@ -322,6 +395,7 @@
   async function handleUpgrade(tier: string, promoCode?: string) {
     error = "";
     try {
+      if (!(await ensureVerifiedBeforeCheckout())) return;
       const result = await createCheckout(tier, promoCode);
       if (result.checkout_url === "dev://granted") {
         await loadAccount();
@@ -330,7 +404,15 @@
         await open(result.checkout_url);
       }
     } catch (e) {
-      error = friendlyError(e);
+      if (isEmailVerificationError(e)) {
+        let email = proStatus?.email;
+        try {
+          email = (await getNorenProStatus()).email || email;
+        } catch {}
+        showPendingVerification(email, "Verify your email before starting checkout.");
+      } else {
+        error = friendlyError(e);
+      }
     }
   }
 
@@ -368,11 +450,101 @@
 
   async function handlePasswordReset() {
     if (!proStatus?.email) return;
+    const email = proStatus.email;
+    resetPasswordEmail = email;
+    resetPasswordOpen = true;
+    resetPasswordCode = "";
+    resetNewPassword = "";
+    resetConfirmPassword = "";
+    resetPasswordMessage = "";
     try {
-      await requestPasswordReset(proStatus.email);
-      toastInfo("Reset link sent to " + proStatus.email);
+      await requestPasswordReset(email);
+      resetPasswordMessage = "If that email exists, a reset code has been sent.";
+      toastInfo("Reset code sent to " + email);
     } catch (e) {
-      toastInfo("Reset link sent to " + proStatus.email);
+      resetPasswordMessage = "If that email exists, a reset code has been sent.";
+      toastInfo("Reset code sent to " + email);
+    }
+  }
+
+  async function handleSignedOutPasswordReset() {
+    const email = proEmail.trim();
+    if (!email) {
+      error = "Enter your email first.";
+      return;
+    }
+    signedOutResetLoading = true;
+    signedOutResetMessage = "";
+    error = "";
+    try {
+      await requestPasswordReset(email);
+      resetPasswordEmail = email;
+      resetPasswordOpen = true;
+      resetPasswordCode = "";
+      resetNewPassword = "";
+      resetConfirmPassword = "";
+      signedOutResetMessage = "If that email exists, a reset code has been sent.";
+    } catch {
+      resetPasswordEmail = email;
+      resetPasswordOpen = true;
+      signedOutResetMessage = "If that email exists, a reset code has been sent.";
+    } finally {
+      signedOutResetLoading = false;
+    }
+  }
+
+  async function handleConfirmPasswordReset() {
+    error = "";
+    resetPasswordMessage = "";
+    if (!resetPasswordEmail.trim() || !resetPasswordCode.trim() || !resetNewPassword || !resetConfirmPassword) {
+      error = "Fill in the reset code and new password.";
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      error = "New passwords do not match.";
+      return;
+    }
+    resetPasswordLoading = true;
+    try {
+      const message = await resetPassword(resetPasswordEmail.trim(), resetPasswordCode.trim(), resetNewPassword);
+      resetPasswordMessage = message;
+      resetPasswordCode = "";
+      resetNewPassword = "";
+      resetConfirmPassword = "";
+      resetPasswordOpen = false;
+      proPassword = "";
+      toastInfo("Password reset. Sign in with your new password.");
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      resetPasswordLoading = false;
+    }
+  }
+
+  async function handleChangePassword() {
+    error = "";
+    passwordMessage = "";
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      error = "Fill in all password fields.";
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      error = "New passwords do not match.";
+      return;
+    }
+    passwordLoading = true;
+    try {
+      await changePassword(currentPassword, newPassword);
+      currentPassword = "";
+      newPassword = "";
+      confirmNewPassword = "";
+      changePasswordOpen = false;
+      passwordMessage = "Password changed.";
+      toastInfo("Password changed.");
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      passwordLoading = false;
     }
   }
 
@@ -434,7 +606,7 @@
     <div class="flex items-center justify-center" style="min-height: 200px;">
       <LoadingSpinner />
     </div>
-  {:else if settings && settings.noren_pro_logged_in && proStatus}
+  {:else if settings && settings.noren_pro_logged_in && proStatus && !pendingVerification}
     <!-- ═══ LOGGED IN ═══ -->
     <div class="av-sections av-stagger">
 
@@ -532,17 +704,6 @@
           </div>
         </div>
 
-        <!-- Password row -->
-        <div class="card-flat">
-          <div class="av-setting-row">
-            <div>
-              <div class="av-setting-label">Password</div>
-              <div class="av-setting-desc">Send a reset link to {proStatus?.email || "your email"}</div>
-            </div>
-            <button class="btn-outline" onclick={handlePasswordReset}>Reset</button>
-          </div>
-        </div>
-
       {:else if hasInference}
         <!-- Free tier with generations: usage only -->
         <div class="card-hero av-card-pad">
@@ -575,7 +736,7 @@
             <div class="av-upgrade-title">Subscribe to Pro</div>
             <div class="av-upgrade-sub">Bundled inference, living profile, and export</div>
           </div>
-          <div class="av-upgrade-price">$7<span class="av-upgrade-per">/mo</span></div>
+          <div class="av-upgrade-price">{proMonthlyAmountLabel(isFoundingMember)}<span class="av-upgrade-per">{proMonthlyIntervalLabel()}</span></div>
         </button>
 
         <div class="av-coupon">
@@ -607,6 +768,105 @@
 
         <div class="divider-thread"></div>
       {/if}
+
+      <div class="card-flat">
+        <div class="av-setting-row">
+          <div>
+            <div class="av-setting-label">Password</div>
+            <div class="av-setting-desc">Change your password, or send a reset code to {proStatus?.email || "your email"}</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn-outline" onclick={() => { changePasswordOpen = !changePasswordOpen; passwordMessage = ""; resetPasswordOpen = false; }}>
+              {changePasswordOpen ? "Cancel" : "Change"}
+            </button>
+            <button class="btn-outline" onclick={handlePasswordReset}>Reset</button>
+          </div>
+        </div>
+        {#if changePasswordOpen}
+          <div class="card-inset av-form-inset" style="margin-top: 14px;">
+            <input
+              type="password"
+              bind:value={currentPassword}
+              class="input-field"
+              placeholder="Current password"
+              autocomplete="current-password"
+            />
+            <input
+              type="password"
+              bind:value={newPassword}
+              class="input-field"
+              placeholder="New password"
+              autocomplete="new-password"
+            />
+            <input
+              type="password"
+              bind:value={confirmNewPassword}
+              onkeydown={(e) => { if (e.key === "Enter") handleChangePassword(); }}
+              class="input-field"
+              placeholder="Confirm new password"
+              autocomplete="new-password"
+            />
+            <button
+              class="btn-primary"
+              style="width: 100%; padding: 11px;"
+              onclick={handleChangePassword}
+              disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
+            >
+              {#if passwordLoading}
+                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Changing...</span>
+              {:else}
+                Change password
+              {/if}
+            </button>
+          </div>
+        {/if}
+        {#if resetPasswordOpen && resetPasswordEmail === proStatus?.email}
+          <div class="card-inset av-form-inset" style="margin-top: 14px;">
+            <p class="text-[11px] text-muted">Enter the reset code sent to {resetPasswordEmail}, then choose a new password.</p>
+            <input
+              type="text"
+              bind:value={resetPasswordCode}
+              class="input-field"
+              placeholder="Reset code"
+              maxlength={6}
+              autocomplete="one-time-code"
+            />
+            <input
+              type="password"
+              bind:value={resetNewPassword}
+              class="input-field"
+              placeholder="New password"
+              autocomplete="new-password"
+            />
+            <input
+              type="password"
+              bind:value={resetConfirmPassword}
+              onkeydown={(e) => { if (e.key === "Enter") handleConfirmPasswordReset(); }}
+              class="input-field"
+              placeholder="Confirm new password"
+              autocomplete="new-password"
+            />
+            <button
+              class="btn-primary"
+              style="width: 100%; padding: 11px;"
+              onclick={handleConfirmPasswordReset}
+              disabled={resetPasswordLoading || !resetPasswordCode.trim() || !resetNewPassword || !resetConfirmPassword}
+            >
+              {#if resetPasswordLoading}
+                <span class="inline-flex items-center gap-1"><LoadingSpinner /> Resetting...</span>
+              {:else}
+                Set new password
+              {/if}
+            </button>
+          </div>
+        {/if}
+        {#if passwordMessage}
+          <p class="text-[10px] text-secondary mt-2">{passwordMessage}</p>
+        {/if}
+        {#if resetPasswordMessage && resetPasswordEmail === proStatus?.email}
+          <p class="text-[10px] text-secondary mt-2">{resetPasswordMessage}</p>
+        {/if}
+      </div>
 
       <!-- Error -->
       {#if error}
@@ -723,7 +983,7 @@
           </button>
           <button
             class="av-text-btn"
-            onclick={() => { pendingVerification = false; otpCode = ""; error = ""; otpMessage = ""; }}
+            onclick={handleProLogout}
           >
             Back
           </button>
@@ -761,7 +1021,12 @@
             </li>
           </ul>
           <div class="divider-thread" style="margin-top: 20px; margin-bottom: 14px;"></div>
-          <p class="text-subhead text-secondary">$7/mo <span class="text-xs text-muted font-normal" style="font-style: normal;">founding member pricing</span></p>
+          <p class="text-subhead text-secondary">
+            {proMonthlyFullLabel(isFoundingMember)}
+            {#if proPricingNote(isFoundingMember)}
+              <span class="text-xs text-muted font-normal" style="font-style: normal;">{proPricingNote(isFoundingMember)}</span>
+            {/if}
+          </p>
           {#if canExtract()}
             <p class="text-[11px] text-muted mt-2">You have extraction. Pro adds inference and living profile.</p>
           {/if}
@@ -836,6 +1101,62 @@
                   {authMode === "signup" ? "Create account" : "Sign in"}
                 {/if}
               </button>
+              {#if authMode === "login"}
+                <button
+                  type="button"
+                  class="av-link-btn"
+                  style="align-self: center;"
+                  onclick={handleSignedOutPasswordReset}
+                  disabled={signedOutResetLoading || !proEmail.trim()}
+                >
+                  {signedOutResetLoading ? "Sending..." : "Forgot password?"}
+                </button>
+              {/if}
+              {#if signedOutResetMessage}
+                <p class="text-[11px] text-secondary text-center">{signedOutResetMessage}</p>
+              {/if}
+              {#if resetPasswordOpen && resetPasswordEmail}
+                <div class="av-form-inset" style="padding: 0; border: 0; background: transparent;">
+                  <input
+                    type="text"
+                    bind:value={resetPasswordCode}
+                    class="input-field"
+                    placeholder="Reset code"
+                    maxlength={6}
+                    autocomplete="one-time-code"
+                  />
+                  <input
+                    type="password"
+                    bind:value={resetNewPassword}
+                    class="input-field"
+                    placeholder="New password"
+                    autocomplete="new-password"
+                  />
+                  <input
+                    type="password"
+                    bind:value={resetConfirmPassword}
+                    onkeydown={(e) => { if (e.key === "Enter") handleConfirmPasswordReset(); }}
+                    class="input-field"
+                    placeholder="Confirm new password"
+                    autocomplete="new-password"
+                  />
+                  <button
+                    class="btn-primary"
+                    style="width: 100%; padding: 11px;"
+                    onclick={handleConfirmPasswordReset}
+                    disabled={resetPasswordLoading || !resetPasswordCode.trim() || !resetNewPassword || !resetConfirmPassword}
+                  >
+                    {#if resetPasswordLoading}
+                      <span class="inline-flex items-center gap-1"><LoadingSpinner /> Resetting...</span>
+                    {:else}
+                      Set new password
+                    {/if}
+                  </button>
+                  {#if resetPasswordMessage}
+                    <p class="text-[11px] text-secondary text-center">{resetPasswordMessage}</p>
+                  {/if}
+                </div>
+              {/if}
             </div>
           </div>
         </div>

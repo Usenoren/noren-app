@@ -463,6 +463,97 @@ pub async fn request_password_reset(
         .to_string())
 }
 
+#[tauri::command]
+pub async fn reset_password(
+    state: State<'_, AppState>,
+    email: String,
+    code: String,
+    new_password: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/auth/reset-password", server_url))
+        .json(&serde_json::json!({
+            "email": email,
+            "code": code,
+            "new_password": new_password,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&body) {
+            if let Some(detail) = data["detail"].as_str() {
+                return Err(detail.to_string());
+            }
+        }
+        return Err("Password reset failed. Check the code and try again.".to_string());
+    }
+
+    let data: serde_json::Value = resp.json().await.unwrap_or_default();
+    Ok(data["message"]
+        .as_str()
+        .unwrap_or("Password reset successfully. Please log in with your new password.")
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn change_password(
+    state: State<'_, AppState>,
+    current_password: String,
+    new_password: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let server_url = config
+        .server_url
+        .as_deref()
+        .unwrap_or("https://api.usenoren.ai");
+    let change_url = format!("{}/v1/auth/change-password", server_url);
+    let payload = serde_json::json!({
+        "current_password": current_password,
+        "new_password": new_password,
+    });
+    let resp = crate::auth_client::authed_request(server_url, |client, token| {
+        client
+            .post(&change_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&payload)
+    })
+    .await
+    .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Password change failed: {}", body));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let token = data["access_token"]
+        .as_str()
+        .ok_or("No access token in response")?;
+    let refresh = data["refresh_token"].as_str().unwrap_or("");
+    keychain::store_api_key("noren-pro-token", token)?;
+    if !refresh.is_empty() {
+        keychain::store_api_key("noren-pro-refresh", refresh)?;
+    }
+    if let Some(email_verified) = data["email_verified"].as_bool() {
+        keychain::store_api_key(
+            "noren-pro-email-verified",
+            if email_verified { "true" } else { "false" },
+        )?;
+    }
+
+    Ok("Password changed".to_string())
+}
+
 // --- Account Deletion ---
 
 #[tauri::command]
