@@ -11,6 +11,7 @@ pub struct SubscriptionStatus {
     pub tier: String,
     pub active: bool,
     pub email_verified: bool,
+    pub is_founding_member: bool,
     pub can_extract: bool,
     pub can_generate_bundled: bool,
     pub can_living_profile: bool,
@@ -23,8 +24,25 @@ pub struct SubscriptionStatus {
     pub current_period_end: Option<String>,
     pub cancel_at_period_end: bool,
     pub one_time_purchases: Vec<String>,
+    pub extraction_credits_remaining: Option<u64>,
     pub export_unlock_remaining_cents: Option<u64>,
     pub export_unlock_progress: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct BillingPublicConfig {
+    pub pro_monthly_amount_label: String,
+    pub pro_monthly_interval_label: String,
+    pub pro_monthly_full_label: String,
+    pub pro_pricing_note: String,
+    pub pro_founding_monthly_amount_label: String,
+    pub pro_founding_monthly_full_label: String,
+    pub pro_founding_pricing_note: String,
+    pub extraction_amount_label: String,
+    pub extraction_cta_label: String,
+    pub extraction_founding_amount_label: String,
+    pub extraction_founding_cta_label: String,
+    pub default_trial_days: u32,
 }
 
 #[derive(Serialize)]
@@ -138,6 +156,27 @@ fn now_iso() -> String {
 // --- Existing auth-required commands ---
 
 #[tauri::command]
+pub async fn get_billing_public_config(
+    state: State<'_, AppState>,
+) -> Result<BillingPublicConfig, String> {
+    let server_url = server_url_from_config(&state);
+    let resp = reqwest::Client::new()
+        .get(format!("{}/v1/billing/public-config", server_url))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        let body: String = resp.text().await.unwrap_or_default();
+        return Err(format!("Failed to get billing config: {}", body));
+    }
+
+    resp.json::<BillingPublicConfig>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_subscription_status(
     state: State<'_, AppState>,
 ) -> Result<SubscriptionStatus, String> {
@@ -166,6 +205,7 @@ pub async fn get_subscription_status(
         tier: data["tier"].as_str().unwrap_or("free").to_string(),
         active: data["active"].as_bool().unwrap_or(false),
         email_verified: data["email_verified"].as_bool().unwrap_or(true),
+        is_founding_member: data["is_founding_member"].as_bool().unwrap_or(false),
         can_extract: ents["can_extract"].as_bool().unwrap_or(false),
         can_generate_bundled: ents["can_generate_bundled"].as_bool().unwrap_or(false),
         can_living_profile: ents["can_living_profile"].as_bool().unwrap_or(false),
@@ -185,6 +225,7 @@ pub async fn get_subscription_status(
                     .collect()
             })
             .unwrap_or_default(),
+        extraction_credits_remaining: data["extraction_credits_remaining"].as_u64(),
         export_unlock_remaining_cents: data["export_unlock_remaining_cents"].as_u64(),
         export_unlock_progress: data["export_unlock_progress"].as_u64(),
     })

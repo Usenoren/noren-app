@@ -14,6 +14,8 @@
     hasUsedExtraction,
     markExtractionUsed,
     createCheckout,
+    getSettings,
+    getSubscriptionStatus,
     scrapeTwitter,
     scrapeBlog,
     scrapeReddit,
@@ -30,9 +32,16 @@
   } from "$lib/stores/extraction.svelte";
   import {
     canExtract,
+    isFoundingMember,
     isPro,
     refresh as refreshSubscription,
   } from "$lib/stores/subscription.svelte";
+  import {
+    refresh as refreshBillingConfig,
+    proMonthlyFullLabel,
+    extractionAmountLabel,
+    extractionCtaLabel,
+  } from "$lib/stores/billing-config.svelte";
   import { friendlyError } from "$lib/utils/errors";
   import LoadingSpinner from "./LoadingSpinner.svelte";
   import loomIdleUrl from "../../assets/loom-idle.png";
@@ -44,6 +53,7 @@
     | "email"
     | "processing"
     | "polling"
+    | "authenticatedCheckout"
     | "restore"
     | "hasProfile"
     | "inputMethod"
@@ -182,6 +192,7 @@
   // --- Lifecycle ---
 
   onMount(() => {
+    refreshBillingConfig();
     checkAccess();
   });
 
@@ -233,6 +244,27 @@
     const timeout = setTimeout(() => {
       clearInterval(interval);
       error = "Payment verification timed out. Click 'Check status' to try again, or start over.";
+    }, 10 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  });
+
+  $effect(() => {
+    if (viewState !== "authenticatedCheckout") return;
+
+    const interval = setInterval(async () => {
+      await refreshSubscription();
+      if (canExtract() || isPro()) {
+        viewState = "inputMethod";
+      }
+    }, 5000);
+
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      error = "Payment verification timed out. Click 'Check status' to try again.";
     }, 10 * 60 * 1000);
 
     return () => {
@@ -308,7 +340,52 @@
     viewState = "paywall";
   }
 
-  // --- Guest checkout flow ---
+  // --- Authenticated extraction checkout ---
+
+  async function handleExtractionCheckout() {
+    error = "";
+    try {
+      const settings = await getSettings();
+      if (!settings.noren_pro_logged_in) {
+        error = "Sign in or create an account before buying one-time extraction. Pro is not required.";
+        emit("navigate", "account");
+        return;
+      }
+
+      const status = await getSubscriptionStatus();
+      if (!status.email_verified) {
+        error = "Verify your email before checkout. Go to Account to enter your code.";
+        emit("navigate", "account");
+        return;
+      }
+
+      viewState = "processing";
+      const result = await createCheckout("extraction");
+      if (result.checkout_url === "dev://granted") {
+        await refreshSubscription();
+        viewState = "inputMethod";
+        return;
+      }
+
+      await open(result.checkout_url);
+      viewState = "authenticatedCheckout";
+    } catch (e) {
+      error = friendlyError(e);
+      viewState = "paywall";
+    }
+  }
+
+  async function handleAuthenticatedCheckoutStatus() {
+    error = "";
+    await refreshSubscription();
+    if (canExtract() || isPro()) {
+      viewState = "inputMethod";
+    } else {
+      error = "Payment not yet confirmed. Complete checkout in your browser.";
+    }
+  }
+
+  // --- Legacy guest checkout recovery ---
 
   async function handleGuestCheckout() {
     if (!guestEmail.trim() || !guestEmail.includes("@")) {
@@ -749,16 +826,16 @@
 
         <div class="flex flex-col gap-1.5 mt-4">
           <button
-            onclick={() => { error = ""; viewState = "email"; }}
+            onclick={handleExtractionCheckout}
             class="w-full py-2 text-[11px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer rounded"
           >
-            {usedExtraction ? "Extract again $19" : "$19 one-time"}
+            {usedExtraction ? `Extract again ${extractionAmountLabel(isFoundingMember())}` : extractionCtaLabel(isFoundingMember())}
           </button>
           <button
             onclick={handleProUpgrade}
             class="w-full py-1.5 text-[10px] text-secondary hover:text-primary transition-colors cursor-pointer"
           >
-            Or get Pro ($7/mo)
+            Or get Pro ({proMonthlyFullLabel(isFoundingMember())})
           </button>
         </div>
 
@@ -766,12 +843,7 @@
           <p class="text-[10px] text-error mt-2">{error}</p>
         {/if}
 
-        <button
-          onclick={() => { error = ""; restoreEmail = ""; viewState = "restore"; }}
-          class="mt-3 text-[9px] text-muted hover:text-secondary transition-colors cursor-pointer"
-        >
-          Already paid? Restore purchase
-        </button>
+        <p class="mt-3 text-[9px] text-muted">One-time extraction is tied to your Noren account.</p>
       </div>
     </div>
 
@@ -821,6 +893,30 @@
     <div class="flex-1 flex flex-col items-center justify-center gap-3">
       <LoadingSpinner />
       <p class="text-xs text-muted">Opening checkout...</p>
+    </div>
+
+  {:else if viewState === "authenticatedCheckout"}
+    <div class="flex-1 flex flex-col items-center justify-center gap-3">
+      <LoadingSpinner />
+      <div class="text-center">
+        <p class="text-sm font-medium text-foreground">Complete payment in your browser</p>
+        <p class="text-xs text-muted mt-1">Waiting for extraction access...</p>
+      </div>
+      <button
+        onclick={handleAuthenticatedCheckoutStatus}
+        class="px-4 py-1.5 text-[10px] font-medium bg-surface border border-border text-foreground rounded-md hover:border-secondary transition-colors cursor-pointer"
+      >
+        Check status
+      </button>
+      {#if error}
+        <p class="text-[10px] text-error text-center max-w-[260px]">{error}</p>
+      {/if}
+      <button
+        onclick={() => { error = ""; viewState = "paywall"; }}
+        class="text-[10px] text-muted hover:text-secondary transition-colors cursor-pointer"
+      >
+        Back
+      </button>
     </div>
 
   {:else if viewState === "polling"}

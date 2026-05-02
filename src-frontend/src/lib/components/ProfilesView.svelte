@@ -997,13 +997,13 @@
           >
             {isExporting ? "..." : "Export as Markdown"}
           </button>
-        {:else if isPro() && exportUnlockProgress() != null}
+        {:else if exportUnlockProgress() != null}
           <button onclick={handleExportUnlock} class="pv-footer-btn">
             Export <span class="text-[8px] text-secondary font-medium">${Math.round((exportUnlockRemainingCents() || 0) / 100)}</span>
           </button>
         {:else}
           <button
-            onclick={() => handleUpgrade("export")}
+            onclick={handleExportUnlock}
             class="pv-footer-btn"
           >
             Export <span class="text-[8px] text-secondary font-medium">$</span>

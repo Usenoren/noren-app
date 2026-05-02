@@ -25,6 +25,10 @@ export function canExtract(): boolean {
   return (status?.can_extract ?? false) || localExtraction;
 }
 
+export function extractionCreditsRemaining(): number | null {
+  return status?.extraction_credits_remaining ?? null;
+}
+
 export function canLivingProfile(): boolean {
   return status?.can_living_profile ?? false;
 }
@@ -43,6 +47,10 @@ export function exportUnlockProgress(): number | null {
 
 export function isTrial(): boolean {
   return status?.is_trial ?? false;
+}
+
+export function isFoundingMember(): boolean {
+  return status?.is_founding_member ?? false;
 }
 
 export function trialExpiresAt(): string | null {
