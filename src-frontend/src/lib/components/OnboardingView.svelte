@@ -8,6 +8,7 @@
     norenProSignup,
     googleOAuthInit,
     googleOAuthPoll,
+    getNorenProStatus,
     createCheckout,
     redeemCoupon,
     createGuestCheckout,
@@ -19,6 +20,7 @@
     verifyEmail,
     resendOtp,
     setInferenceMode,
+    getSubscriptionStatus,
     scrapeTwitter,
     scrapeBlog,
     scrapeReddit,
@@ -257,9 +259,23 @@
 
   onMount(() => {
     // Check initial auth state
-    getSettings().then((settings) => {
+    getSettings().then(async (settings) => {
       isLoggedIn = settings.noren_pro_logged_in;
-      if (isLoggedIn) refreshSubscription();
+      if (isLoggedIn) {
+        const status = await getNorenProStatus();
+        let emailVerified = status.email_verified;
+        try {
+          emailVerified = (await getSubscriptionStatus()).email_verified;
+        } catch {}
+        if (!emailVerified) {
+          authEmail = status.email || authEmail;
+          authPassword = "";
+          otpMessage = "Enter the verification code we sent to your email.";
+          step = "otp";
+          return;
+        }
+        refreshSubscription();
+      }
     }).catch(() => {});
     // Restore in-progress draft
     loadDraft();
@@ -317,20 +333,23 @@
     error = "";
     try {
       if (authMode === "signup") {
-        await norenProSignup(authEmail.trim(), authPassword.trim());
+        const status = await norenProSignup(authEmail.trim(), authPassword.trim());
+        authEmail = status.email || email;
         authPassword = "";
         otpMessage = "Check your email for a verification code.";
         step = "otp";
         startResendCooldown();
       } else {
-        await norenProLogin(authEmail.trim(), authPassword.trim());
+        const status = await norenProLogin(authEmail.trim(), authPassword.trim());
         isLoggedIn = true;
-        authEmail = "";
         authPassword = "";
-        // Mirror the OTP/signup path: a successful Pro login means the user
-        // intends to use server inference, so the engine config has to know.
-        // Otherwise getProfileOverview falls back to a local-disk check and
-        // shows the empty-state on returning Pro users with server profiles.
+        if (!status.email_verified) {
+          authEmail = status.email || email;
+          otpMessage = "Enter the verification code we sent to your email.";
+          step = "otp";
+          return;
+        }
+        authEmail = "";
         await setInferenceMode("noren_pro");
         await afterAuth();
       }
@@ -362,6 +381,7 @@
       await verifyEmail(otpCode.trim());
       isLoggedIn = true;
       otpCode = "";
+      otpMessage = "";
       authEmail = "";
       await setInferenceMode("noren_pro");
       await afterAuth();

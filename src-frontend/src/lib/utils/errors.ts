@@ -52,6 +52,9 @@ export function friendlyError(raw: unknown): string {
   }
 
   // Auth errors
+  if (msg.includes("Email not verified")) {
+    return "Verify your email to continue.";
+  }
   if (msg.includes("401") || msg.includes("Unauthorized") || msg.includes("invalid_api_key") || msg.includes("Invalid API key")) {
     return "Invalid API key. Check your key in Settings.";
   }

@@ -13,6 +13,7 @@
     redeemCoupon,
     googleOAuthInit,
     googleOAuthPoll,
+    getNorenProStatus,
     verifyEmail,
     resendOtp,
     resendSetupEmail,
@@ -123,12 +124,23 @@
 
       if (s.noren_pro_logged_in) {
         try {
-          proStatus = await getNorenProUsage();
+          const status = await getNorenProStatus();
+          proStatus = status;
           try {
             subscription = await getSubscriptionStatus();
           } catch {
             subscription = null;
           }
+          const emailVerified = subscription?.email_verified ?? status.email_verified;
+          if (!emailVerified) {
+            pendingVerification = true;
+            proEmail = status.email || proEmail;
+            settings = s;
+            accountReady = true;
+            return;
+          }
+          pendingVerification = false;
+          proStatus = await getNorenProUsage();
         } catch (e) {
           if (isAuthSessionError(e)) {
             try {
@@ -175,13 +187,21 @@
     error = "";
     try {
       if (authMode === "signup") {
-        await norenProSignup(proEmail.trim(), proPassword.trim());
+        const status = await norenProSignup(proEmail.trim(), proPassword.trim());
+        proEmail = status.email || email;
         pendingVerification = true;
         otpMessage = "Check your email for a verification code.";
         proPassword = "";
         startResendCooldown();
       } else {
-        await norenProLogin(proEmail.trim(), proPassword.trim());
+        const status = await norenProLogin(proEmail.trim(), proPassword.trim());
+        if (!status.email_verified) {
+          proEmail = status.email || email;
+          proPassword = "";
+          pendingVerification = true;
+          otpMessage = "Enter the verification code we sent to your email.";
+          return;
+        }
         proEmail = "";
         proPassword = "";
         await setInferenceMode("noren_pro");
@@ -204,6 +224,7 @@
       await verifyEmail(otpCode.trim());
       pendingVerification = false;
       otpCode = "";
+      otpMessage = "";
       proEmail = "";
       await setInferenceMode("noren_pro");
       await loadAccount();

@@ -10,6 +10,7 @@ use crate::AppState;
 pub struct SubscriptionStatus {
     pub tier: String,
     pub active: bool,
+    pub email_verified: bool,
     pub can_extract: bool,
     pub can_generate_bundled: bool,
     pub can_living_profile: bool,
@@ -164,6 +165,7 @@ pub async fn get_subscription_status(
     Ok(SubscriptionStatus {
         tier: data["tier"].as_str().unwrap_or("free").to_string(),
         active: data["active"].as_bool().unwrap_or(false),
+        email_verified: data["email_verified"].as_bool().unwrap_or(true),
         can_extract: ents["can_extract"].as_bool().unwrap_or(false),
         can_generate_bundled: ents["can_generate_bundled"].as_bool().unwrap_or(false),
         can_living_profile: ents["can_living_profile"].as_bool().unwrap_or(false),

@@ -178,6 +178,7 @@ pub async fn test_connection(
 pub struct NorenProStatus {
     pub logged_in: bool,
     pub email: Option<String>,
+    pub email_verified: bool,
     pub inference_mode: String,
     pub tokens_used: Option<u64>,
     pub tokens_limit: Option<u64>,
@@ -191,6 +192,9 @@ pub fn get_noren_pro_status(state: State<'_, AppState>) -> NorenProStatus {
     let config = state.config.lock().unwrap();
     let has_token = keychain::get_api_key("noren-pro-token").is_some();
     let email = keychain::get_api_key("noren-pro-email");
+    let email_verified = keychain::get_api_key("noren-pro-email-verified")
+        .map(|v| v == "true")
+        .unwrap_or(has_token);
 
     let mode = match config.inference_mode {
         noren_engine::InferenceMode::NorenPro => "noren_pro",
@@ -200,6 +204,7 @@ pub fn get_noren_pro_status(state: State<'_, AppState>) -> NorenProStatus {
     NorenProStatus {
         logged_in: has_token,
         email,
+        email_verified,
         inference_mode: mode.to_string(),
         tokens_used: None,
         tokens_limit: None,
@@ -244,6 +249,7 @@ pub async fn noren_pro_login(
         .as_str()
         .ok_or("No access token in response")?;
     let refresh = data["refresh_token"].as_str().unwrap_or("");
+    let email_verified = data["email_verified"].as_bool().unwrap_or(false);
 
     // Store tokens and email in keychain
     keychain::store_api_key("noren-pro-token", token)?;
@@ -251,10 +257,15 @@ pub async fn noren_pro_login(
         keychain::store_api_key("noren-pro-refresh", refresh)?;
     }
     keychain::store_api_key("noren-pro-email", &email)?;
+    keychain::store_api_key(
+        "noren-pro-email-verified",
+        if email_verified { "true" } else { "false" },
+    )?;
 
     Ok(NorenProStatus {
         logged_in: true,
         email: Some(email),
+        email_verified,
         inference_mode: "noren_pro".to_string(),
         tokens_used: None,
         tokens_limit: None,
@@ -299,6 +310,7 @@ pub async fn noren_pro_signup(
         .as_str()
         .ok_or("No access token in response")?;
     let refresh = data["refresh_token"].as_str().unwrap_or("");
+    let email_verified = data["email_verified"].as_bool().unwrap_or(false);
 
     // Store tokens and email in keychain
     keychain::store_api_key("noren-pro-token", token)?;
@@ -306,10 +318,15 @@ pub async fn noren_pro_signup(
         keychain::store_api_key("noren-pro-refresh", refresh)?;
     }
     keychain::store_api_key("noren-pro-email", &email)?;
+    keychain::store_api_key(
+        "noren-pro-email-verified",
+        if email_verified { "true" } else { "false" },
+    )?;
 
     Ok(NorenProStatus {
         logged_in: true,
         email: Some(email),
+        email_verified,
         inference_mode: "noren_pro".to_string(),
         tokens_used: None,
         tokens_limit: None,
@@ -349,6 +366,7 @@ pub async fn verify_email(state: State<'_, AppState>, code: String) -> Result<St
         let body = resp.text().await.unwrap_or_default();
         return Err(format!("Verification failed: {}", body));
     }
+    keychain::store_api_key("noren-pro-email-verified", "true")?;
 
     let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     Ok(data["message"]
@@ -609,6 +627,7 @@ pub async fn google_oauth_poll(
             keychain::store_api_key("noren-pro-refresh", refresh_token)?;
         }
         keychain::store_api_key("noren-pro-email", email)?;
+        keychain::store_api_key("noren-pro-email-verified", "true")?;
     }
 
     Ok(GoogleOAuthPollResult {
@@ -626,6 +645,9 @@ pub async fn get_noren_pro_usage(state: State<'_, AppState>) -> Result<NorenProS
         .unwrap_or("https://api.usenoren.ai");
     let auth_token = keychain::get_api_key("noren-pro-token").ok_or("Not logged in")?;
     let email = keychain::get_api_key("noren-pro-email");
+    let email_verified = keychain::get_api_key("noren-pro-email-verified")
+        .map(|v| v == "true")
+        .unwrap_or(true);
 
     let refresh_token = keychain::get_api_key("noren-pro-refresh");
     let mut proxy = noren_engine::NorenProxyClient::new(
@@ -648,6 +670,7 @@ pub async fn get_noren_pro_usage(state: State<'_, AppState>) -> Result<NorenProS
     Ok(NorenProStatus {
         logged_in: true,
         email,
+        email_verified,
         inference_mode: "noren_pro".to_string(),
         tokens_used: Some(used),
         tokens_limit: Some(limit),

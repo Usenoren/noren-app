@@ -33,6 +33,7 @@ export interface SettingsInfo {
 export interface NorenProStatus {
   logged_in: boolean;
   email: string | null;
+  email_verified: boolean;
   inference_mode: string;
   tokens_used: number | null;
   tokens_limit: number | null;
@@ -296,6 +297,7 @@ export async function googleOAuthPoll(sessionId: string): Promise<GoogleOAuthPol
 export interface SubscriptionStatus {
   tier: "free" | "pro" | "teams";
   active: boolean;
+  email_verified: boolean;
   can_extract: boolean;
   can_generate_bundled: boolean;
   can_living_profile: boolean;

@@ -10,6 +10,7 @@ pub fn clear_auth_credentials() {
     let _ = keychain::delete_api_key("noren-pro-token");
     let _ = keychain::delete_api_key("noren-pro-refresh");
     let _ = keychain::delete_api_key("noren-pro-email");
+    let _ = keychain::delete_api_key("noren-pro-email-verified");
 }
 
 pub fn is_auth_session_error(message: &str) -> bool {
@@ -100,6 +101,12 @@ where
     keychain::store_api_key("noren-pro-token", new_access)?;
     if !new_refresh.is_empty() {
         keychain::store_api_key("noren-pro-refresh", new_refresh)?;
+    }
+    if let Some(email_verified) = data["email_verified"].as_bool() {
+        keychain::store_api_key(
+            "noren-pro-email-verified",
+            if email_verified { "true" } else { "false" },
+        )?;
     }
 
     // Retry the original request with the new token
