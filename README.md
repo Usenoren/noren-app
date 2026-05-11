@@ -31,6 +31,12 @@ Noren extracts your unique writing voice from samples you provide, then uses tha
 
 **Compare** - See your voiced output side-by-side with generic AI output. The difference is the product.
 
+## Who uses it
+
+- **Fiction writers** use Noren to preserve narrator, character, and genre voice while drafting or revising with AI. See: [AI fiction writing: why every character sounds like ChatGPT](https://usenoren.ai/blog/ai-fiction-writing-character-voice)
+- **Newsletter writers** use Noren to keep AI drafts from turning into generic content-marketing prose. See: [How to use AI for your newsletter without losing your voice](https://usenoren.ai/blog/ai-newsletter-writing)
+- **Founders and operators** use Noren for emails, updates, posts, and agent-written communication that should still sound like the person behind it.
+
 ## How it works
 
 ```
