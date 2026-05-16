@@ -10,7 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://usenoren.ai">Website</a> · <a href="https://usenoren.ai">Download</a>
+  <a href="https://usenoren.ai">Website</a> ·
+  <a href="https://usenoren.ai">Download</a> ·
+  <a href="https://github.com/Usenoren/noren-extension">Chrome Extension</a>
 </p>
 
 <p align="center">
