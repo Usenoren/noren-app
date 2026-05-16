@@ -47,6 +47,11 @@ Your prompt + profile → LLM → Voice-matched output → Clipboard / Inject in
 
 The voice profile is a structured document that captures *how* you write, not what you write about. It travels with you across formats - emails, tweets, docs, Slack messages, adapting enforcement level (strict / guided / light) per use case.
 
+You can inspect what that artifact looks like:
+
+- [Raw Markdown sample, using public-safe demo data](examples/sample-voice-profile.md)
+- [Interactive sample profiles from named public writers](https://usenoren.ai/sample-voice-profile)
+
 ## Architecture
 
 ```
