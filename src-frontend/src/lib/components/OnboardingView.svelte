@@ -2107,7 +2107,7 @@
             onclick={() => { pendingPath = "paste"; step = "paywall"; }}
             class="text-[10px] text-secondary font-medium cursor-pointer hover:text-foreground uppercase tracking-wide"
           >
-            One-time $19
+            One-time $49.99
           </button>
           <span class="text-[10px] text-muted">or</span>
           <button

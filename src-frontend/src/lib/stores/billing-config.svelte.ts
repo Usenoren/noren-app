@@ -1,21 +1,21 @@
 import { getBillingPublicConfig, type BillingPublicConfig } from "$lib/api/tauri";
 
 const DEFAULT_CONFIG: BillingPublicConfig = {
-  pro_monthly_amount_label: "$19",
+  pro_monthly_amount_label: "$12",
   pro_monthly_interval_label: "/mo",
-  pro_monthly_full_label: "$19/mo",
+  pro_monthly_full_label: "$12/mo",
   pro_pricing_note: "",
   pro_founding_monthly_amount_label: "$7",
   pro_founding_monthly_full_label: "$7/mo",
   pro_founding_pricing_note: "founding member pricing",
-  extraction_amount_label: "$29",
-  extraction_cta_label: "$29 one-time",
+  extraction_amount_label: "$49.99",
+  extraction_cta_label: "$49.99 one-time",
   extraction_founding_amount_label: "$19",
   extraction_founding_cta_label: "$19 one-time",
   default_trial_days: 7,
 };
 
-const CACHE_KEY = "noren:billing_public_config:v3";
+const CACHE_KEY = "noren:billing_public_config:v4";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 type CachedBillingConfig = {
