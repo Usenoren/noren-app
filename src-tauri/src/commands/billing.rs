@@ -246,6 +246,7 @@ pub async fn create_checkout(
     coupon_code: Option<String>,
 ) -> Result<CheckoutResult, String> {
     let server_url = server_url_from_config(&state);
+    let checkout_request_id = uuid::Uuid::new_v4().to_string();
 
     let tier_clone = tier.clone();
     let code_clone = coupon_code.clone();
@@ -253,6 +254,7 @@ pub async fn create_checkout(
         let mut body = serde_json::json!({
             "target": tier_clone,
             "checkout_surface": "desktop",
+            "checkout_request_id": checkout_request_id,
         });
         if let Some(ref code) = code_clone {
             let trimmed = code.trim();
@@ -294,12 +296,16 @@ pub async fn create_export_unlock_checkout(
     state: State<'_, AppState>,
 ) -> Result<CheckoutResult, String> {
     let server_url = server_url_from_config(&state);
+    let checkout_request_id = uuid::Uuid::new_v4().to_string();
 
     let resp = crate::auth_client::authed_request(&server_url, |client, token| {
         client
             .post(format!("{}/v1/billing/checkout/export-unlock", server_url))
             .bearer_auth(token)
-            .json(&serde_json::json!({ "checkout_surface": "desktop" }))
+            .json(&serde_json::json!({
+                "checkout_surface": "desktop",
+                "checkout_request_id": checkout_request_id,
+            }))
     })
     .await?;
 
