@@ -250,7 +250,10 @@ pub async fn create_checkout(
     let tier_clone = tier.clone();
     let code_clone = coupon_code.clone();
     let resp = crate::auth_client::authed_request(&server_url, |client, token| {
-        let mut body = serde_json::json!({ "target": tier_clone });
+        let mut body = serde_json::json!({
+            "target": tier_clone,
+            "checkout_surface": "desktop",
+        });
         if let Some(ref code) = code_clone {
             let trimmed = code.trim();
             if !trimmed.is_empty() {
@@ -296,6 +299,7 @@ pub async fn create_export_unlock_checkout(
         client
             .post(format!("{}/v1/billing/checkout/export-unlock", server_url))
             .bearer_auth(token)
+            .json(&serde_json::json!({ "checkout_surface": "desktop" }))
     })
     .await?;
 
@@ -416,7 +420,11 @@ pub async fn create_guest_checkout(
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/v1/billing/checkout/guest", server_url))
-        .json(&serde_json::json!({ "email": email, "tier": tier }))
+        .json(&serde_json::json!({
+            "email": email,
+            "tier": tier,
+            "checkout_surface": "desktop",
+        }))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
