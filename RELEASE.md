@@ -237,16 +237,11 @@ git commit -m "Bump updater manifest to vX.Y.Z"
 git push origin main
 ```
 
-Deploy via rsync + docker recreate (no git on prod):
+Then deploy the server so the updater endpoint serves the new manifest.
 
-```bash
-rsync -avz -e "ssh -i /Users/onomeokajevo/Downloads/wilfs.pem -o StrictHostKeyChecking=no" \
-  /Users/onomeokajevo/noren/server/app/updater/ \
-  ec2-user@176.34.83.86:~/noren-server/app/updater/
-
-ssh -i /Users/onomeokajevo/Downloads/wilfs.pem ec2-user@176.34.83.86 \
-  "cd ~/noren-server && docker-compose build --no-cache app && docker-compose up -d --force-recreate app"
-```
+This repo is public, so the deploy procedure lives with the private server docs
+rather than here. Follow the "Deploy" section of `docs/SERVER-OPS.md` in the
+`noren` repo, which covers the current host, credentials and build commands.
 
 Verify:
 
