@@ -292,7 +292,11 @@ pub async fn noren_pro_signup(
     // Register
     let resp: reqwest::Response = client
         .post(format!("{}/v1/auth/register", server_url))
-        .json(&serde_json::json!({ "email": email, "password": password }))
+        .json(&serde_json::json!({
+            "email": email,
+            "password": password,
+            "registration_surface": "desktop",
+        }))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
@@ -641,6 +645,9 @@ pub async fn google_oauth_init(
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/v1/auth/google/init", server_url))
+        .json(&serde_json::json!({
+            "registration_surface": "desktop",
+        }))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
